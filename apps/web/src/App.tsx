@@ -13,7 +13,13 @@ import {
 } from './lib/devices.ts';
 import { loadDisplayPrefs, persistDisplayPrefs, resolveQualityLevel, resolveTargetFps, type DisplayPrefs } from './lib/displayPrefs.ts';
 import { qualityCommand, remotePrivacyAllowed, shouldFollowFocusedDisplay } from './lib/displays.ts';
-import { resolveEffectiveLocale, resolveInitialLocale, type Locale, type LocalePreference } from './lib/i18n.ts';
+import {
+  LOCALE_STORAGE_KEY,
+  resolveEffectiveLocale,
+  resolveStartupLocale,
+  type Locale,
+  type LocalePreference,
+} from './lib/i18n.ts';
 import {
   clearLegacyPasswordStorage,
   forgetTabPasswords,
@@ -28,6 +34,21 @@ import { loadSavedTheme, persistTheme, resolveEffectiveTheme, type ThemePreferen
 import { useSession } from './session/useSession.ts';
 
 const PREFS_KEY = 'rd_web_prefs';
+
+function browserLanguages(): readonly string[] | string | null {
+  if (typeof navigator === 'undefined') return null;
+  return navigator.languages?.length ? navigator.languages : navigator.language;
+}
+
+function readStartupLocale() {
+  let saved: string | null = null;
+  try {
+    saved = window.localStorage.getItem(LOCALE_STORAGE_KEY);
+  } catch {
+    saved = null;
+  }
+  return resolveStartupLocale(saved, browserLanguages());
+}
 
 interface SavedConnectionPrefs {
   mode?: ConnectionMode;
@@ -70,8 +91,8 @@ export function App() {
   const [devices, setDevices] = useState<SavedDevice[]>(() => loadSavedDevices());
   const [savedPasswords, setSavedPasswords] = useState<SavedPasswordMap>({});
   const [rememberPassword, setRememberPassword] = useState(false);
-  const [localePreference, setLocalePreference] = useState<LocalePreference>('default');
-  const [locale, setLocale] = useState<Locale>(() => resolveInitialLocale(null));
+  const [localePreference, setLocalePreference] = useState<LocalePreference>(() => readStartupLocale().preference);
+  const [locale, setLocale] = useState<Locale>(() => readStartupLocale().locale);
   const [theme, setTheme] = useState<ThemePreference>(() => loadSavedTheme());
   const [displayPrefs, setDisplayPrefs] = useState<DisplayPrefs>(() => loadDisplayPrefs());
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
@@ -269,6 +290,7 @@ export function App() {
         onCopyDiagnostics={(text) => {
           void navigator.clipboard?.writeText(text);
         }}
+        locale={locale}
       />
     );
   }
@@ -282,7 +304,12 @@ export function App() {
       displayPrefs={displayPrefs}
       onChangeLocale={(next) => {
         setLocalePreference(next);
-        setLocale(resolveEffectiveLocale(next, navigator.language));
+        setLocale(resolveEffectiveLocale(next, browserLanguages()));
+        try {
+          window.localStorage.setItem(LOCALE_STORAGE_KEY, next);
+        } catch {
+          // Private mode can reject storage.
+        }
       }}
       onChangeTheme={setTheme}
       onUpdateDisplayPrefs={(patch) => {

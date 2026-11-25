@@ -12,21 +12,34 @@ export function resolveLocalePreference(saved: string | null | undefined): Local
   return 'default';
 }
 
-export function detectSystemLocale(navLang?: string | null): Locale {
-  if (navLang && /^zh\b/i.test(navLang.trim())) {
-    return 'zh';
-  }
+export function preferredLanguage(languages?: readonly string[] | string | null): string | null {
+  if (!languages) return null;
+  if (typeof languages === 'string') return languages.trim() || null;
+  return languages.find((language) => language.trim())?.trim() ?? null;
+}
+
+export function detectSystemLocale(navLang?: string | readonly string[] | null): Locale {
+  const primary = preferredLanguage(navLang);
+  if (primary && /^zh\b/i.test(primary)) return 'zh';
   return 'en';
 }
 
 export function resolveEffectiveLocale(
   pref: LocalePreference,
-  navLang?: string | null,
+  navLang?: string | readonly string[] | null,
 ): Locale {
   if (pref === 'default') {
     return detectSystemLocale(navLang);
   }
   return pref;
+}
+
+export function resolveStartupLocale(
+  saved: string | null | undefined,
+  languages?: readonly string[] | string | null,
+): { preference: LocalePreference; locale: Locale } {
+  const preference = resolveLocalePreference(saved);
+  return { preference, locale: resolveEffectiveLocale(preference, languages) };
 }
 
 export function resolveInitialLocale(saved: string | null | undefined): Locale {

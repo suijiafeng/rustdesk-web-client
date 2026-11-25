@@ -8,6 +8,7 @@ import {
   resolveEffectiveLocale,
   resolveInitialLocale,
   resolveLocalePreference,
+  resolveStartupLocale,
   statusLabel,
   t,
 } from './i18n';
@@ -36,6 +37,14 @@ test('resolveLocalePreference defaults to default and resolves system language a
   assert.equal(resolveEffectiveLocale('default', 'en-GB'), 'en');
   assert.equal(resolveEffectiveLocale('en', 'zh-CN'), 'en');
   assert.equal(resolveEffectiveLocale('zh', 'en-US'), 'zh');
+});
+
+test('startup locale uses the saved setting, otherwise the browser language list', () => {
+  assert.deepEqual(resolveStartupLocale('zh', ['en-US']), { preference: 'zh', locale: 'zh' });
+  assert.deepEqual(resolveStartupLocale('en', ['zh-CN']), { preference: 'en', locale: 'en' });
+  assert.deepEqual(resolveStartupLocale(null, ['zh-CN', 'en-US']), { preference: 'default', locale: 'zh' });
+  assert.deepEqual(resolveStartupLocale('default', ['en-US', 'zh-CN']), { preference: 'default', locale: 'en' });
+  assert.deepEqual(resolveStartupLocale(null, null), { preference: 'default', locale: 'en' });
 });
 
 test('nextLocale toggles cleanly between en and zh and translates core labels', () => {
