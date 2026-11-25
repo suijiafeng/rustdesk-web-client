@@ -1,6 +1,7 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
 import type { DisplayInfo, QualityLevel } from '@rustdesk-web/shared';
+import { Eye, LogOut, Maximize2, Monitor, SlidersHorizontal, Volume2 } from 'lucide-react';
 import { t, translateAudioIssue, type Locale } from '../lib/i18n.ts';
 
 interface SessionToolbarProps {
@@ -18,6 +19,8 @@ interface SessionToolbarProps {
   volume: number;
   onToggleAudio: () => void;
   onVolume: (volume: number) => void;
+  onFullscreen: () => void;
+  onDisconnect: () => void;
 }
 
 const QUALITIES: QualityLevel[] = ['low', 'balanced', 'best'];
@@ -37,35 +40,34 @@ export function SessionToolbar({
   volume,
   onToggleAudio,
   onVolume,
+  onFullscreen,
+  onDisconnect,
 }: SessionToolbarProps) {
   return (
     <div
+      className="rd-session-toolbar"
       data-testid="session-toolbar"
-      style={{
-        position: 'absolute',
-        top: 12,
-        left: 12,
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: 8,
-        zIndex: 3,
-        maxWidth: 'calc(100% - 220px)',
-      }}
+      role="toolbar"
+      aria-label={t(locale, 'session')}
+      onPointerDown={(event) => event.stopPropagation()}
     >
       {displays.map((display, index) => (
         <button
           key={`${display.name}-${index}`}
           type="button"
+          className="rd-session-btn"
           disabled={!display.online}
           aria-pressed={index === currentDisplay}
           onClick={() => onSwitchDisplay(index)}
-          style={{ cursor: 'pointer' }}
         >
+          <Monitor size={15} />
           {display.name || `${t(locale, 'displayFallback')} ${index + 1}`}
         </button>
       ))}
-      <label>
-        {t(locale, 'sessionQuality')}{' '}
+      <span className="rd-session-sep" aria-hidden="true" />
+      <label className="rd-session-field">
+        <SlidersHorizontal size={15} />
+        <span>{t(locale, 'sessionQuality')}</span>
         <select
           aria-label={t(locale, 'sessionQuality')}
           value={quality}
@@ -79,14 +81,16 @@ export function SessionToolbar({
           ))}
         </select>
       </label>
-      <button type="button" aria-pressed={viewOnly} onClick={onToggleViewOnly} style={{ cursor: 'pointer' }}>
+      <button type="button" className="rd-session-btn" aria-pressed={viewOnly} onClick={onToggleViewOnly}>
+        <Eye size={15} />
         {viewOnly ? t(locale, 'viewOnlyLabel') : t(locale, 'sessionControl')}
       </button>
-      <button type="button" aria-pressed={audioEnabled} onClick={onToggleAudio} style={{ cursor: 'pointer' }}>
+      <button type="button" className="rd-session-btn" aria-pressed={audioEnabled} onClick={onToggleAudio}>
+        <Volume2 size={15} />
         {audioEnabled ? t(locale, 'audioOn') : t(locale, 'audioOff')}
       </button>
-      <label>
-        {t(locale, 'sessionVolume')}{' '}
+      <label className="rd-session-field">
+        <span>{t(locale, 'sessionVolume')}</span>
         <input
           aria-label={t(locale, 'sessionVolume')}
           type="range"
@@ -97,8 +101,17 @@ export function SessionToolbar({
           onChange={(event) => onVolume(Number(event.target.value))}
         />
       </label>
-      {audioIssue ? <span data-testid="audio-issue">{translateAudioIssue(locale, audioIssue)}</span> : null}
-      {!privacyAllowed ? <span data-testid="privacy-revoked">{t(locale, 'privacyUnavailable')}</span> : null}
+      <span className="rd-session-sep" aria-hidden="true" />
+      <button type="button" className="rd-session-btn" onClick={onFullscreen}>
+        <Maximize2 size={15} />
+        {t(locale, 'sessionFullscreen')}
+      </button>
+      <button type="button" className="rd-session-btn danger" onClick={onDisconnect}>
+        <LogOut size={15} />
+        {t(locale, 'disconnect')}
+      </button>
+      {audioIssue ? <span className="rd-session-note" data-testid="audio-issue">{translateAudioIssue(locale, audioIssue)}</span> : null}
+      {!privacyAllowed ? <span className="rd-session-note" data-testid="privacy-revoked">{t(locale, 'privacyUnavailable')}</span> : null}
     </div>
   );
 }

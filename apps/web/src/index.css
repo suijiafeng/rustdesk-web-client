@@ -391,6 +391,122 @@ button:focus-visible {
   color: var(--ink);
 }
 
+.rd-session-toolbar {
+  position: absolute;
+  top: calc(10px + env(safe-area-inset-top, 0px));
+  left: 50%;
+  z-index: 4;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  padding: 4px 8px;
+  border-radius: 12px;
+  border: 1px solid #40454c;
+  background: rgba(34, 37, 43, 0.92);
+  color: #f3f5f8;
+  color-scheme: dark;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(16px) saturate(1.25);
+  -webkit-backdrop-filter: blur(16px) saturate(1.25);
+  transform: translateX(-50%);
+}
+
+.rd-session-toolbar button,
+.rd-session-toolbar select,
+.rd-session-field {
+  font: inherit;
+  font-size: 13px;
+  color: #f3f5f8;
+}
+
+.rd-session-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #e7edf3;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.rd-session-btn:hover:not(:disabled),
+.rd-session-btn:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.rd-session-btn:focus-visible,
+.rd-session-toolbar select:focus-visible,
+.rd-session-toolbar input:focus-visible {
+  outline: 2px solid #8bcaff;
+  outline-offset: 1px;
+}
+
+.rd-session-btn[aria-pressed='true'] {
+  background: #224362;
+  border-color: #3d8fd4;
+  color: #a1d2ff;
+}
+
+.rd-session-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.rd-session-btn.danger {
+  color: #ffaaa6;
+}
+
+.rd-session-btn.danger:hover:not(:disabled),
+.rd-session-btn.danger:focus-visible {
+  background: rgba(180, 35, 24, 0.35);
+  color: #ffd0cd;
+}
+
+.rd-session-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px;
+  white-space: nowrap;
+}
+
+.rd-session-toolbar select {
+  border: 0;
+  border-radius: 6px;
+  background: #30353c;
+  color: #f3f5f8;
+  padding: 4px 8px;
+}
+
+.rd-session-toolbar input[type='range'] {
+  width: 96px;
+  accent-color: #2f95ee;
+}
+
+.rd-session-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 2px;
+  background: rgba(255, 255, 255, 0.16);
+  flex-shrink: 0;
+}
+
+.rd-session-note {
+  color: #c2cad3;
+  font-size: 12px;
+  padding: 0 4px;
+}
+
 .scrim {
   position: absolute;
   inset: 0;

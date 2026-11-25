@@ -17,7 +17,7 @@ import { applyTouchEffects } from '../lib/touchInput.ts';
 import { MobileSessionDock } from './MobileSessionDock.tsx';
 import { SoftKeyboardBar } from './SoftKeyboardBar.tsx';
 import { useKeyboardViewport } from '../hooks/useKeyboardViewport.ts';
-import { t, type Locale } from '../lib/i18n.ts';
+import type { Locale } from '../lib/i18n.ts';
 import { sessionChromeMode } from '../lib/sessionChrome.ts';
 import { DiagnosticsPanel } from './DiagnosticsPanel.tsx';
 import { offsetPointerMessages } from '../lib/displays.ts';
@@ -738,17 +738,9 @@ export function RemoteScreen({
           volume={volume}
           onToggleAudio={onToggleAudio}
           onVolume={onVolume}
+          onFullscreen={() => toggleFullscreen(stageRef.current)}
+          onDisconnect={onDisconnect}
         />
-      ) : null}
-      {chrome === 'desktop' ? (
-        <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 8, zIndex: 3 }}>
-          <button type="button" onClick={() => toggleFullscreen(stageRef.current)} style={{ cursor: 'pointer' }}>
-            {t(locale, 'sessionFullscreen')}
-          </button>
-          <button type="button" onClick={onDisconnect} style={{ cursor: 'pointer' }}>
-            {t(locale, 'disconnect')}
-          </button>
-        </div>
       ) : null}
     </div>
   );
