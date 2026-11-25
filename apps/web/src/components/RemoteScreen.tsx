@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPoi
 import { flushSync } from 'react-dom';
 import type { ClientMessage, CursorShape, DisplayInfo, QualityLevel } from '@rustdesk-web/shared';
 import { MousePointer2 } from 'lucide-react';
-import { clampPan, computePinchStep, computeViewTransform, mapFromRemote, panToKeepVisible, type ViewMode, type ViewTransform } from '../lib/mapping.ts';
+import { clampPan, computePinchStep, computeViewTransform, fitScale, mapFromRemote, panToKeepVisible, type ViewMode, type ViewTransform } from '../lib/mapping.ts';
 import type { DefaultViewStyle, ScrollStyle } from '../lib/displayPrefs.ts';
 import {
   LONG_PRESS_MS,
@@ -310,7 +310,7 @@ export function RemoteScreen({
     const stage = stageRef.current;
     if (!stage) return;
     const measure = () => {
-      if (keyboardLayout.pending.current) return;
+      if (keyboardLayout.pending.current || keyboardLayout.active.current) return;
       setBox({ width: stage.clientWidth, height: stage.clientHeight });
     };
     measure();
@@ -528,27 +528,35 @@ export function RemoteScreen({
         }, LONG_PRESS_MS);
       }
     }
+    const { width, height } = boxRef.current;
+    const remote = frameRef.current;
+    const panOptions = {
+      allowEdgePan: true,
+      edgePadding: 48,
+      bottomInset: keyboardOpen && !keyboardLayout.viewport ? 112 : 0,
+    };
+    const applyManualView = (mode: ViewMode, nextZoom: number, position: typeof pan) => {
+      const view = computeViewTransform(width, height, remote.width, remote.height, mode, nextZoom, position, panOptions);
+      transformRef.current = view;
+      keyboardLayout.markManual(view, mode);
+      setViewMode(mode);
+      setZoom(nextZoom);
+      setPan(position);
+    };
     if (outcome.pan) {
-      const panStep = outcome.pan;
-      setViewMode((mode) => (mode === 'fit' ? 'custom' : mode));
-      setPan((current) => clampPan(
-        boxRef.current.width,
-        boxRef.current.height,
-        frameRef.current.width,
-        frameRef.current.height,
-        transformRef.current.scale,
-        current.panX + panStep.dx,
-        current.panY + panStep.dy,
-        { allowEdgePan: true, edgePadding: 48, bottomInset: keyboardOpen ? 112 : 0 },
-      ));
+      const current = transformRef.current;
+      const position = clampPan(width, height, remote.width, remote.height, current.scale,
+        current.panX + outcome.pan.dx, current.panY + outcome.pan.dy, panOptions);
+      const mode = viewMode === 'fit' ? 'custom' : viewMode;
+      applyManualView(mode, current.scale / fitScale(width, height, remote.width, remote.height), position);
     }
     if (outcome.pinch) {
       const pinch = outcome.pinch;
       const step = computePinchStep(
-        boxRef.current.width,
-        boxRef.current.height,
-        frameRef.current.width,
-        frameRef.current.height,
+        width,
+        height,
+        remote.width,
+        remote.height,
         transformRef.current,
         pinch.prevMidX,
         pinch.prevMidY,
@@ -556,11 +564,9 @@ export function RemoteScreen({
         pinch.nextMidX,
         pinch.nextMidY,
         pinch.nextDist,
-        { allowEdgePan: true, edgePadding: 48, bottomInset: keyboardOpen ? 112 : 0 },
+        panOptions,
       );
-      setViewMode(step.viewMode);
-      setZoom(step.zoom);
-      setPan(step.pan);
+      applyManualView(step.viewMode, step.zoom, step.pan);
     }
   };
 

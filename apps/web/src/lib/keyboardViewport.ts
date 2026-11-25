@@ -33,6 +33,31 @@ export function keyboardOcclusion(baseline: HeightBaseline, width: number, heigh
   return Math.max(0, base - height);
 }
 
+/** A keyboard can shrink a portrait viewport below its width without rotating the screen. */
+export function keyboardSessionOcclusion(
+  baseline: HeightBaseline,
+  initial: { width: number; height: number },
+  current: { width: number; height: number },
+): number {
+  if (Math.abs(current.width - initial.width) > ROTATE_WIDTH_PX) {
+    return keyboardOcclusion(baseline, current.width, current.height);
+  }
+  const base = baseline[viewportOrientation(initial.width, initial.height)];
+  return Math.max(0, Math.max(initial.height, base) - current.height);
+}
+
+export function translateManualKeyboardView(
+  view: ViewTransform,
+  from: Point,
+  to: Point,
+  fit: number,
+): { view: ViewTransform; zoom: number } {
+  return {
+    view: { ...view, panX: view.panX + from.x - to.x, panY: view.panY + from.y - to.y },
+    zoom: view.scale / fit,
+  };
+}
+
 export function keyboardIsOpen(occlusion: number, alreadyShown: boolean): boolean {
   return occlusion > (alreadyShown ? KEYBOARD_HIDE_PX : KEYBOARD_APPEAR_PX);
 }

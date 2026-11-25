@@ -6,10 +6,11 @@ import {
   KEYBOARD_PENDING_MS,
   ROTATE_WIDTH_PX,
   keyboardIsOpen,
-  keyboardOcclusion,
+  keyboardSessionOcclusion,
   keyboardView,
   noteViewportHeight,
   pendingKeyboardExpired,
+  translateManualKeyboardView,
   type HeightBaseline,
 } from '../lib/keyboardViewport.ts';
 import { fitScale, type Point, type ViewMode, type ViewTransform } from '../lib/mapping.ts';
@@ -41,8 +42,9 @@ export function useKeyboardViewport(options: Options) {
   const baseline = useRef<HeightBaseline>({ ...EMPTY_HEIGHT_BASELINE });
   const startedAt = useRef(0);
   const shown = useRef(false);
-  const widthAtBegin = useRef(0);
-  const manual = useRef<ViewState | null>(null);
+  const initialViewport = useRef({ width: 0, height: 0 });
+  const initialOrigin = useRef<Point>({ x: 0, y: 0 });
+  const manual = useRef<{ view: ViewTransform; mode: ViewMode; origin: Point } | null>(null);
   const before = useRef<ReturnType<Options['read']> | null>(null);
   const pending = useRef(false);
   const active = useRef(false);
@@ -75,26 +77,40 @@ export function useKeyboardViewport(options: Options) {
       clearPending();
       return;
     }
-    baseline.current = noteViewportHeight(baseline.current, vv.width, vv.height);
-    const occlusion = keyboardOcclusion(baseline.current, vv.width, vv.height);
+    if (!pending.current && !shown.current) {
+      baseline.current = noteViewportHeight(baseline.current, vv.width, vv.height);
+      return;
+    }
+    const occlusion = keyboardSessionOcclusion(baseline.current, initialViewport.current, vv);
     const visible = keyboardIsOpen(occlusion, shown.current);
-    const rotated = widthAtBegin.current > 0 && Math.abs(vv.width - widthAtBegin.current) > ROTATE_WIDTH_PX;
+    const rotated = Math.abs(vv.width - initialViewport.current.width) > ROTATE_WIDTH_PX;
     if (pending.current && pendingKeyboardExpired(startedAt.current, Date.now(), visible)) {
       clearPending();
       return;
     }
-    if (!pending.current && !shown.current) return;
-    if (shown.current && !visible) {
-      const restore = rotated ? null : manual.current ?? before.current;
+    const now = current.read();
+    if (shown.current && (rotated ? !current.softKeys : !visible)) {
+      let restore = before.current;
+      const size = { w: vv.width, h: vv.height };
+      const adjusted = manual.current;
+      if (rotated) {
+        restore = { ...now, mode: 'fit', zoom: 1,
+          view: keyboardView(size.w, size.h, now.remoteW, now.remoteH, 'fit', now.view, now.anchor) };
+      } else if (adjusted) {
+        const fit = fitScale(size.w, size.h, now.remoteW, now.remoteH);
+        restore = { ...now, mode: adjusted.mode,
+          ...translateManualKeyboardView(adjusted.view, adjusted.origin, initialOrigin.current, fit) };
+      }
       clearPending();
-      if (restore) current.apply({ w: vv.width, h: vv.height }, restore);
+      baseline.current = noteViewportHeight(baseline.current, vv.width, vv.height);
+      if (restore) current.apply(size, restore);
       return;
     }
-    if (rotated && !visible) {
+    if (rotated && !shown.current && !visible) {
       clearPending();
       return;
     }
-    if (!visible) return;
+    if (!visible && !shown.current) return;
     shown.current = true;
     pending.current = false;
     active.current = true;
@@ -105,13 +121,18 @@ export function useKeyboardViewport(options: Options) {
       ? current.stage.current?.querySelector('[data-testid="softbar"]')?.getBoundingClientRect().height ?? 46
       : 0;
     const size = { w: rect.width, h: Math.max(1, rect.height - barHeight) };
-    const now = current.read();
     const snapshot = before.current ?? now;
-    const mode: ViewMode = manual.current
-      ? manual.current.mode === 'fit' ? 'custom' : manual.current.mode
-      : snapshot.mode;
-    const previous = manual.current?.view ?? snapshot.view;
-    const view = keyboardView(size.w, size.h, now.remoteW, now.remoteH, mode, previous, snapshot.anchor);
+    const adjusted = rotated ? null : manual.current;
+    const mode: ViewMode = rotated ? 'fit' : adjusted?.mode ?? snapshot.mode;
+    const fit = fitScale(size.w, size.h, now.remoteW, now.remoteH);
+    const origin = { x: rect.left, y: rect.top };
+    const view = adjusted
+      ? translateManualKeyboardView(adjusted.view, adjusted.origin, origin, fit).view
+      : keyboardView(size.w, size.h, now.remoteW, now.remoteH, mode, {
+        ...snapshot.view,
+        panX: snapshot.view.panX + initialOrigin.current.x - rect.left,
+        panY: snapshot.view.panY + initialOrigin.current.y - rect.top,
+      }, snapshot.anchor);
     setViewport((previousRect) => (
       previousRect
       && previousRect.left === rect.left
@@ -123,7 +144,7 @@ export function useKeyboardViewport(options: Options) {
     ));
     current.apply(size, {
       mode,
-      zoom: view.scale / fitScale(size.w, size.h, now.remoteW, now.remoteH),
+      zoom: view.scale / fit,
       view,
     });
   }, [clearPending, sample]);
@@ -139,7 +160,9 @@ export function useKeyboardViewport(options: Options) {
     if (!vv || vv.scale > 1.02) return;
     baseline.current = noteViewportHeight(baseline.current, vv.width, vv.height);
     before.current = latest.current.read();
-    widthAtBegin.current = vv.width;
+    initialViewport.current = { width: vv.width, height: vv.height };
+    const stageRect = latest.current.stage.current?.getBoundingClientRect();
+    initialOrigin.current = { x: stageRect?.left ?? 0, y: stageRect?.top ?? 0 };
     startedAt.current = Date.now();
     pending.current = true;
     shown.current = false;
@@ -151,9 +174,15 @@ export function useKeyboardViewport(options: Options) {
     schedule();
   }, [clearPending, sample, schedule]);
 
-  const markManual = useCallback((view: ViewTransform, mode: ViewMode, zoom: number) => {
-    if (active.current) manual.current = { view, mode, zoom };
+  const markManual = useCallback((view: ViewTransform, mode: ViewMode) => {
+    if (!active.current) return;
+    const rect = latest.current.stage.current?.getBoundingClientRect();
+    if (rect) manual.current = { view, mode: mode === 'fit' ? 'custom' : mode, origin: { x: rect.left, y: rect.top } };
   }, []);
+
+  useEffect(() => {
+    schedule();
+  }, [options.softKeys, schedule]);
 
   useEffect(() => {
     const vv = window.visualViewport;

@@ -7,9 +7,11 @@ import {
   KEYBOARD_PENDING_MS,
   keyboardIsOpen,
   keyboardOcclusion,
+  keyboardSessionOcclusion,
   keyboardView,
   noteViewportHeight,
   pendingKeyboardExpired,
+  translateManualKeyboardView,
 } from './keyboardViewport.ts';
 
 test('fit view leaves the entire desktop above the keyboard and function bar', () => {
@@ -50,4 +52,22 @@ test('a pending keyboard clears when the OS keyboard never appears', () => {
   assert.equal(pendingKeyboardExpired(1_000, 1_000 + KEYBOARD_PENDING_MS - 1, false), false);
   assert.equal(pendingKeyboardExpired(1_000, 1_000 + KEYBOARD_PENDING_MS, false), true);
   assert.equal(pendingKeyboardExpired(1_000, 1_000 + KEYBOARD_PENDING_MS + 5_000, true), false);
+});
+
+test('a keyboard-shortened portrait viewport retains the portrait height baseline', () => {
+  const baseline = { portrait: 780, landscape: 360 };
+  const initial = { width: 390, height: 740 };
+  assert.equal(keyboardSessionOcclusion(baseline, initial, { width: 390, height: 330 }), 450);
+  assert.equal(keyboardSessionOcclusion(baseline, initial, { width: 740, height: 360 }), 0);
+});
+
+test('restoring a manual view keeps its scale and translates pan to the full stage', () => {
+  const view = { scale: 0.6, panX: -220, panY: -102 };
+  const restored = translateManualKeyboardView(view, { x: 12, y: 85 }, { x: 0, y: 0 }, 0.3);
+  assert.deepEqual(restored.view, { scale: 0.6, panX: -208, panY: -17 });
+  assert.equal(restored.zoom, 2);
+  assert.deepEqual(
+    translateManualKeyboardView(restored.view, { x: 0, y: 0 }, { x: 12, y: 85 }, 0.2).view,
+    view,
+  );
 });
