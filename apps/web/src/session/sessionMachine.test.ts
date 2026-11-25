@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { CodecSupport, PeerMessage } from '@rustdesk-web/shared';
 import {
+  canSendSessionMessage,
   CONNECT_TIMEOUT_MS,
   RESTART_GAP_MS,
   restartReconnectDue,
@@ -232,4 +233,16 @@ test('disconnect clears the session and a stale generation is ignored', () => {
   assert.equal(idle.peer, null);
   assert.equal(isCurrentGeneration(2, 2), true);
   assert.equal(isCurrentGeneration(3, 2), false);
+});
+
+
+test('remote operations and authentication use their appropriate session phases', () => {
+  assert.equal(canSendSessionMessage('connecting', 'auth2fa'), true);
+  assert.equal(canSendSessionMessage('live', 'auth2fa'), false);
+  assert.equal(canSendSessionMessage('idle', 'auth2fa'), false);
+  for (const type of ['chat', 'privacy', 'resolution', 'restart'] as const) {
+    assert.equal(canSendSessionMessage('live', type), true);
+    assert.equal(canSendSessionMessage('connecting', type), false);
+  }
+  assert.equal(canSendSessionMessage('live', 'connect'), false);
 });

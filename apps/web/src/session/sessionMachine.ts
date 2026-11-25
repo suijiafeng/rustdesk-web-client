@@ -22,6 +22,20 @@ export function restartReconnectDue(now: number, deadline: number, phase: Sessio
 
 export type SessionPhase = 'idle' | 'connecting' | 'live' | 'error';
 
+export function canSendSessionMessage(phase: SessionPhase, type: ClientMessage['type']): boolean {
+  if (type === 'auth2fa') return phase === 'connecting';
+  if (phase !== 'live') return false;
+  switch (type) {
+    case 'mouse': case 'key': case 'text': case 'switchDisplay': case 'quality':
+    case 'followWindow': case 'audio': case 'ping': case 'resolution': case 'privacy':
+    case 'restart': case 'chat':
+      return true;
+    default:
+      return false;
+  }
+}
+
+
 export interface SessionSnapshot {
   phase: SessionPhase;
   detail: string;

@@ -17,12 +17,13 @@ import {
 } from '../lib/linkHealth.ts';
 import { sessionEndLock } from '../lib/displays.ts';
 import { textMessages } from '../lib/keyboard.ts';
-import { classifyBrowser, clipboardDelivery, reconnectDelayMs, twoFactorStatus, validateChatText, validateClipboardText, validateTwoFactorCode, type ClipboardActionResult } from '../lib/platform.ts';
+import { classifyBrowser, clipboardDelivery, reconnectDelayMs, TWO_FACTOR_TIMEOUT_MS, twoFactorStatus, validateChatText, validateClipboardText, validateTwoFactorCode, type ClipboardActionResult } from '../lib/platform.ts';
 import { RemoteAudio, clampVolume, webAudioStatus } from '../lib/remoteAudio.ts';
 import { filterCodecSupport, resolveQualityLevel, resolveTargetFps, type DisplayPrefs } from '../lib/displayPrefs.ts';
 import {
   CONNECT_TIMEOUT_MS,
   buildConnectMessage,
+  canSendSessionMessage,
   initialSession,
   RESTART_GAP_MS,
   RESTART_OFFLINE_MS,
@@ -89,7 +90,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
   const reconnectTimerRef = useRef<number | null>(null);
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const [chatLines, setChatLines] = useState<{ direction: 'in' | 'out'; text: string }[]>([]);
-  const [twoFactor, setTwoFactor] = useState<null | 'required' | 'failed' | 'expired'>(null);
+  const [twoFactor, setTwoFactor] = useState<null | 'required' | 'submitted' | 'failed' | 'expired'>(null);
   const twoFactorMeta = useRef({ started: 0, attempts: 0 });
   const heldReleaseRef = useRef<ClientMessage | null>(null);
   const armedKeysRef = useRef<ClientMessage[]>([]);
@@ -145,15 +146,18 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
 
   const sendInput = useCallback((messages: ClientMessage[]) => {
     const socket = socketRef.current;
-    if (!socket || socket.readyState !== WebSocket.OPEN || phaseRef.current !== 'live') return;
-    for (const message of messages) {
-      if (
-        message.type !== 'mouse' && message.type !== 'key' && message.type !== 'text' &&
-        message.type !== 'switchDisplay' && message.type !== 'quality' && message.type !== 'followWindow' &&
-        message.type !== 'audio' && message.type !== 'ping'
-      ) continue;
-      socket.send(JSON.stringify(message));
+    if (!socket || socket.readyState !== WebSocket.OPEN) return false;
+    let sent = false;
+    try {
+      for (const message of messages) {
+        if (!canSendSessionMessage(phaseRef.current, message.type)) continue;
+        socket.send(JSON.stringify(message));
+        sent = true;
+      }
+    } catch {
+      return false;
     }
+    return sent;
   }, []);
 
   const setHeldRelease = useCallback((message: ClientMessage | null) => {
@@ -287,6 +291,8 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     closeAudio();
     setAudio({ enabled: false, denied: false, volume: 1, issue: '' });
     setDecoderError('');
+    twoFactorMeta.current = { started: 0, attempts: 0 };
+    setTwoFactor(null);
     apply(eventGeneration, { type: 'connect-started' });
     const rawSupport = await probeCodecs();
     if (!isCurrentGeneration(generation.current, eventGeneration)) return;
@@ -321,14 +327,15 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     const socket = new WebSocket(wsUrl(window.location));
     socket.binaryType = 'arraybuffer';
     socketRef.current = socket;
-    const timer = window.setTimeout(() => {
-      if (!isCurrentGeneration(generation.current, eventGeneration)) return;
+    const onConnectTimeout = () => {
+      if (!isCurrentGeneration(generation.current, eventGeneration) || socketRef.current !== socket) return;
       if (phaseRef.current !== 'connecting') return;
       apply(eventGeneration, { type: 'timeout' });
       releaseDecoder();
       closeSocket(socket, false);
-    }, CONNECT_TIMEOUT_MS);
-
+      if (twoFactorMeta.current.started) setTwoFactor('expired');
+    };
+    let timer = window.setTimeout(onConnectTimeout, CONNECT_TIMEOUT_MS);
     const finishTimer = () => window.clearTimeout(timer);
     socket.onopen = () => {
       if (!isCurrentGeneration(generation.current, eventGeneration) || socketRef.current !== socket) return;
@@ -417,12 +424,17 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
         return;
       }
       if (parsed.type === 'twoFactorRequired') {
-        if (!twoFactorMeta.current.started) twoFactorMeta.current.started = Date.now();
+        if (!twoFactorMeta.current.started) {
+          twoFactorMeta.current.started = Date.now();
+          finishTimer();
+          timer = window.setTimeout(onConnectTimeout, TWO_FACTOR_TIMEOUT_MS);
+        }
         const status = twoFactorStatus(twoFactorMeta.current.attempts, Date.now() - twoFactorMeta.current.started);
         setTwoFactor(status === 'ok' ? 'required' : status === 'expired' ? 'expired' : 'failed');
         return;
       }
       if (parsed.type === 'status' && parsed.state === 'live') {
+        finishTimer();
         twoFactorMeta.current = { started: 0, attempts: 0 };
         setTwoFactor(null);
       }
@@ -561,14 +573,19 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     }
     const trimmed = code.trim();
     if (!validateTwoFactorCode(trimmed)) return;
-    twoFactorMeta.current.attempts += 1;
-    sendInput([{ type: 'auth2fa', code: trimmed }]);
-  }, [sendInput]);
+    if (twoFactor !== 'required') return;
+    if (sendInput([{ type: 'auth2fa', code: trimmed }])) {
+      twoFactorMeta.current.attempts += 1;
+      setTwoFactor('submitted');
+    } else {
+      setTwoFactor('failed');
+    }
+  }, [sendInput, twoFactor]);
 
   const sendChat = useCallback((text: string) => {
     if (validateChatText(text) !== 'ok' || phaseRef.current !== 'live') return;
     const trimmed = text.trim();
-    sendInput([{ type: 'chat', text: trimmed }]);
+    if (!sendInput([{ type: 'chat', text: trimmed }])) return;
     setChatLines((lines) => [...lines, { direction: 'out' as const, text: trimmed }].slice(-50));
   }, [sendInput]);
 
@@ -582,10 +599,13 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
 
   const requestRestart = useCallback(() => {
     if (phaseRef.current !== 'live' || sessionRef.current.peer?.restartAllowed !== true || restartModeRef.current) return;
+    if (!sendInput([{ type: 'restart' }])) {
+      setRestartNotice('failed');
+      return;
+    }
     restartDeadlineRef.current = Date.now() + RESTART_RETRY_MS;
     restartModeRef.current = 'requested';
     setRestartNotice('requested');
-    sendInput([{ type: 'restart' }]);
   }, [sendInput]);
 
   useEffect(() => {
@@ -616,9 +636,17 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
   const togglePrivacy = useCallback(() => {
     if (phaseRef.current !== 'live' || sessionRef.current.peer?.privacyAllowed !== true || privacy.pending) return;
     const enabled = !privacy.enabled;
-    setPrivacy({ enabled: privacy.enabled, pending: true, failed: false });
-    sendInput([{ type: 'privacy', enabled }]);
+    const sent = sendInput([{ type: 'privacy', enabled }]);
+    setPrivacy({ enabled: privacy.enabled, pending: sent, failed: !sent });
   }, [privacy.enabled, privacy.pending, sendInput]);
+
+  useEffect(() => {
+    if (!privacy.pending) return;
+    const timer = window.setTimeout(() => setPrivacy((current) => (
+      current.pending ? { ...current, pending: false, failed: true } : current
+    )), 10_000);
+    return () => window.clearTimeout(timer);
+  }, [privacy.pending]);
 
   return {
     session,

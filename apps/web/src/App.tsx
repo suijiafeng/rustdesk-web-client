@@ -258,7 +258,7 @@ export function App() {
           onChange={(event) => setTwoFactorCode(event.target.value)}
         />
       </label>
-      <button type="submit">{t(locale, 'send')}</button>
+      <button type="submit" disabled={twoFactor !== 'required'}>{t(locale, 'send')}</button>
       {twoFactor === 'failed' ? <span>{t(locale, 'twoFactorFailed')}</span> : null}
       {twoFactor === 'expired' ? <span>{t(locale, 'twoFactorExpired')}</span> : null}
     </form>
