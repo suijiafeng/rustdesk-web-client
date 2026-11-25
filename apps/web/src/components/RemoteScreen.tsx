@@ -1,10 +1,12 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
-import type { ClientMessage, CursorShape } from '@rustdesk-web/shared';
+import type { ClientMessage, CursorShape, DisplayInfo, QualityLevel } from '@rustdesk-web/shared';
 import { MousePointer2 } from 'lucide-react';
 import { computeViewTransform, mapFromRemote, type ViewTransform } from '../lib/mapping.ts';
+import { offsetPointerMessages } from '../lib/displays.ts';
 import { isImeEvent } from '../lib/keys.ts';
+import { SessionToolbar } from './SessionToolbar.tsx';
 import {
   noteKeyDown,
   noteKeyUp,
@@ -34,6 +36,7 @@ interface RemoteScreenProps {
   showRemoteCursor: boolean;
   enlargeCursor: boolean;
   cursorEmbedded: boolean;
+  displayOrigin: { x: number; y: number };
   cursor: { x: number; y: number } | null;
   cursorShape: CursorShape | null;
   onMouse: (messages: ClientMessage[]) => void;
@@ -41,6 +44,13 @@ interface RemoteScreenProps {
   onHeldRelease: (message: ClientMessage | null) => void;
   onArmKeys: (messages: ClientMessage[]) => void;
   onDisconnect: () => void;
+  displays: readonly DisplayInfo[];
+  currentDisplay: number;
+  quality: QualityLevel;
+  privacyAllowed: boolean;
+  onSwitchDisplay: (display: number) => void;
+  onQuality: (quality: QualityLevel) => void;
+  onToggleViewOnly: () => void;
 }
 
 interface Drag {
@@ -59,6 +69,7 @@ export function RemoteScreen({
   showRemoteCursor,
   enlargeCursor,
   cursorEmbedded,
+  displayOrigin,
   cursor,
   cursorShape,
   onMouse,
@@ -66,6 +77,13 @@ export function RemoteScreen({
   onHeldRelease,
   onArmKeys,
   onDisconnect,
+  displays,
+  currentDisplay,
+  quality,
+  privacyAllowed,
+  onSwitchDisplay,
+  onQuality,
+  onToggleViewOnly,
 }: RemoteScreenProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const captureRef = useRef<HTMLInputElement>(null);
@@ -88,6 +106,7 @@ export function RemoteScreen({
   const onKeyboardRef = useRef(onKeyboard);
   const onHeldRef = useRef(onHeldRelease);
   const onArmKeysRef = useRef(onArmKeys);
+  const originRef = useRef(displayOrigin);
   viewOnlyRef.current = viewOnly;
   swapRef.current = swapMouseButtons;
   reverseRef.current = reverseMouseWheel;
@@ -96,6 +115,18 @@ export function RemoteScreen({
   onKeyboardRef.current = onKeyboard;
   onHeldRef.current = onHeldRelease;
   onArmKeysRef.current = onArmKeys;
+  originRef.current = displayOrigin;
+
+  const sendPointer = (messages: ClientMessage[]) => {
+    onMouseRef.current(offsetPointerMessages(messages, originRef.current));
+  };
+  const armPointer = (message: ClientMessage | null) => {
+    if (!message) {
+      onHeldRef.current(null);
+      return;
+    }
+    onHeldRef.current(offsetPointerMessages([message], originRef.current)[0] ?? null);
+  };
 
   const transform = computeViewTransform(box.width, box.height, frameWidth, frameHeight, 'fit', 1, {
     panX: 0,
@@ -145,17 +176,17 @@ export function RemoteScreen({
       queuedMoveRef.current = null;
       if (!next) return;
       const message = pointerMoveMessage(next, viewOnlyRef.current);
-      if (message) onMouseRef.current([message]);
+      if (message) sendPointer([message]);
     });
   };
 
   const releaseDrag = (point: { x: number; y: number } | null) => {
     const drag = dragRef.current;
     dragRef.current = null;
-    onHeldRef.current(null);
+    armPointer(null);
     if (!drag || viewOnlyRef.current) return;
     cancelQueuedMove();
-    onMouseRef.current(releaseHeldButton(drag.button, point ?? drag.point));
+    sendPointer(releaseHeldButton(drag.button, point ?? drag.point));
   };
 
   useEffect(() => {
@@ -187,7 +218,7 @@ export function RemoteScreen({
       if (pos && !viewOnlyRef.current) {
         cancelQueuedMove();
         const move = pointerMoveMessage(pos, false);
-        if (move) onMouseRef.current([move]);
+        if (move) sendPointer([move]);
       }
       const wheel = wheelMessages(
         event.deltaX,
@@ -199,7 +230,7 @@ export function RemoteScreen({
         viewOnlyRef.current,
       );
       wheelAccumRef.current = { x: wheel.nextAccumX, y: wheel.nextAccumY };
-      if (wheel.messages.length > 0) onMouseRef.current(wheel.messages);
+      if (wheel.messages.length > 0) sendPointer(wheel.messages);
     };
     stage.addEventListener('wheel', onWheel, { passive: false });
     return () => stage.removeEventListener('wheel', onWheel);
@@ -288,8 +319,8 @@ export function RemoteScreen({
     }
     cancelQueuedMove();
     dragRef.current = { pointerId: event.pointerId, button, point: pos };
-    onHeldRef.current({ type: 'mouse', action: 'up', button, x: pos.x, y: pos.y });
-    onMouseRef.current(pointerDownMessages(button, pos, false));
+    armPointer({ type: 'mouse', action: 'up', button, x: pos.x, y: pos.y });
+    sendPointer(pointerDownMessages(button, pos, false));
     captureRef.current?.focus({ preventScroll: true });
   };
 
@@ -305,9 +336,9 @@ export function RemoteScreen({
     if (dragging && drag) {
       drag.point = pos;
       cancelQueuedMove();
-      onHeldRef.current({ type: 'mouse', action: 'up', button: drag.button, x: pos.x, y: pos.y });
+      armPointer({ type: 'mouse', action: 'up', button: drag.button, x: pos.x, y: pos.y });
       const move = pointerMoveMessage(pos, false);
-      if (move) onMouseRef.current([move]);
+      if (move) sendPointer([move]);
       return;
     }
     queueMove(pos);
@@ -322,10 +353,10 @@ export function RemoteScreen({
       ? remotePoint(local.x, local.y, remote.width, remote.height, transformRef.current, true)
       : drag.point;
     dragRef.current = null;
-    onHeldRef.current(null);
+    armPointer(null);
     if (viewOnlyRef.current || !pos) return;
     cancelQueuedMove();
-    onMouseRef.current(pointerUpMessages(drag.button, pos, false));
+    sendPointer(pointerUpMessages(drag.button, pos, false));
   };
 
   const cursorScreen = showCursor && cursor ? mapFromRemote(cursor.x, cursor.y, transform) : null;
@@ -417,6 +448,16 @@ export function RemoteScreen({
           if (messages.length > 0) onKeyboardRef.current(messages);
         }}
         style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 1, height: 1 }}
+      />
+      <SessionToolbar
+        displays={displays}
+        currentDisplay={currentDisplay}
+        quality={quality}
+        viewOnly={viewOnly}
+        privacyAllowed={privacyAllowed}
+        onSwitchDisplay={onSwitchDisplay}
+        onQuality={onQuality}
+        onToggleViewOnly={onToggleViewOnly}
       />
       <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 8, zIndex: 3 }}>
         <button type="button" onClick={() => toggleFullscreen(stageRef.current)} style={{ cursor: 'pointer' }}>

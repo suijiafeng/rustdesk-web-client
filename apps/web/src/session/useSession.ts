@@ -6,6 +6,7 @@ import type { ClientMessage, ServerMessage } from '@rustdesk-web/shared';
 import type { ConnectRequest } from '../components/RustDeskShell.tsx';
 import { probeCodecs, webCodecsStatus } from '../lib/codecs.ts';
 import { RemoteDecoder } from '../lib/decoder.ts';
+import { sessionEndLock } from '../lib/displays.ts';
 import { filterCodecSupport, resolveQualityLevel, resolveTargetFps, type DisplayPrefs } from '../lib/displayPrefs.ts';
 import {
   CONNECT_TIMEOUT_MS,
@@ -97,7 +98,10 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     const socket = socketRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN || phaseRef.current !== 'live') return;
     for (const message of messages) {
-      if (message.type !== 'mouse' && message.type !== 'key' && message.type !== 'text') continue;
+      if (
+        message.type !== 'mouse' && message.type !== 'key' && message.type !== 'text' &&
+        message.type !== 'switchDisplay' && message.type !== 'quality' && message.type !== 'followWindow'
+      ) continue;
       socket.send(JSON.stringify(message));
     }
   }, []);
@@ -123,13 +127,18 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
 
   const disconnect = useCallback(() => {
     const eventGeneration = ++generation.current;
+    const lock = sessionEndLock(
+      readInput().displayPrefs.lockAfterSessionEnd,
+      phaseRef.current === 'live',
+    );
+    if (lock.length > 0) sendInput(lock);
     releaseHeldInput();
     closeSocket(socketRef.current, true);
     socketRef.current = null;
     releaseDecoder();
     setDecoderError('');
     apply(eventGeneration, { type: 'disconnect' });
-  }, [apply, closeSocket, releaseDecoder, releaseHeldInput]);
+  }, [apply, closeSocket, readInput, releaseDecoder, releaseHeldInput, sendInput]);
 
   const connect = useCallback(async (request?: ConnectRequest) => {
     const input = readInput();

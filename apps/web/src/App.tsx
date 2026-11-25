@@ -10,7 +10,8 @@ import {
   toggleFavoriteDevice,
   type SavedDevice,
 } from './lib/devices.ts';
-import { loadDisplayPrefs, persistDisplayPrefs, type DisplayPrefs } from './lib/displayPrefs.ts';
+import { loadDisplayPrefs, persistDisplayPrefs, resolveQualityLevel, resolveTargetFps, type DisplayPrefs } from './lib/displayPrefs.ts';
+import { qualityCommand, remotePrivacyAllowed, shouldFollowFocusedDisplay } from './lib/displays.ts';
 import { resolveEffectiveLocale, resolveInitialLocale, type Locale, type LocalePreference } from './lib/i18n.ts';
 import {
   clearLegacyPasswordStorage,
@@ -196,7 +197,19 @@ export function App() {
     void connect(request);
   }, [connect]);
 
+  useEffect(() => {
+    if (session.phase !== 'live') return;
+    const displays = session.peer?.displays ?? [];
+    if (displays.length > 1) {
+      sendInput([{ type: 'followWindow', enabled: displayPrefs.followWindow }]);
+    }
+    if (shouldFollowFocusedDisplay(displayPrefs.followWindow, session.focusedDisplay, session.currentDisplay, displays)) {
+      sendInput([{ type: 'switchDisplay', display: session.focusedDisplay ?? 0 }]);
+    }
+  }, [displayPrefs.followWindow, sendInput, session.currentDisplay, session.focusedDisplay, session.peer, session.phase]);
+
   if (session.phase === 'live') {
+    const toolbarQuality = resolveQualityLevel(displayPrefs.qualityPreset, displayPrefs.customBitrate);
     return (
       <RemoteScreen
         canvasRef={canvasRef}
@@ -208,6 +221,7 @@ export function App() {
         showRemoteCursor={displayPrefs.showRemoteCursor}
         enlargeCursor={displayPrefs.enlargeCursor}
         cursorEmbedded={session.cursorEmbedded}
+        displayOrigin={session.displayOrigin}
         cursor={session.cursor}
         cursorShape={session.cursorShape}
         onMouse={sendInput}
@@ -215,6 +229,26 @@ export function App() {
         onHeldRelease={setHeldRelease}
         onArmKeys={setArmedKeys}
         onDisconnect={disconnect}
+        displays={session.peer?.displays ?? []}
+        currentDisplay={session.currentDisplay}
+        quality={toolbarQuality}
+        privacyAllowed={remotePrivacyAllowed(session.peer)}
+        onSwitchDisplay={(display) => sendInput([{ type: 'switchDisplay', display }])}
+        onQuality={(quality) => {
+          setDisplayPrefs((current) => {
+            const next = { ...current, qualityPreset: quality };
+            persistDisplayPrefs(next);
+            return next;
+          });
+          sendInput([qualityCommand(quality, resolveTargetFps(quality, displayPrefs.customFps))]);
+        }}
+        onToggleViewOnly={() => {
+          setDisplayPrefs((current) => {
+            const next = { ...current, viewOnly: !current.viewOnly };
+            persistDisplayPrefs(next);
+            return next;
+          });
+        }}
       />
     );
   }
