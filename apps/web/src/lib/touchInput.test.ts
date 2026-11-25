@@ -2,6 +2,7 @@
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { createTouchGestureState, gesturePointerDown, gesturePointerMove, gesturePointerUpOrCancel, resetTouchGestureState } from './gestures.ts';
 import { applyTouchEffects, isNarrowViewport } from './touchInput.ts';
 
 const map = (x: number, y: number) => ({ x: Math.floor(x), y: Math.floor(y) });
@@ -51,4 +52,17 @@ test('pinch and pan stay local view changes', () => {
   assert.equal(outcome.messages.length, 0);
   assert.deepEqual(outcome.pan, { dx: 5, dy: -2 });
   assert.equal(outcome.pinch?.nextDist, 20);
+});
+
+test('a suspended touch drag sends one release and ignores late pointer events', () => {
+  const down = gesturePointerDown(createTouchGestureState(), 1, 20, 25, { mode: 'touch', hand: false, now: 1000 });
+  const drag = gesturePointerMove(down.state, 1, 90, 50, { mode: 'touch', now: 1050 });
+  const reset = resetTouchGestureState(drag.state);
+  const release = applyTouchEffects(reset.effects, { x: 0, y: 0 }, map, false, 1, false);
+  assert.equal(release.cancelLongPress, true);
+  assert.deepEqual(release.messages, [{ type: 'mouse', action: 'up', button: 'left', x: 90, y: 50 }]);
+  const repeated = resetTouchGestureState(reset.state);
+  const late = gesturePointerUpOrCancel(repeated.state, 1, 90, 50, 'up', { now: 1100 });
+  assert.deepEqual(repeated.effects, []);
+  assert.deepEqual(late.effects, []);
 });

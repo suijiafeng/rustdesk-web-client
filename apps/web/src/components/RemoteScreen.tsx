@@ -13,6 +13,7 @@ import {
   gesturePointerDown,
   gesturePointerMove,
   gesturePointerUpOrCancel,
+  resetTouchGestureState,
   type TouchGestureEffect,
 } from '../lib/gestures.ts';
 import { applyTouchEffects } from '../lib/touchInput.ts';
@@ -260,16 +261,16 @@ export function RemoteScreen({
   onArmKeysRef.current = onArmKeys;
   originRef.current = displayOrigin;
 
-  const sendPointer = (messages: ClientMessage[]) => {
+  const sendPointer = useCallback((messages: ClientMessage[]) => {
     onMouseRef.current(offsetPointerMessages(messages, originRef.current));
-  };
-  const armPointer = (message: ClientMessage | null) => {
+  }, []);
+  const armPointer = useCallback((message: ClientMessage | null) => {
     if (!message) {
       onHeldRef.current(null);
       return;
     }
     onHeldRef.current(offsetPointerMessages([message], originRef.current)[0] ?? null);
-  };
+  }, []);
 
   const keyboardLayout = useKeyboardViewport({
     enabled: true,
@@ -346,11 +347,11 @@ export function RemoteScreen({
     canvas.getContext('2d')?.putImageData(image, 0, 0);
   }, [cursorShape, showCursor]);
 
-  const cancelQueuedMove = () => {
+  const cancelQueuedMove = useCallback(() => {
     if (moveFrameRef.current !== null) cancelAnimationFrame(moveFrameRef.current);
     moveFrameRef.current = null;
     queuedMoveRef.current = null;
-  };
+  }, []);
 
   const queueMove = (point: { x: number; y: number }) => {
     queuedMoveRef.current = point;
@@ -365,23 +366,13 @@ export function RemoteScreen({
     });
   };
 
-  const releaseDrag = (point: { x: number; y: number } | null) => {
+  const releaseDrag = useCallback(() => {
     const drag = dragRef.current;
+    if (!drag) return;
     dragRef.current = null;
     armPointer(null);
-    if (!drag || viewOnlyRef.current) return;
-    cancelQueuedMove();
-    sendPointer(releaseHeldButton(drag.button, point ?? drag.point));
-  };
-
-  useEffect(() => {
-    const onBlur = () => releaseDrag(dragRef.current?.point ?? null);
-    window.addEventListener('blur', onBlur);
-    return () => {
-      window.removeEventListener('blur', onBlur);
-      cancelQueuedMove();
-    };
-  }, []);
+    sendPointer(releaseHeldButton(drag.button, drag.point));
+  }, [armPointer, sendPointer]);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -480,12 +471,12 @@ export function RemoteScreen({
     };
   }, []);
 
-  const clearLongPress = () => {
+  const clearLongPress = useCallback(() => {
     if (longTimerRef.current !== null) window.clearTimeout(longTimerRef.current);
     longTimerRef.current = null;
-  };
+  }, []);
 
-  const runTouch = (effects: TouchGestureEffect[]) => {
+  const applyTouchInput = useCallback((effects: TouchGestureEffect[]) => {
     const outcome = applyTouchEffects(
       effects,
       touchCursorRef.current,
@@ -496,6 +487,34 @@ export function RemoteScreen({
     );
     touchCursorRef.current = outcome.cursor;
     if (outcome.cancelLongPress) clearLongPress();
+    if (outcome.messages.length > 0) sendPointer(outcome.messages);
+    return outcome;
+  }, [clearLongPress, sendPointer]);
+
+  useEffect(() => {
+    const suspendPointerInput = () => {
+      cancelQueuedMove();
+      releaseDrag();
+      clearLongPress();
+      const reset = resetTouchGestureState(gestureRef.current);
+      gestureRef.current = reset.state;
+      applyTouchInput(reset.effects);
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') suspendPointerInput();
+    };
+    window.addEventListener('blur', suspendPointerInput);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('blur', suspendPointerInput);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      cancelQueuedMove();
+      clearLongPress();
+    };
+  }, [applyTouchInput, cancelQueuedMove, clearLongPress, releaseDrag]);
+
+  const runTouch = (effects: TouchGestureEffect[]) => {
+    const outcome = applyTouchInput(effects);
     if (outcome.armLongPress) {
       clearLongPress();
       const armed = effects.find((effect) => effect.type === 'arm-long-press');
@@ -509,7 +528,6 @@ export function RemoteScreen({
         }, LONG_PRESS_MS);
       }
     }
-    if (outcome.messages.length > 0) sendPointer(outcome.messages);
     if (outcome.pan) {
       const panStep = outcome.pan;
       setViewMode((mode) => (mode === 'fit' ? 'custom' : mode));
