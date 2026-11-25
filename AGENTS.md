@@ -11,6 +11,7 @@
 - 检查：`yarn typecheck` 与 `yarn lint`（两者都做类型检查）
 - 测试：`yarn test`
 - 构建：`yarn build`
+- 本地容器：`deploy/README.md`。生产模式必须设置 `RUSTDESK_GATEWAY_TOKEN`。不要推送镜像或打发布标签。
 
 不要提交 `.env`、密钥、`node_modules` 或构建产物。`docs/migration/` 留在仓库外，已被忽略。
 
