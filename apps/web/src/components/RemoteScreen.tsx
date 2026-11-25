@@ -23,6 +23,7 @@ import { DiagnosticsPanel } from './DiagnosticsPanel.tsx';
 import { offsetPointerMessages } from '../lib/displays.ts';
 import { isImeEvent } from '../lib/keys.ts';
 import { SessionToolbar } from './SessionToolbar.tsx';
+import { ClipboardPanel } from './ClipboardPanel.tsx';
 import {
   noteKeyDown,
   noteKeyUp,
@@ -89,6 +90,11 @@ interface RemoteScreenProps {
   onCopyDiagnostics: (text: string) => void;
   onToggleDiagnostics: () => void;
   remotePlatform: string;
+  clipboardFallback: string | null;
+  clipboardPermitted: boolean;
+  clipboardDisabled: boolean;
+  onSendClipboard: (text: string) => 'ok' | 'disabled' | 'denied' | 'empty' | 'too-large';
+  onDismissClipboard: () => void;
   locale?: Locale;
 }
 
@@ -135,6 +141,11 @@ export function RemoteScreen({
   onCopyDiagnostics,
   onToggleDiagnostics,
   remotePlatform,
+  clipboardFallback,
+  clipboardPermitted,
+  clipboardDisabled,
+  onSendClipboard,
+  onDismissClipboard,
   locale = 'en',
 }: RemoteScreenProps) {
   const stageRef = useRef<HTMLDivElement>(null);
@@ -153,6 +164,7 @@ export function RemoteScreen({
   const [pan, setPan] = useState({ panX: 0, panY: 0 });
   const [touchMode, setTouchMode] = useState(true);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [clipboardOpen, setClipboardOpen] = useState(false);
   const [coarsePointer, setCoarsePointer] = useState(() => window.matchMedia('(pointer: coarse)').matches);
   const [viewportNarrow, setViewportNarrow] = useState(() => window.matchMedia('(max-width: 768px)').matches);
 
@@ -183,6 +195,9 @@ export function RemoteScreen({
   const localOsRef = useRef(classifyLocalOs(navigator.userAgent, navigator.platform));
   const remotePlatformRef = useRef(remotePlatform);
   remotePlatformRef.current = remotePlatform;
+  useEffect(() => {
+    if (clipboardFallback) setClipboardOpen(true);
+  }, [clipboardFallback]);
   const sendKeys = useCallback((messages: ClientMessage[]) => {
     const adapted = adaptKeyMessages(messages, localOsRef.current, classifyRemoteOs(remotePlatform));
     if (adapted.length > 0) onKeyboard(adapted);
@@ -733,6 +748,7 @@ export function RemoteScreen({
           onToggleDiagnostics={onToggleDiagnostics}
           remotePlatform={remotePlatform}
           onQuickKey={sendQuickKey}
+          onOpenClipboard={() => setClipboardOpen(true)}
         />
       ) : null}
       {chrome === 'keyboard' ? (
@@ -763,8 +779,21 @@ export function RemoteScreen({
           onDisconnect={onDisconnect}
           remotePlatform={remotePlatform}
           onQuickKey={sendQuickKey}
+          onOpenClipboard={() => setClipboardOpen(true)}
         />
       ) : null}
+      <ClipboardPanel
+        locale={locale}
+        open={clipboardOpen}
+        incoming={clipboardFallback}
+        permitted={clipboardPermitted}
+        disabled={clipboardDisabled}
+        onSend={onSendClipboard}
+        onClose={() => {
+          setClipboardOpen(false);
+          onDismissClipboard();
+        }}
+      />
     </div>
   );
 }

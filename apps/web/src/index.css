@@ -507,6 +507,53 @@ button:focus-visible {
   padding: 0 4px;
 }
 
+.rd-clipboard-panel {
+  position: absolute;
+  top: 64px;
+  left: 50%;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(420px, calc(100% - 24px));
+  padding: 12px;
+  border: 1px solid #40454c;
+  border-radius: 12px;
+  background: rgba(34, 37, 43, 0.96);
+  color: #f3f5f8;
+  transform: translateX(-50%);
+}
+
+.rd-clipboard-panel textarea {
+  min-height: 72px;
+  resize: vertical;
+  border: 0;
+  border-radius: 8px;
+  background: #30353c;
+  color: #f3f5f8;
+  padding: 8px;
+}
+
+.rd-clipboard-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.rd-clipboard-panel button {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: #30353c;
+  color: #f3f5f8;
+}
+
+.rd-clipboard-panel p {
+  margin: 0;
+  color: #c2cad3;
+  font-size: 12px;
+}
+
 .scrim {
   position: absolute;
   inset: 0;

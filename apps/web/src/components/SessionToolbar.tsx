@@ -1,7 +1,7 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
 import type { DisplayInfo, QualityLevel } from '@rustdesk-web/shared';
-import { Eye, LockKeyhole, LogOut, Maximize2, Monitor, ShieldAlert, SlidersHorizontal, Volume2 } from 'lucide-react';
+import { Clipboard, Eye, LockKeyhole, LogOut, Maximize2, Monitor, ShieldAlert, SlidersHorizontal, Volume2 } from 'lucide-react';
 import { t, translateAudioIssue, type Locale } from '../lib/i18n.ts';
 import { classifyRemoteOs, remoteFeatures } from '../lib/platform.ts';
 
@@ -24,6 +24,7 @@ interface SessionToolbarProps {
   onDisconnect: () => void;
   remotePlatform: string;
   onQuickKey: (name: 'Ctrl+Alt+Del' | 'Lock') => void;
+  onOpenClipboard: () => void;
 }
 
 const QUALITIES: QualityLevel[] = ['low', 'balanced', 'best'];
@@ -47,6 +48,7 @@ export function SessionToolbar({
   onDisconnect,
   remotePlatform,
   onQuickKey,
+  onOpenClipboard,
 }: SessionToolbarProps) {
   const features = remoteFeatures(classifyRemoteOs(remotePlatform));
   return (
@@ -120,6 +122,10 @@ export function SessionToolbar({
         </button>
       ) : null}
       <span className="rd-session-sep" aria-hidden="true" />
+      <button type="button" className="rd-session-btn" onClick={onOpenClipboard}>
+        <Clipboard size={15} />
+        {t(locale, 'clipboard')}
+      </button>
       <button type="button" className="rd-session-btn" onClick={onFullscreen}>
         <Maximize2 size={15} />
         {t(locale, 'sessionFullscreen')}

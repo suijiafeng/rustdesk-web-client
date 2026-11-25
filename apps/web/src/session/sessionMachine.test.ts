@@ -200,6 +200,11 @@ test('hot-plug and display switch keep a valid monitor, including a negative ori
     message: { type: 'resolutions', display: 0, sizes: [{ width: 800, height: 600 }] },
   });
   assert.equal(sizes.resolutions?.sizes.length, 1);
+  const copied = reduceSession(sizes, { type: 'server', message: { type: 'clipboard', text: 'from-host' } });
+  assert.equal(copied.clipboardText, 'from-host');
+  assert.equal(copied.clipboardSeq, 1);
+  const huge = reduceSession(copied, { type: 'server', message: { type: 'clipboard', text: 'x'.repeat(256 * 1024 + 1) } });
+  assert.equal(huge.clipboardSeq, 1);
 });
 
 test('disconnect clears the session and a stale generation is ignored', () => {

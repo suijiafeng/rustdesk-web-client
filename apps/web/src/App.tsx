@@ -209,6 +209,7 @@ export function App() {
   const {
     session, connect, disconnect, sendInput, setHeldRelease, setArmedKeys, canvasRef, frameSize, decoderError,
     stats, quality: linkQuality, audio, startAudio, stopAudio, setAudioVolume,
+    clipboardFallback, sendClipboard, dismissClipboard,
   } = useSession({
     readInput: () => formRef.current,
     onPasswordRejected: rejectSavedPassword,
@@ -292,6 +293,11 @@ export function App() {
         }}
         onToggleDiagnostics={() => setDiagnosticsOpen((current) => !current)}
         remotePlatform={session.peer?.platform ?? ''}
+        clipboardFallback={clipboardFallback}
+        clipboardPermitted={session.peer?.clipboardAllowed === true}
+        clipboardDisabled={displayPrefs.disableClipboard}
+        onSendClipboard={sendClipboard}
+        onDismissClipboard={dismissClipboard}
         locale={locale}
       />
     );

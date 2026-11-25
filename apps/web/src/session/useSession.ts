@@ -16,6 +16,7 @@ import {
   sweepTimeouts,
 } from '../lib/linkHealth.ts';
 import { sessionEndLock } from '../lib/displays.ts';
+import { classifyBrowser, clipboardDelivery, validateClipboardText } from '../lib/platform.ts';
 import { RemoteAudio, clampVolume, webAudioStatus } from '../lib/remoteAudio.ts';
 import { filterCodecSupport, resolveQualityLevel, resolveTargetFps, type DisplayPrefs } from '../lib/displayPrefs.ts';
 import {
@@ -70,9 +71,12 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const decoderRef = useRef<RemoteDecoder | null>(null);
   const phaseRef = useRef(session.phase);
+  const sessionRef = useRef(session);
+  const [clipboardFallback, setClipboardFallback] = useState<string | null>(null);
   const heldReleaseRef = useRef<ClientMessage | null>(null);
   const armedKeysRef = useRef<ClientMessage[]>([]);
   phaseRef.current = session.phase;
+  sessionRef.current = session;
 
   const apply = useCallback((eventGeneration: number, event: Parameters<typeof reduceSession>[1]) => {
     if (!isCurrentGeneration(generation.current, eventGeneration)) return;
@@ -208,6 +212,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     socketRef.current = null;
     releaseDecoder();
     setDecoderError('');
+    setClipboardFallback(null);
     apply(eventGeneration, { type: 'disconnect' });
   }, [apply, closeAudio, closeSocket, readInput, releaseDecoder, releaseHeldInput, sendInput]);
 
@@ -357,6 +362,20 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
         setAudio((current) => ({ ...current, enabled: false, denied: true, issue: 'The host refused audio.' }));
         return;
       }
+      if (parsed.type === 'clipboard') {
+        const text = parsed.text ?? '';
+        const allowed = sessionRef.current.peer?.clipboardAllowed === true;
+        const decision = validateClipboardText(text, readInput().displayPrefs.disableClipboard, allowed);
+        if (decision !== 'ok') return;
+        apply(eventGeneration, { type: 'server', message: parsed });
+        const delivery = clipboardDelivery(classifyBrowser(navigator.userAgent), window.isSecureContext, false);
+        if (delivery === 'write') {
+          void navigator.clipboard.writeText(text).catch(() => setClipboardFallback(text));
+        } else {
+          setClipboardFallback(text);
+        }
+        return;
+      }
       apply(eventGeneration, { type: 'server', message: parsed });
     };
     socket.onerror = () => {
@@ -415,6 +434,16 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     audioRef.current = null;
   }, [closeSocket]);
 
+  const sendClipboard = useCallback((text: string) => {
+    const allowed = sessionRef.current.peer?.clipboardAllowed === true;
+    const decision = validateClipboardText(text, readInput().displayPrefs.disableClipboard, allowed);
+    if (decision !== 'ok' || phaseRef.current !== 'live') return decision;
+    sendInput([{ type: 'clipboard', text }]);
+    return 'ok' as const;
+  }, [readInput, sendInput]);
+
+  const dismissClipboard = useCallback(() => setClipboardFallback(null), []);
+
   return {
     session,
     connect,
@@ -431,5 +460,8 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     startAudio,
     stopAudio,
     setAudioVolume,
+    clipboardFallback,
+    sendClipboard,
+    dismissClipboard,
   };
 }

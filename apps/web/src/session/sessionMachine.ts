@@ -9,6 +9,7 @@ import type {
   ServerMessage,
 } from '@rustdesk-web/shared';
 import { chooseDisplay } from '../lib/displays.ts';
+import { validateClipboardText } from '../lib/platform.ts';
 
 export const CONNECT_TIMEOUT_MS = 45_000;
 
@@ -28,6 +29,8 @@ export interface SessionSnapshot {
   currentDisplay: number;
   focusedDisplay: number | null;
   resolutions: { display: number; sizes: { width: number; height: number }[] } | null;
+  clipboardText: string | null;
+  clipboardSeq: number;
 }
 
 export const initialSession: SessionSnapshot = {
@@ -44,6 +47,8 @@ export const initialSession: SessionSnapshot = {
   currentDisplay: 0,
   focusedDisplay: null,
   resolutions: null,
+  clipboardText: null,
+  clipboardSeq: 0,
 };
 
 export interface ConnectFields {
@@ -222,6 +227,11 @@ function applyServerMessage(state: SessionSnapshot, message: ServerMessage): Ses
     }
     case 'resolutions':
       return { ...state, resolutions: { display: message.display, sizes: message.sizes } };
+    case 'clipboard': {
+      const text = message.text ?? '';
+      if (validateClipboardText(text, false, true) !== 'ok') return state;
+      return { ...state, clipboardText: text, clipboardSeq: state.clipboardSeq + 1 };
+    }
     case 'focusedDisplay':
       return { ...state, focusedDisplay: message.display };
     case 'cursor': {

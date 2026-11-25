@@ -7,6 +7,7 @@ import {
   ChevronRight,
   CircleHelp,
   Eye,
+  Clipboard,
   Keyboard,
   LockKeyhole,
   Layers2,
@@ -71,6 +72,7 @@ interface MobileSessionDockProps {
   onToggleDiagnostics: () => void;
   remotePlatform: string;
   onQuickKey: (name: 'Ctrl+Alt+Del' | 'Lock') => void;
+  onOpenClipboard: () => void;
 }
 
 export function MobileSessionDock({
@@ -97,6 +99,7 @@ export function MobileSessionDock({
   onToggleDiagnostics,
   remotePlatform,
   onQuickKey,
+  onOpenClipboard,
 }: MobileSessionDockProps) {
   const features = remoteFeatures(classifyRemoteOs(remotePlatform));
   const [menuOpen, setMenuOpen] = useState(false);
@@ -205,6 +208,10 @@ export function MobileSessionDock({
                   {label('lockScreen')}
                 </button>
               ) : null}
+              <button type="button" className="tool-row" onClick={onOpenClipboard}>
+                <Clipboard size={18} />
+                {label('clipboard')}
+              </button>
               <button type="button" className="tool-row" onClick={onFullscreen}>
                 <Maximize2 size={18} />
                 {label('sessionFullscreen')}
