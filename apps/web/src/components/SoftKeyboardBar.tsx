@@ -1,6 +1,6 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import type { ClientMessage } from '@rustdesk-web/shared';
 import { ChevronDown } from 'lucide-react';
 import { keyboardInset } from '../lib/gestures.ts';
@@ -10,6 +10,7 @@ import { softControlMessages, softTextEdit, toggleLatched } from '../lib/softKey
 
 interface SoftKeyboardBarProps {
   locale: Locale;
+  inputRef: RefObject<HTMLInputElement | null>;
   viewOnly: boolean;
   onSend: (messages: ClientMessage[]) => void;
   onHide: () => void;
@@ -40,8 +41,7 @@ const EXTRA_KEYS: Array<{ label: string; control: string; labelKey?: I18nKey; ar
   }),
 ];
 
-export function SoftKeyboardBar({ locale, viewOnly, onSend, onHide }: SoftKeyboardBarProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
+export function SoftKeyboardBar({ locale, inputRef, viewOnly, onSend, onHide }: SoftKeyboardBarProps) {
   const composingRef = useRef(false);
   const lastSentRef = useRef('');
   const latchedRef = useRef<string[]>([]);
@@ -51,9 +51,14 @@ export function SoftKeyboardBar({ locale, viewOnly, onSend, onHide }: SoftKeyboa
   useEffect(() => {
     const viewport = window.visualViewport;
     if (!viewport) return;
+    const initialHeight = viewport.height;
+    const initialWidth = viewport.width;
     let keyboardWasVisible = false;
     const syncKeyboard = () => {
-      const inset = keyboardInset(window.innerHeight, viewport.height, viewport.offsetTop);
+      const inset = Math.max(
+        keyboardInset(window.innerHeight, viewport.height, viewport.offsetTop),
+        Math.abs(viewport.width - initialWidth) < 80 ? initialHeight - viewport.height : 0,
+      );
       if (inset > 120) keyboardWasVisible = true;
       else if (keyboardWasVisible && inset < 48) {
         keyboardWasVisible = false;
@@ -140,6 +145,7 @@ export function SoftKeyboardBar({ locale, viewOnly, onSend, onHide }: SoftKeyboa
       <input
         ref={inputRef}
         type="text"
+        inputMode="text"
         className="soft-key-capture"
         data-testid="soft-input"
         aria-label={t(locale, 'softPlaceholder')}

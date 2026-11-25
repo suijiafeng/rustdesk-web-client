@@ -1,6 +1,7 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
+import { flushSync } from 'react-dom';
 import type { ClientMessage, CursorShape, DisplayInfo, QualityLevel } from '@rustdesk-web/shared';
 import { MousePointer2 } from 'lucide-react';
 import { clampPan, computePinchStep, computeViewTransform, mapFromRemote, panToKeepVisible, type ViewMode, type ViewTransform } from '../lib/mapping.ts';
@@ -184,6 +185,8 @@ export function RemoteScreen({
 }: RemoteScreenProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const captureRef = useRef<HTMLInputElement>(null);
+  const softKeyboardInputRef = useRef<HTMLInputElement>(null);
+  const autoKeyboardArmed = useRef(false);
   const cursorCanvasRef = useRef<HTMLCanvasElement>(null);
   const trackedKeysRef = useRef<TrackedKey[]>([]);
   const composingRef = useRef(false);
@@ -286,6 +289,14 @@ export function RemoteScreen({
       setPan({ panX: next.view.panX, panY: next.view.panY });
     },
   });
+  const openSoftKeyboard = () => {
+    autoKeyboardArmed.current = true;
+    keyboardLayout.begin();
+    // Mobile browsers need the input mounted and focused within the same user gesture.
+    flushSync(() => setKeyboardOpen(true));
+    softKeyboardInputRef.current?.focus({ preventScroll: true });
+  };
+  const hideSoftKeyboard = useCallback(() => setKeyboardOpen(false), []);
 
   const transform = computeViewTransform(box.width, box.height, frameWidth, frameHeight, viewMode, zoom, pan, {
     allowEdgePan: true,
@@ -638,6 +649,10 @@ export function RemoteScreen({
       );
       gestureRef.current = next.state;
       runTouch(next.effects);
+      if (autoKeyboard && chrome === 'dock' && !autoKeyboardArmed.current
+        && next.effects.some((effect) => effect.type === 'tap-click')) {
+        openSoftKeyboard();
+      }
       return;
     }
     const drag = dragRef.current;
@@ -683,14 +698,6 @@ export function RemoteScreen({
       readKeyboardLock(navigator)?.unlock();
     };
   }, []);
-  const autoKeyboardArmed = useRef(false);
-  useEffect(() => {
-    if (!autoKeyboard || chrome !== 'dock' || autoKeyboardArmed.current) return;
-    autoKeyboardArmed.current = true;
-    setKeyboardOpen(true);
-    keyboardLayout.begin();
-  }, [autoKeyboard, chrome, keyboardLayout]);
-
   return (
     <div
       ref={stageRef}
@@ -807,10 +814,7 @@ export function RemoteScreen({
           viewOnly={viewOnly}
           privacyAllowed={privacyAllowed}
           diagnosticsOpen={diagnosticsOpen}
-          onToggleKeyboard={() => {
-            setKeyboardOpen(true);
-            keyboardLayout.begin();
-          }}
+          onToggleKeyboard={openSoftKeyboard}
           onToggleTouchMode={() => setTouchMode((current) => !current)}
           onSwitchDisplay={onSwitchDisplay}
           onQuality={onQuality}
@@ -841,9 +845,10 @@ export function RemoteScreen({
       {chrome === 'keyboard' ? (
         <SoftKeyboardBar
           locale={locale}
+          inputRef={softKeyboardInputRef}
           viewOnly={viewOnly}
           onSend={sendKeys}
-          onHide={() => setKeyboardOpen(false)}
+          onHide={hideSoftKeyboard}
         />
       ) : null}
       {chrome === 'desktop' ? (

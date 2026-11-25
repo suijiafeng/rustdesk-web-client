@@ -84,6 +84,12 @@ export function useKeyboardViewport(options: Options) {
       return;
     }
     if (!pending.current && !shown.current) return;
+    if (shown.current && !visible) {
+      const restore = rotated ? null : manual.current ?? before.current;
+      clearPending();
+      if (restore) current.apply({ w: vv.width, h: vv.height }, restore);
+      return;
+    }
     if (rotated && !visible) {
       clearPending();
       return;
