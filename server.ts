@@ -127,7 +127,7 @@ async function startServer() {
     });
   }
 
-  const host = process.env.HOST || '127.0.0.1';
+  const host = process.env.RENDER === 'true' ? '0.0.0.0' : process.env.HOST || '127.0.0.1';
   httpServer.listen(port, host, () => {
     console.log(redactLog(`RustDesk Web Gateway listening on http://${host}:${port}`));
   });

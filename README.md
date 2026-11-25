@@ -74,15 +74,15 @@ NODE_ENV=production yarn start
 
 | 设置 | 值 |
 | --- | --- |
-| Repository | `suijiafeng/rustdesk` |
-| Branch | `feature/web-client` |
-| Root Directory | `web-client` |
+| Repository | `suijiafeng/rustdesk-web-client` |
+| Branch | `main` |
+| Root Directory | 留空（仓库根目录） |
 | Build Command | `yarn install --frozen-lockfile --production=false && yarn build` |
 | Start Command | `yarn start` |
 | Health Check Path | `/api/health` |
-| Environment | `NODE_ENV=production`，按需设置网关令牌 |
+| Environment | `NODE_ENV=production`，设置私有的 `RUSTDESK_GATEWAY_TOKEN` |
 
-项目提供 `.node-version`。如服务已设置 `NODE_VERSION`，应确认该值使用 Node 24。Render 的端口由平台通过 `PORT` 提供。
+项目提供 `.node-version`。如服务已设置 `NODE_VERSION`，应确认该值使用 Node 24。当 Render 注入 `RENDER=true` 时，网关监听 `0.0.0.0`，端口使用平台提供的 `PORT`（默认 `10000`）。
 
 Render 的构建与启动命令在所选根目录执行。平台配置说明见 [Render Web Services](https://render.com/docs/web-services)、[Root Directory](https://render.com/docs/your-first-deploy) 和 [Node 版本设置](https://render.com/docs/node-version)。
 
@@ -94,6 +94,7 @@ Render 的构建与启动命令在所选根目录执行。平台配置说明见 
 | --- | --- | --- |
 | `NODE_ENV` | 未设置时为开发模式 | 生产部署设为 `production`，提供已构建页面 |
 | `PORT` | `3000` | HTTP 与 WebSocket 共用的监听端口 |
+| `HOST` | `127.0.0.1` | 网关监听地址。Render 环境固定使用 `0.0.0.0` |
 | `RUSTDESK_GATEWAY_TOKEN` | 空 | 网关访问令牌，设置后连接时需要填写 |
 | `RUSTDESK_ENABLE_WEBRTC` | `false` | 只有设为 `true` 才开启浏览器 WebRTC 尝试和 `/ws/webrtc` 信令入口；修改后重启服务并刷新页面 |
 
