@@ -1,5 +1,6 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { Laptop, Monitor, Star, Trash2 } from 'lucide-react';
 import { formatPeerId, type SavedDevice } from '../lib/devices';
 import { t, type Locale } from '../lib/i18n';
@@ -14,6 +15,97 @@ interface PeerListProps {
   onToggleFavorite: (key: string) => void;
   onRemove: (key: string) => void;
   onRename: (key: string, alias: string) => void;
+}
+
+function DeviceActions({
+  locale,
+  title,
+  favorite,
+  menuOpen,
+  starClass,
+  extraClass,
+  iconSize,
+  onToggleMenu,
+  onCloseMenu,
+  onToggleFavorite,
+  onRename,
+  onRemove,
+}: {
+  locale: Locale;
+  title: string;
+  favorite: boolean;
+  menuOpen: boolean;
+  starClass: string;
+  extraClass: string;
+  iconSize: number;
+  onToggleMenu: () => void;
+  onCloseMenu: () => void;
+  onToggleFavorite: () => void;
+  onRename: (alias: string) => void;
+  onRemove: () => void;
+}) {
+  const rename = () => {
+    onCloseMenu();
+    const alias = window.prompt(t(locale, 'renameDevice'), title);
+    if (alias) onRename(alias);
+  };
+  return (
+    <div className="rd-peer-actions flex items-center shrink-0">
+      <button
+        type="button"
+        className={starClass}
+        aria-label={favorite ? t(locale, 'unfavoriteDevice') : t(locale, 'favoriteDevice')}
+        data-tooltip={favorite ? t(locale, 'unfavoriteDevice') : t(locale, 'favoriteDevice')}
+        data-tooltip-pos="top"
+        aria-pressed={favorite}
+        onClick={onToggleFavorite}
+      >
+        <Star size={iconSize} className={favorite ? 'text-[#f59e0b] fill-[#f59e0b]' : ''} />
+      </button>
+      <button
+        type="button"
+        className={extraClass}
+        aria-label={t(locale, 'renameDevice')}
+        title={t(locale, 'renameDevice')}
+        onClick={() => {
+          const alias = window.prompt(t(locale, 'renameDevice'), title);
+          if (alias) onRename(alias);
+        }}
+      >
+        <span className="text-xs">Aa</span>
+      </button>
+      <button
+        type="button"
+        className={`${extraClass} hover:bg-[var(--bad-bg)] hover:text-[var(--bad)]`}
+        aria-label={`${t(locale, 'removeDevice')} ${title}`}
+        data-tooltip={t(locale, 'removeDevice')}
+        data-tooltip-pos="top-end"
+        onClick={onRemove}
+      >
+        <Trash2 size={iconSize - 1} />
+      </button>
+      <button
+        type="button"
+        className="rd-peer-more rounded-lg border-0 bg-transparent text-[var(--ink-soft)]"
+        data-peer-more=""
+        aria-label={t(locale, 'moreActions')}
+        aria-expanded={menuOpen}
+        aria-haspopup="menu"
+        onClick={(event) => {
+          event.stopPropagation();
+          onToggleMenu();
+        }}
+      >
+        …
+      </button>
+      {menuOpen ? (
+        <div className="rd-peer-menu" data-peer-menu="" role="menu" onPointerDown={(event) => event.stopPropagation()}>
+          <button type="button" role="menuitem" onClick={rename}>{t(locale, 'renameDevice')}</button>
+          <button type="button" role="menuitem" onClick={() => { onCloseMenu(); onRemove(); }}>{t(locale, 'removeDevice')}</button>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function formatPrimaryId(device: SavedDevice): string {
@@ -33,6 +125,49 @@ export function PeerList({
   onRemove,
   onRename,
 }: PeerListProps) {
+  const [menuKey, setMenuKey] = useState<string | null>(null);
+  const pressRef = useRef<{ timer: number; fired: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!menuKey) return;
+    const close = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        setMenuKey(null);
+        return;
+      }
+      if (target.closest('[data-peer-menu], [data-peer-more]')) return;
+      setMenuKey(null);
+    };
+    window.addEventListener('pointerdown', close);
+    return () => window.removeEventListener('pointerdown', close);
+  }, [menuKey]);
+
+  const startPress = (key: string, event: ReactPointerEvent) => {
+    if (event.pointerType === 'mouse') return;
+    const target = event.target;
+    if (target instanceof Element && target.closest('[data-peer-menu], [data-peer-more]')) return;
+    if (pressRef.current) window.clearTimeout(pressRef.current.timer);
+    const state = { timer: 0, fired: false };
+    state.timer = window.setTimeout(() => {
+      state.fired = true;
+      setMenuKey(key);
+    }, 500);
+    pressRef.current = state;
+  };
+
+  const endPress = () => {
+    if (!pressRef.current) return;
+    window.clearTimeout(pressRef.current.timer);
+  };
+
+  const suppressSelect = (event: ReactMouseEvent) => {
+    if (!pressRef.current?.fired) return;
+    pressRef.current.fired = false;
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
   if (devices.length === 0) {
     return (
       <div
@@ -72,7 +207,15 @@ export function PeerList({
           ].filter(Boolean);
 
           return (
-            <li key={device.key} className="rd-device-card">
+            <li
+              key={device.key}
+              className="rd-device-card"
+              onPointerDown={(event) => startPress(device.key, event)}
+              onPointerUp={endPress}
+              onPointerCancel={endPress}
+              onClickCapture={suppressSelect}
+              onContextMenu={(event) => event.preventDefault()}
+            >
               <div className="flex items-start gap-2.5">
                 <button
                   type="button"
@@ -92,48 +235,20 @@ export function PeerList({
                   </div>
                 </button>
 
-                <div className="flex items-center shrink-0 -mr-1 -mt-1">
-                  <button
-                    type="button"
-                    className="w-8 h-8 inline-flex items-center justify-center rounded-lg border-0 bg-transparent text-[var(--ink-soft)] hover:bg-[var(--rd-hover-bg)] hover:text-[#f59e0b]"
-                    aria-label={
-                      device.favorite ? t(locale, 'unfavoriteDevice') : t(locale, 'favoriteDevice')
-                    }
-                    data-tooltip={
-                      device.favorite ? t(locale, 'unfavoriteDevice') : t(locale, 'favoriteDevice')
-                    }
-                    data-tooltip-pos="top"
-                    aria-pressed={device.favorite}
-                    onClick={() => onToggleFavorite(device.key)}
-                  >
-                    <Star
-                      size={15}
-                      className={device.favorite ? 'text-[#f59e0b] fill-[#f59e0b]' : ''}
-                    />
-                  </button>
-                  <button
-                    type="button"
-                    className="rd-peer-extra w-8 h-8 inline-flex items-center justify-center rounded-lg border-0 bg-transparent text-[var(--ink-soft)] hover:bg-[var(--rd-hover-bg)]"
-                    aria-label={`Rename ${title}`}
-                    title={`Rename ${title}`}
-                    onClick={() => {
-                      const alias = window.prompt('Device name', title);
-                      if (alias) onRename(device.key, alias);
-                    }}
-                  >
-                    <span className="text-xs">Aa</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="rd-peer-extra w-8 h-8 inline-flex items-center justify-center rounded-lg border-0 bg-transparent text-[var(--ink-soft)] hover:bg-[var(--bad-bg)] hover:text-[var(--bad)]"
-                    aria-label={`${t(locale, 'removeDevice')} ${title}`}
-                    data-tooltip={t(locale, 'removeDevice')}
-                    data-tooltip-pos="top-end"
-                    onClick={() => onRemove(device.key)}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
+                <DeviceActions
+                  locale={locale}
+                  title={title}
+                  favorite={device.favorite}
+                  menuOpen={menuKey === device.key}
+                  iconSize={15}
+                  starClass="w-8 h-8 inline-flex items-center justify-center rounded-lg border-0 bg-transparent text-[var(--ink-soft)] hover:bg-[var(--rd-hover-bg)] hover:text-[#f59e0b]"
+                  extraClass="rd-peer-extra w-8 h-8 inline-flex items-center justify-center rounded-lg border-0 bg-transparent text-[var(--ink-soft)] hover:bg-[var(--rd-hover-bg)]"
+                  onToggleMenu={() => setMenuKey((current) => current === device.key ? null : device.key)}
+                  onCloseMenu={() => setMenuKey(null)}
+                  onToggleFavorite={() => onToggleFavorite(device.key)}
+                  onRename={(alias) => onRename(device.key, alias)}
+                  onRemove={() => onRemove(device.key)}
+                />
               </div>
 
               <button
@@ -161,7 +276,15 @@ export function PeerList({
         ].filter(Boolean);
 
         return (
-          <li key={device.key} className="rd-peer-list-row">
+          <li
+            key={device.key}
+            className="rd-peer-list-row"
+            onPointerDown={(event) => startPress(device.key, event)}
+            onPointerUp={endPress}
+            onPointerCancel={endPress}
+            onClickCapture={suppressSelect}
+            onContextMenu={(event) => event.preventDefault()}
+          >
             <button
               type="button"
               className="flex-1 min-w-0 flex items-center gap-3 text-left bg-transparent border-0 p-0"
@@ -182,48 +305,20 @@ export function PeerList({
               </div>
             </button>
 
-            <div className="flex items-center gap-0.5 shrink-0">
-              <button
-                type="button"
-                className="w-9 h-9 inline-flex items-center justify-center rounded-lg border-0 bg-transparent text-[var(--ink-soft)] hover:bg-[var(--rd-hover-bg)] hover:text-[#f59e0b]"
-                aria-label={
-                  device.favorite ? t(locale, 'unfavoriteDevice') : t(locale, 'favoriteDevice')
-                }
-                data-tooltip={
-                  device.favorite ? t(locale, 'unfavoriteDevice') : t(locale, 'favoriteDevice')
-                }
-                data-tooltip-pos="top"
-                aria-pressed={device.favorite}
-                onClick={() => onToggleFavorite(device.key)}
-              >
-                <Star
-                  size={16}
-                  className={device.favorite ? 'text-[#f59e0b] fill-[#f59e0b]' : ''}
-                />
-              </button>
-              <button
-                type="button"
-                className="rd-peer-extra w-9 h-9 inline-flex items-center justify-center rounded-lg border-0 bg-transparent text-[var(--ink-soft)] hover:bg-[var(--rd-hover-bg)]"
-                aria-label={`Rename ${title}`}
-                title={`Rename ${title}`}
-                onClick={() => {
-                  const alias = window.prompt('Device name', title);
-                  if (alias) onRename(device.key, alias);
-                }}
-              >
-                <span className="text-xs">Aa</span>
-              </button>
-              <button
-                type="button"
-                className="rd-peer-extra w-9 h-9 inline-flex items-center justify-center rounded-lg border-0 bg-transparent text-[var(--ink-soft)] hover:bg-[var(--bad-bg)] hover:text-[var(--bad)]"
-                aria-label={`${t(locale, 'removeDevice')} ${title}`}
-                data-tooltip={t(locale, 'removeDevice')}
-                data-tooltip-pos="top-end"
-                onClick={() => onRemove(device.key)}
-              >
-                <Trash2 size={15} />
-              </button>
-            </div>
+            <DeviceActions
+              locale={locale}
+              title={title}
+              favorite={device.favorite}
+              menuOpen={menuKey === device.key}
+              iconSize={16}
+              starClass="w-9 h-9 inline-flex items-center justify-center rounded-lg border-0 bg-transparent text-[var(--ink-soft)] hover:bg-[var(--rd-hover-bg)] hover:text-[#f59e0b]"
+              extraClass="rd-peer-extra w-9 h-9 inline-flex items-center justify-center rounded-lg border-0 bg-transparent text-[var(--ink-soft)] hover:bg-[var(--rd-hover-bg)]"
+              onToggleMenu={() => setMenuKey((current) => current === device.key ? null : device.key)}
+              onCloseMenu={() => setMenuKey(null)}
+              onToggleFavorite={() => onToggleFavorite(device.key)}
+              onRename={(alias) => onRename(device.key, alias)}
+              onRemove={() => onRemove(device.key)}
+            />
           </li>
         );
       })}

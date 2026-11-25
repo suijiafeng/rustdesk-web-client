@@ -1197,6 +1197,64 @@ button:focus-visible {
   min-width: 9rem;
 }
 
+.rd-peer-actions {
+  position: relative;
+}
+
+.rd-peer-more {
+  display: none;
+  width: 2rem;
+  height: 2rem;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.rd-peer-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  min-width: 9.5rem;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid var(--rd-card-border);
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(16, 20, 24, 0.16);
+}
+
+.rd-peer-menu button {
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  min-height: 36px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.rd-peer-menu button:hover,
+.rd-peer-menu button:focus-visible {
+  background: var(--rd-hover-bg);
+}
+
+@media (hover: none), (pointer: coarse) {
+  .rd-peer-extra {
+    display: none;
+  }
+
+  .rd-peer-more {
+    display: inline-flex;
+  }
+
+  .rd-peer-name {
+    min-width: 0;
+  }
+}
+
 @media (hover: hover) and (pointer: fine) {
   .rd-peer-extra {
     width: 0;
