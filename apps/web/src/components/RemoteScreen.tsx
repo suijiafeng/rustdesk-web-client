@@ -95,6 +95,10 @@ interface RemoteScreenProps {
   clipboardDisabled: boolean;
   onSendClipboard: (text: string) => 'ok' | 'disabled' | 'denied' | 'empty' | 'too-large';
   onDismissClipboard: () => void;
+  privacyEnabled: boolean;
+  privacyPending: boolean;
+  privacyFailed: boolean;
+  onTogglePrivacy: () => void;
   locale?: Locale;
 }
 
@@ -146,6 +150,10 @@ export function RemoteScreen({
   clipboardDisabled,
   onSendClipboard,
   onDismissClipboard,
+  privacyEnabled,
+  privacyPending,
+  privacyFailed,
+  onTogglePrivacy,
   locale = 'en',
 }: RemoteScreenProps) {
   const stageRef = useRef<HTMLDivElement>(null);
@@ -749,6 +757,10 @@ export function RemoteScreen({
           remotePlatform={remotePlatform}
           onQuickKey={sendQuickKey}
           onOpenClipboard={() => setClipboardOpen(true)}
+          privacyEnabled={privacyEnabled}
+          privacyPending={privacyPending}
+          privacyFailed={privacyFailed}
+          onTogglePrivacy={onTogglePrivacy}
         />
       ) : null}
       {chrome === 'keyboard' ? (
@@ -780,6 +792,10 @@ export function RemoteScreen({
           remotePlatform={remotePlatform}
           onQuickKey={sendQuickKey}
           onOpenClipboard={() => setClipboardOpen(true)}
+          privacyEnabled={privacyEnabled}
+          privacyPending={privacyPending}
+          privacyFailed={privacyFailed}
+          onTogglePrivacy={onTogglePrivacy}
         />
       ) : null}
       <ClipboardPanel

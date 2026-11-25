@@ -1,7 +1,7 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
 import type { DisplayInfo, QualityLevel } from '@rustdesk-web/shared';
-import { Clipboard, Eye, LockKeyhole, LogOut, Maximize2, Monitor, ShieldAlert, SlidersHorizontal, Volume2 } from 'lucide-react';
+import { Clipboard, Eye, LockKeyhole, LogOut, Maximize2, Monitor, Shield, ShieldAlert, SlidersHorizontal, Volume2 } from 'lucide-react';
 import { t, translateAudioIssue, type Locale } from '../lib/i18n.ts';
 import { classifyRemoteOs, remoteFeatures } from '../lib/platform.ts';
 
@@ -25,6 +25,10 @@ interface SessionToolbarProps {
   remotePlatform: string;
   onQuickKey: (name: 'Ctrl+Alt+Del' | 'Lock') => void;
   onOpenClipboard: () => void;
+  privacyEnabled: boolean;
+  privacyPending: boolean;
+  privacyFailed: boolean;
+  onTogglePrivacy: () => void;
 }
 
 const QUALITIES: QualityLevel[] = ['low', 'balanced', 'best'];
@@ -49,6 +53,10 @@ export function SessionToolbar({
   remotePlatform,
   onQuickKey,
   onOpenClipboard,
+  privacyEnabled,
+  privacyPending,
+  privacyFailed,
+  onTogglePrivacy,
 }: SessionToolbarProps) {
   const features = remoteFeatures(classifyRemoteOs(remotePlatform));
   return (
@@ -115,6 +123,19 @@ export function SessionToolbar({
           {t(locale, 'ctrlAltDel')}
         </button>
       ) : null}
+      {features.privacyMode && privacyAllowed ? (
+        <button
+          type="button"
+          className="rd-session-btn"
+          aria-pressed={privacyEnabled}
+          disabled={viewOnly || privacyPending}
+          onClick={onTogglePrivacy}
+        >
+          <Shield size={15} />
+          {t(locale, privacyPending ? 'privacyWaiting' : 'privacyMode')}
+        </button>
+      ) : null}
+      {privacyFailed ? <span className="rd-session-note">{t(locale, 'privacyFailed')}</span> : null}
       {features.lockScreen ? (
         <button type="button" className="rd-session-btn" disabled={viewOnly} onClick={() => onQuickKey('Lock')}>
           <LockKeyhole size={15} />

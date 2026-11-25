@@ -8,6 +8,7 @@ import {
   buildConnectMessage,
   initialSession,
   isCurrentGeneration,
+  nextPrivacyState,
   reduceSession,
   wsUrl,
   type SessionSnapshot,
@@ -205,6 +206,11 @@ test('hot-plug and display switch keep a valid monitor, including a negative ori
   assert.equal(copied.clipboardSeq, 1);
   const huge = reduceSession(copied, { type: 'server', message: { type: 'clipboard', text: 'x'.repeat(256 * 1024 + 1) } });
   assert.equal(huge.clipboardSeq, 1);
+});
+
+test('privacy results keep the previous state when the host rejects the change', () => {
+  assert.deepEqual(nextPrivacyState({ enabled: false }, { enabled: true, failed: false }), { enabled: true, pending: false, failed: false });
+  assert.deepEqual(nextPrivacyState({ enabled: false }, { failed: true }), { enabled: false, pending: false, failed: true });
 });
 
 test('disconnect clears the session and a stale generation is ignored', () => {

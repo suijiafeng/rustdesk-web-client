@@ -13,6 +13,7 @@ import {
 } from './lib/devices.ts';
 import { loadDisplayPrefs, persistDisplayPrefs, resolveQualityLevel, resolveTargetFps, type DisplayPrefs } from './lib/displayPrefs.ts';
 import { qualityCommand, remotePrivacyAllowed, shouldFollowFocusedDisplay } from './lib/displays.ts';
+import { classifyRemoteOs } from './lib/platform.ts';
 import {
   LOCALE_STORAGE_KEY,
   resolveEffectiveLocale,
@@ -209,7 +210,7 @@ export function App() {
   const {
     session, connect, disconnect, sendInput, setHeldRelease, setArmedKeys, canvasRef, frameSize, decoderError,
     stats, quality: linkQuality, audio, startAudio, stopAudio, setAudioVolume,
-    clipboardFallback, sendClipboard, dismissClipboard,
+    clipboardFallback, sendClipboard, dismissClipboard, privacy, togglePrivacy,
   } = useSession({
     readInput: () => formRef.current,
     onPasswordRejected: rejectSavedPassword,
@@ -298,6 +299,13 @@ export function App() {
         clipboardDisabled={displayPrefs.disableClipboard}
         onSendClipboard={sendClipboard}
         onDismissClipboard={dismissClipboard}
+        privacyEnabled={privacy.enabled}
+        privacyPending={privacy.pending}
+        privacyFailed={privacy.failed}
+        onTogglePrivacy={() => {
+          if (classifyRemoteOs(session.peer?.platform ?? '') !== 'windows') return;
+          togglePrivacy();
+        }}
         locale={locale}
       />
     );

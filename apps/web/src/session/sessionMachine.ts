@@ -117,6 +117,14 @@ export function isCurrentGeneration(active: number, eventGeneration: number): bo
   return active === eventGeneration;
 }
 
+export function nextPrivacyState(
+  current: { enabled: boolean },
+  result: { enabled?: boolean; failed: boolean },
+): { enabled: boolean; pending: boolean; failed: boolean } {
+  if (result.failed) return { enabled: current.enabled, pending: false, failed: true };
+  return { enabled: result.enabled === true, pending: false, failed: false };
+}
+
 export function reduceSession(state: SessionSnapshot, event: SessionEvent): SessionSnapshot {
   const next: SessionSnapshot = { ...state, clearPassword: false };
   switch (event.type) {

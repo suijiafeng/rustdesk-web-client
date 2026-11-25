@@ -24,6 +24,7 @@ import {
   buildConnectMessage,
   initialSession,
   isCurrentGeneration,
+  nextPrivacyState,
   reduceSession,
   wsUrl,
   type SessionSnapshot,
@@ -73,6 +74,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
   const phaseRef = useRef(session.phase);
   const sessionRef = useRef(session);
   const [clipboardFallback, setClipboardFallback] = useState<string | null>(null);
+  const [privacy, setPrivacy] = useState({ enabled: false, pending: false, failed: false });
   const heldReleaseRef = useRef<ClientMessage | null>(null);
   const armedKeysRef = useRef<ClientMessage[]>([]);
   phaseRef.current = session.phase;
@@ -213,6 +215,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     releaseDecoder();
     setDecoderError('');
     setClipboardFallback(null);
+    setPrivacy({ enabled: false, pending: false, failed: false });
     apply(eventGeneration, { type: 'disconnect' });
   }, [apply, closeAudio, closeSocket, readInput, releaseDecoder, releaseHeldInput, sendInput]);
 
@@ -376,6 +379,9 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
         }
         return;
       }
+      if (parsed.type === 'privacyResult') {
+        setPrivacy((current) => nextPrivacyState(current, parsed));
+      }
       apply(eventGeneration, { type: 'server', message: parsed });
     };
     socket.onerror = () => {
@@ -444,6 +450,13 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
 
   const dismissClipboard = useCallback(() => setClipboardFallback(null), []);
 
+  const togglePrivacy = useCallback(() => {
+    if (phaseRef.current !== 'live' || sessionRef.current.peer?.privacyAllowed !== true || privacy.pending) return;
+    const enabled = !privacy.enabled;
+    setPrivacy({ enabled: privacy.enabled, pending: true, failed: false });
+    sendInput([{ type: 'privacy', enabled }]);
+  }, [privacy.enabled, privacy.pending, sendInput]);
+
   return {
     session,
     connect,
@@ -463,5 +476,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     clipboardFallback,
     sendClipboard,
     dismissClipboard,
+    privacy,
+    togglePrivacy,
   };
 }

@@ -13,6 +13,7 @@ import {
   Layers2,
   LogOut,
   Maximize2,
+  Shield,
   ShieldAlert,
   Monitor,
   MousePointer2,
@@ -73,6 +74,10 @@ interface MobileSessionDockProps {
   remotePlatform: string;
   onQuickKey: (name: 'Ctrl+Alt+Del' | 'Lock') => void;
   onOpenClipboard: () => void;
+  privacyEnabled: boolean;
+  privacyPending: boolean;
+  privacyFailed: boolean;
+  onTogglePrivacy: () => void;
 }
 
 export function MobileSessionDock({
@@ -100,6 +105,10 @@ export function MobileSessionDock({
   remotePlatform,
   onQuickKey,
   onOpenClipboard,
+  privacyEnabled,
+  privacyPending,
+  privacyFailed,
+  onTogglePrivacy,
 }: MobileSessionDockProps) {
   const features = remoteFeatures(classifyRemoteOs(remotePlatform));
   const [menuOpen, setMenuOpen] = useState(false);
@@ -189,6 +198,14 @@ export function MobileSessionDock({
                 <span>{label('viewOnlyLabel')}</span>
                 <input type="checkbox" role="switch" checked={viewOnly} onChange={onToggleViewOnly} />
               </label>
+              {features.privacyMode && privacyAllowed ? (
+                <label className="tool-row">
+                  <Shield size={18} />
+                  <span>{label(privacyPending ? 'privacyWaiting' : 'privacyMode')}</span>
+                  <input type="checkbox" role="switch" checked={privacyEnabled} disabled={viewOnly || privacyPending} onChange={onTogglePrivacy} />
+                </label>
+              ) : null}
+              {privacyFailed ? <p role="alert">{label('privacyFailed')}</p> : null}
               {!privacyAllowed ? <p>{label('privacyUnavailable')}</p> : null}
             </div>
             <div className="tool-group">
