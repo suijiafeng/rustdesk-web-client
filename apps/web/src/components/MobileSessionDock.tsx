@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { t, translateAudioIssue, type I18nKey, type Locale } from '../lib/i18n.ts';
 import { classifyRemoteOs, remoteFeatures } from '../lib/platform.ts';
+import { ResolutionSelect } from './ResolutionSelect.tsx';
 
 type DockPanel = 'toolbar' | 'display' | 'gestures' | 'actions';
 
@@ -141,6 +142,11 @@ export function MobileSessionDock({
     setMenuOpen(true);
   };
 
+  const openSessionPanel = (open: () => void) => {
+    setPanel('toolbar');
+    open();
+  };
+
   const sheet = active && active !== 'toolbar' ? (
     <div
       className="remote-menu-backdrop"
@@ -173,23 +179,14 @@ export function MobileSessionDock({
             {features.resolutionChange && resolutions.length > 0 ? (
               <label className="tool-row">
                 <span>{label('remoteResolution')}</span>
-                <select
-                  aria-label={label('remoteResolution')}
-                  value={`${frameWidth}x${frameHeight}`}
-                  onChange={(event) => {
-                    const [width, height] = event.target.value.split('x').map(Number);
-                    if (width > 0 && height > 0) onResolution(width, height);
-                  }}
-                >
-                  {resolutions.some((size) => size.width === frameWidth && size.height === frameHeight) ? null : (
-                    <option value={`${frameWidth}x${frameHeight}`}>{frameWidth} × {frameHeight}</option>
-                  )}
-                  {resolutions.map((size) => (
-                    <option key={`${size.width}x${size.height}`} value={`${size.width}x${size.height}`}>
-                      {size.width} × {size.height}
-                    </option>
-                  ))}
-                </select>
+                <ResolutionSelect
+                  label={label('remoteResolution')}
+                  resolutions={resolutions}
+                  frameWidth={frameWidth}
+                  frameHeight={frameHeight}
+                  disabled={viewOnly}
+                  onSelect={onResolution}
+                />
               </label>
             ) : null}
           </div>
@@ -268,11 +265,11 @@ export function MobileSessionDock({
                   {label('lockScreen')}
                 </button>
               ) : null}
-              <button type="button" className="tool-row" onClick={onOpenChat}>
+              <button type="button" className="tool-row" onClick={() => openSessionPanel(onOpenChat)}>
                 <MessageSquare size={18} />
                 {label('chat')}
               </button>
-              <button type="button" className="tool-row" onClick={onOpenClipboard}>
+              <button type="button" className="tool-row" onClick={() => openSessionPanel(onOpenClipboard)}>
                 <Clipboard size={18} />
                 {label('clipboard')}
               </button>

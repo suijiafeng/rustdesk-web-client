@@ -19,7 +19,7 @@ import { applyTouchEffects } from '../lib/touchInput.ts';
 import { MobileSessionDock } from './MobileSessionDock.tsx';
 import { SoftKeyboardBar } from './SoftKeyboardBar.tsx';
 import { useKeyboardViewport } from '../hooks/useKeyboardViewport.ts';
-import type { Locale } from '../lib/i18n.ts';
+import { t, type Locale } from '../lib/i18n.ts';
 import { sessionChromeMode } from '../lib/sessionChrome.ts';
 import { DiagnosticsPanel } from './DiagnosticsPanel.tsx';
 import { offsetPointerMessages } from '../lib/displays.ts';
@@ -186,6 +186,7 @@ export function RemoteScreen({
   const stageRef = useRef<HTMLDivElement>(null);
   const captureRef = useRef<HTMLInputElement>(null);
   const softKeyboardInputRef = useRef<HTMLInputElement>(null);
+  const restartDialogRef = useRef<HTMLDialogElement>(null);
   const autoKeyboardArmed = useRef(false);
   const cursorCanvasRef = useRef<HTMLCanvasElement>(null);
   const trackedKeysRef = useRef<TrackedKey[]>([]);
@@ -436,7 +437,7 @@ export function RemoteScreen({
       if (!(target instanceof Element)) return false;
       const capture = captureRef.current;
       if (capture && (target === capture || capture.contains(target))) return false;
-      return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
+      return Boolean(target.closest('input, textarea, select, dialog[open], [contenteditable="true"]'));
     };
     const onKeyDown = (event: KeyboardEvent) => {
       const isolate = shouldIsolateKeyboardEvent({
@@ -684,6 +685,10 @@ export function RemoteScreen({
     keyboardOpen,
     viewportNarrow,
   });
+  const confirmRestart = () => {
+    const dialog = restartDialogRef.current;
+    if (dialog && !dialog.open) dialog.showModal();
+  };
   useEffect(() => {
     const sync = () => {
       const action = keyboardLockAction(classifyBrowser(navigator.userAgent), window.isSecureContext, document.fullscreenElement === stageRef.current);
@@ -837,7 +842,7 @@ export function RemoteScreen({
           onResolution={onResolution}
           restartAllowed={restartAllowed}
           restartNotice={restartNotice}
-          onRestart={onRestart}
+          onRestart={confirmRestart}
           onScreenshot={onScreenshot}
           onOpenChat={() => setChatOpen(true)}
         />
@@ -882,11 +887,39 @@ export function RemoteScreen({
           onResolution={onResolution}
           restartAllowed={restartAllowed}
           restartNotice={restartNotice}
-          onRestart={onRestart}
+          onRestart={confirmRestart}
           onScreenshot={onScreenshot}
           onOpenChat={() => setChatOpen(true)}
         />
       ) : null}
+      <dialog
+        ref={restartDialogRef}
+        className="rd-restart-dialog"
+        aria-labelledby="restart-title"
+        aria-describedby="restart-description"
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) event.currentTarget.close();
+        }}
+      >
+        <form
+          className="rd-password-dialog"
+          onSubmit={(event) => {
+            event.preventDefault();
+            restartDialogRef.current?.close();
+            if (restartAllowed && restartNotice !== 'requested' && restartNotice !== 'waiting') onRestart();
+          }}
+        >
+          <h2 id="restart-title" className="mb-2 text-base font-semibold">{t(locale, 'restartDevice')}</h2>
+          <p id="restart-description" className="text-[var(--ink-soft)]">{t(locale, 'confirmRestart')}</p>
+          <div className="mt-4 flex flex-wrap justify-end gap-2">
+            <button type="button" className="rd-btn" autoFocus onClick={() => restartDialogRef.current?.close()}>
+              {t(locale, 'cancel')}
+            </button>
+            <button type="submit" className="rd-btn danger">{t(locale, 'restartDevice')}</button>
+          </div>
+        </form>
+      </dialog>
       <ChatPanel locale={locale} open={chatOpen} lines={chatLines} onSend={onSendChat} onClose={() => setChatOpen(false)} />
       <ClipboardPanel
         locale={locale}

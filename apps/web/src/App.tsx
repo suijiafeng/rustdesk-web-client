@@ -348,9 +348,7 @@ export function App() {
         onResolution={(width, height) => sendInput([{ type: 'resolution', display: session.currentDisplay, width, height }])}
         restartAllowed={session.peer?.restartAllowed === true && remoteFeatures(classifyRemoteOs(session.peer?.platform ?? '')).restart}
         restartNotice={restartNotice}
-        onRestart={() => {
-          if (window.confirm(t(locale, 'confirmRestart'))) requestRestart();
-        }}
+        onRestart={requestRestart}
         chatLines={chatLines}
         onSendChat={sendChat}
         onScreenshot={() => {

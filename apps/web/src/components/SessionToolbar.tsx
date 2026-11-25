@@ -4,6 +4,7 @@ import type { DisplayInfo, QualityLevel } from '@rustdesk-web/shared';
 import { Camera, Clipboard, Eye, LockKeyhole, LogOut, Maximize2, MessageSquare, Monitor, RotateCcw, Shield, ShieldAlert, SlidersHorizontal, Volume2 } from 'lucide-react';
 import { t, translateAudioIssue, type Locale } from '../lib/i18n.ts';
 import { classifyRemoteOs, remoteFeatures } from '../lib/platform.ts';
+import { ResolutionSelect } from './ResolutionSelect.tsx';
 
 interface SessionToolbarProps {
   locale: Locale;
@@ -101,23 +102,14 @@ export function SessionToolbar({
       {features.resolutionChange && resolutions.length > 0 ? (
         <label className="rd-session-field">
           <span>{t(locale, 'remoteResolution')}</span>
-          <select
-            aria-label={t(locale, 'remoteResolution')}
-            value={`${frameWidth}x${frameHeight}`}
-            onChange={(event) => {
-              const [width, height] = event.target.value.split('x').map(Number);
-              if (width > 0 && height > 0) onResolution(width, height);
-            }}
-          >
-            {resolutions.some((size) => size.width === frameWidth && size.height === frameHeight) ? null : (
-              <option value={`${frameWidth}x${frameHeight}`}>{frameWidth} × {frameHeight}</option>
-            )}
-            {resolutions.map((size) => (
-              <option key={`${size.width}x${size.height}`} value={`${size.width}x${size.height}`}>
-                {size.width} × {size.height}
-              </option>
-            ))}
-          </select>
+          <ResolutionSelect
+            label={t(locale, 'remoteResolution')}
+            resolutions={resolutions}
+            frameWidth={frameWidth}
+            frameHeight={frameHeight}
+            disabled={viewOnly}
+            onSelect={onResolution}
+          />
         </label>
       ) : null}
       <span className="rd-session-sep" aria-hidden="true" />
