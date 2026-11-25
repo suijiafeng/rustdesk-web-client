@@ -1,0 +1,28 @@
+// Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
+
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { createApp, GATEWAY_SERVICE, HEALTH_PATH, type HealthResponse } from './index.ts';
+
+test('GET /api/health reports the gateway is up', async () => {
+  const server = createApp().listen(0, '127.0.0.1');
+  await new Promise<void>((resolve, reject) => {
+    server.once('listening', () => resolve());
+    server.once('error', reject);
+  });
+  try {
+    const address = server.address();
+    if (address === null || typeof address === 'string') {
+      throw new Error('gateway test server has no TCP port');
+    }
+    const response = await fetch(`http://127.0.0.1:${address.port}${HEALTH_PATH}`);
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as HealthResponse;
+    assert.deepEqual(body, { ok: true, service: GATEWAY_SERVICE });
+  } finally {
+    if (!server.listening) return;
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+});
