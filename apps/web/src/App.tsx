@@ -1,6 +1,6 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { RustDeskShell, type ConnectRequest, type ConnectionField, type ConnectionMode } from './components/RustDeskShell.tsx';
 import {
   loadSavedDevices,
@@ -22,6 +22,7 @@ import {
   type SavedPasswordMap,
 } from './lib/passwords.ts';
 import { loadSavedTheme, persistTheme, resolveEffectiveTheme, type ThemePreference } from './lib/theme.ts';
+import { useSession } from './session/useSession.ts';
 
 const PREFS_KEY = 'rd_web_prefs';
 
@@ -63,8 +64,6 @@ export function App() {
   const [serverKey, setServerKey] = useState(prefs.serverKey ?? '');
   const [forceRelay, setForceRelay] = useState(Boolean(prefs.forceRelay));
   const [gatewayToken, setGatewayToken] = useState('');
-  const [phase, setPhase] = useState<'idle' | 'connecting' | 'live' | 'error'>('idle');
-  const [detail, setDetail] = useState('');
   const [devices, setDevices] = useState<SavedDevice[]>(() => loadSavedDevices());
   const [savedPasswords, setSavedPasswords] = useState<SavedPasswordMap>({});
   const [rememberPassword, setRememberPassword] = useState(false);
@@ -148,14 +147,53 @@ export function App() {
     else setGatewayToken(value);
   };
 
+  const formRef = useRef({
+    mode,
+    peerId,
+    idServer,
+    relayServer,
+    serverKey,
+    forceRelay,
+    host,
+    port,
+    password,
+    token: gatewayToken,
+    displayPrefs,
+  });
+  formRef.current = {
+    mode,
+    peerId,
+    idServer,
+    relayServer,
+    serverKey,
+    forceRelay,
+    host,
+    port,
+    password,
+    token: gatewayToken,
+    displayPrefs,
+  };
+  const rejectSavedPassword = useCallback(() => {
+    const current = formRef.current;
+    const key = current.mode === 'direct'
+      ? `direct:${current.host}:${current.port}`
+      : `id:${current.peerId.replace(/\s+/g, '')}`;
+    setSavedPasswords((saved) => removeSavedPassword(saved, key));
+    setPassword('');
+  }, []);
+  const { session, connect, disconnect } = useSession({
+    readInput: () => formRef.current,
+    onPasswordRejected: rejectSavedPassword,
+  });
   const onConnect = useCallback((request?: ConnectRequest) => {
-    setPhase('connecting');
-    setDetail('');
     if (request?.remember && request.password) {
-      const key = request.mode === 'direct' ? `direct:${request.host}:${request.port}` : `id:${(request.peerId ?? '').replace(/\s+/g, '')}`;
+      const key = request.mode === 'direct'
+        ? `direct:${request.host}:${request.port}`
+        : `id:${(request.peerId ?? '').replace(/\s+/g, '')}`;
       setSavedPasswords((current) => setSavedPassword(current, key, request.password ?? ''));
     }
-  }, []);
+    void connect(request);
+  }, [connect]);
 
   return (
     <RustDeskShell
@@ -178,7 +216,7 @@ export function App() {
       }}
       mode={mode}
       directIpEnabled={directIpEnabled}
-      phase={phase}
+      phase={session.phase}
       host={host}
       port={port}
       password={password}
@@ -188,9 +226,9 @@ export function App() {
       serverKey={serverKey}
       forceRelay={forceRelay}
       gatewayToken={gatewayToken}
-      authRequired={false}
-      detail={detail}
-      decoderError=""
+      authRequired={session.authRequired}
+      detail={session.detail}
+      decoderError={session.phase === 'error' ? session.errorMessage : ''}
       touchMode={!isDesktop}
       diagnosticsOpen={false}
       devices={devices}
@@ -227,18 +265,9 @@ export function App() {
       onToggleTouchMode={() => undefined}
       onToggleDiagnostics={() => undefined}
       onConnect={onConnect}
-      onDisconnect={() => {
-        setPhase('idle');
-        setDetail('');
-      }}
-      onDismissError={() => {
-        setPhase('idle');
-        setDetail('');
-      }}
-      onClose={() => {
-        setPhase('idle');
-        setDetail('');
-      }}
+      onDisconnect={disconnect}
+      onDismissError={disconnect}
+      onClose={disconnect}
     />
   );
 }
