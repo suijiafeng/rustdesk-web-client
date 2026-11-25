@@ -13,6 +13,7 @@
     "packages/*"
   ],
   "scripts": {
+    "dev": "node scripts/dev.mjs",
     "dev:web": "yarn workspace @rustdesk-web/web dev",
     "dev:gateway": "yarn workspace @rustdesk-web/gateway dev",
     "start": "node --env-file-if-exists=.env apps/gateway/dist/index.js",
