@@ -7,7 +7,7 @@ import type { ConnectRequest } from '../components/RustDeskShell.tsx';
 import { probeCodecs, webCodecsStatus } from '../lib/codecs.ts';
 import { RemoteDecoder } from '../lib/decoder.ts';
 import { acceptRtt } from '../lib/diagnostics.ts';
-import { computeFrameRates, createFrameStats, recordRxFrame } from '../lib/frameStats.ts';
+import { computeFrameRates, createFrameStats, recordRenderedFrame, recordRxFrame } from '../lib/frameStats.ts';
 import {
   computeDiagnosticsSummary,
   createDiagnosticsState,
@@ -93,7 +93,10 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
   const ensureDecoder = useCallback(() => {
     if (!decoderRef.current) {
       decoderRef.current = new RemoteDecoder({
-        onOutput: (width, height) => setFrameSize({ width, height }),
+        onOutput: (width, height, _renderedCount, nowMs) => {
+          recordRenderedFrame(frameStatsRef.current, nowMs);
+          setFrameSize({ width, height });
+        },
         onError: (message) => setDecoderError(message),
         onNeedRefresh: () => {
           const socket = socketRef.current;
