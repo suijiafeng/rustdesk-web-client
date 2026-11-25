@@ -1,8 +1,6 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
 import { useState } from 'react';
-import type { ClientMessage } from '@rustdesk-web/shared';
-import { chordMessages, textMessages } from '../lib/keyboard.ts';
 import { clampOrbPosition, orbCoordsFromState, snapOrbToEdge, type OrbState } from '../lib/floatingMenu.ts';
 
 interface MobileChromeProps {
@@ -12,23 +10,10 @@ interface MobileChromeProps {
   open: boolean;
   keyboardOpen: boolean;
   touchMode: boolean;
-  viewOnly: boolean;
   onToggleOpen: () => void;
   onToggleKeyboard: () => void;
   onToggleTouchMode: () => void;
-  onSend: (messages: ClientMessage[]) => void;
 }
-
-const SOFT_KEYS = [
-  ['Esc', 'Escape'],
-  ['Tab', 'Tab'],
-  ['Left', 'ArrowLeft'],
-  ['Right', 'ArrowRight'],
-  ['Up', 'ArrowUp'],
-  ['Down', 'ArrowDown'],
-  ['PgUp', 'PageUp'],
-  ['PgDn', 'PageDown'],
-] as const;
 
 export function MobileChrome({
   viewportWidth,
@@ -37,17 +22,12 @@ export function MobileChrome({
   open,
   keyboardOpen,
   touchMode,
-  viewOnly,
   onToggleOpen,
   onToggleKeyboard,
   onToggleTouchMode,
-  onSend,
 }: MobileChromeProps) {
   const [orb, setOrb] = useState<OrbState>({ side: 'right', yRatio: 0.72 });
   const position = orbCoordsFromState(orb, 46, viewportWidth, viewportHeight, 10);
-  const sendKeys = (messages: ClientMessage[]) => {
-    if (!viewOnly) onSend(messages);
-  };
 
   return (
     <>
@@ -114,47 +94,9 @@ export function MobileChrome({
           <button type="button" onClick={onToggleTouchMode} style={{ cursor: 'pointer' }}>
             {touchMode ? 'Touch mode' : 'Mouse mode'}
           </button>
-          <button type="button" onClick={onToggleKeyboard} style={{ cursor: 'pointer' }}>
+          <button type="button" aria-pressed={keyboardOpen} onClick={onToggleKeyboard} style={{ cursor: 'pointer' }}>
             Keyboard
           </button>
-          {keyboardOpen ? (
-            <>
-              <input
-                aria-label="Remote text"
-                data-testid="soft-text"
-                disabled={viewOnly}
-                onKeyDown={(event) => event.stopPropagation()}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  event.target.value = '';
-                  sendKeys(textMessages(value, viewOnly));
-                }}
-                style={{ minWidth: 120 }}
-              />
-              {SOFT_KEYS.map(([label, control]) => (
-                <button
-                  key={control}
-                  type="button"
-                  disabled={viewOnly}
-                  onClick={() => sendKeys([
-                    { type: 'key', action: 'down', control },
-                    { type: 'key', action: 'up', control },
-                  ])}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {label}
-                </button>
-              ))}
-              <button
-                type="button"
-                disabled={viewOnly}
-                onClick={() => sendKeys(chordMessages([{ control: 'Control' }, { chr: 'c' }], viewOnly))}
-                style={{ cursor: 'pointer' }}
-              >
-                Ctrl+C
-              </button>
-            </>
-          ) : null}
         </div>
       ) : null}
     </>

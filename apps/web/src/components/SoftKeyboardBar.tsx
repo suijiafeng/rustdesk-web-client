@@ -1,0 +1,191 @@
+// Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
+
+import { useEffect, useRef, useState } from 'react';
+import type { ClientMessage } from '@rustdesk-web/shared';
+import { ChevronDown } from 'lucide-react';
+import { keyboardInset } from '../lib/gestures.ts';
+import { t, type Locale } from '../lib/i18n.ts';
+import { controlFromKeyOrCode, isImeEvent } from '../lib/keys.ts';
+import { softControlMessages, softTextEdit, toggleLatched } from '../lib/softKeyboard.ts';
+
+interface SoftKeyboardBarProps {
+  locale: Locale;
+  viewOnly: boolean;
+  onSend: (messages: ClientMessage[]) => void;
+  onHide: () => void;
+}
+
+const STICKY_MODIFIERS = [
+  { label: 'Ctrl', control: 'Control' },
+  { label: 'Alt', control: 'Alt' },
+  { label: 'Shift', control: 'Shift' },
+  { label: 'Win', control: 'Meta' },
+] as const;
+
+const EXTRA_KEYS = [
+  { label: 'Esc', control: 'Escape' },
+  { label: 'Tab', control: 'Tab' },
+  { label: '←', control: 'ArrowLeft', aria: 'Left arrow' },
+  { label: '↑', control: 'ArrowUp', aria: 'Up arrow' },
+  { label: '↓', control: 'ArrowDown', aria: 'Down arrow' },
+  { label: '→', control: 'ArrowRight', aria: 'Right arrow' },
+  { label: 'Home', control: 'Home' },
+  { label: 'End', control: 'End' },
+  { label: 'Page Up', control: 'PageUp' },
+  { label: 'Page Down', control: 'PageDown' },
+  { label: 'Del', control: 'Delete' },
+  ...Array.from({ length: 12 }, (_, index) => {
+    const name = `F${index + 1}`;
+    return { label: name, control: name, aria: name };
+  }),
+] as const;
+
+export function SoftKeyboardBar({ locale, viewOnly, onSend, onHide }: SoftKeyboardBarProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const composingRef = useRef(false);
+  const lastSentRef = useRef('');
+  const latchedRef = useRef<string[]>([]);
+  const [latched, setLatched] = useState<string[]>([]);
+  latchedRef.current = latched;
+
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    let keyboardWasVisible = false;
+    const syncKeyboard = () => {
+      const inset = keyboardInset(window.innerHeight, viewport.height, viewport.offsetTop);
+      if (inset > 120) keyboardWasVisible = true;
+      else if (keyboardWasVisible && inset < 48) {
+        keyboardWasVisible = false;
+        onHide();
+      }
+    };
+    syncKeyboard();
+    viewport.addEventListener('resize', syncKeyboard);
+    viewport.addEventListener('scroll', syncKeyboard);
+    return () => {
+      viewport.removeEventListener('resize', syncKeyboard);
+      viewport.removeEventListener('scroll', syncKeyboard);
+    };
+  }, [onHide]);
+
+  const focusInput = () => inputRef.current?.focus({ preventScroll: true });
+
+  const toggleModifier = (control: string) => {
+    setLatched((current) => toggleLatched(current, control));
+    focusInput();
+  };
+
+  const tapExtraKey = (control: string) => {
+    const next = softControlMessages(latchedRef.current, control, viewOnly);
+    latchedRef.current = next.latched;
+    setLatched(next.latched);
+    if (next.messages.length > 0) onSend(next.messages);
+    focusInput();
+  };
+
+  const applyDraft = (value: string) => {
+    const next = softTextEdit(latchedRef.current, lastSentRef.current, value, viewOnly);
+    latchedRef.current = next.latched;
+    setLatched(next.latched);
+    lastSentRef.current = next.draft;
+    if (inputRef.current && inputRef.current.value !== next.draft) inputRef.current.value = next.draft;
+    if (next.messages.length > 0) onSend(next.messages);
+  };
+
+  return (
+    <div
+      className="softbar"
+      data-testid="softbar"
+      onPointerDown={(event) => event.stopPropagation()}
+      onMouseDown={(event) => {
+        if (event.target instanceof Element && event.target.closest('button')) event.preventDefault();
+      }}
+    >
+      <div className="soft-key-strip" data-testid="soft-key-strip" role="toolbar" aria-label={t(locale, 'specialKeysAria')}>
+        {STICKY_MODIFIERS.map((mod) => {
+          const isActive = latched.includes(mod.control);
+          return (
+            <button
+              key={mod.control}
+              type="button"
+              aria-pressed={isActive}
+              data-testid={`soft-mod-${mod.label.toLowerCase()}`}
+              className={`soft-key-btn${isActive ? ' active' : ''}`}
+              onClick={() => toggleModifier(mod.control)}
+            >
+              {mod.label}
+            </button>
+          );
+        })}
+        <span className="soft-key-divider" aria-hidden="true" />
+        {EXTRA_KEYS.map((item) => (
+          <button
+            key={item.control}
+            type="button"
+            aria-label={'aria' in item ? item.aria : item.label}
+            className="soft-key-btn"
+            onClick={() => tapExtraKey(item.control)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      <button type="button" className="soft-key-btn" data-testid="soft-hide" aria-label={t(locale, 'softHide')} onClick={onHide}>
+        <ChevronDown size={18} aria-hidden="true" />
+      </button>
+      <input
+        ref={inputRef}
+        type="text"
+        className="soft-key-capture"
+        data-testid="soft-input"
+        aria-label={t(locale, 'softPlaceholder')}
+        tabIndex={-1}
+        autoCapitalize="off"
+        autoCorrect="off"
+        autoComplete="off"
+        spellCheck={false}
+        onKeyDown={(event) => {
+          if (composingRef.current || isImeEvent({ isComposing: event.nativeEvent.isComposing, key: event.key, keyCode: event.keyCode })) return;
+          const control = controlFromKeyOrCode(event.code, event.key);
+          if (!control || control === 'Space') return;
+          if (control === 'Backspace' && latchedRef.current.length === 0 && event.currentTarget.value.length > 0) return;
+          event.preventDefault();
+          const held = latchedRef.current;
+          const next = softControlMessages(held, control, viewOnly);
+          latchedRef.current = next.latched;
+          setLatched(next.latched);
+          if (held.length === 0) {
+            const down = next.messages.find((message) => message.type === 'key' && message.action === 'down');
+            if (down) onSend([down]);
+            if (control === 'Enter') {
+              lastSentRef.current = '';
+              event.currentTarget.value = '';
+            }
+          } else if (next.messages.length > 0) {
+            onSend(next.messages);
+          }
+        }}
+        onKeyUp={(event) => {
+          if (composingRef.current || isImeEvent({ isComposing: event.nativeEvent.isComposing, key: event.key, keyCode: event.keyCode })) return;
+          const control = controlFromKeyOrCode(event.code, event.key);
+          if (!control || control === 'Space' || latchedRef.current.length > 0) return;
+          if (control === 'Backspace' && event.currentTarget.value.length > 0) return;
+          event.preventDefault();
+          if (!viewOnly) onSend([{ type: 'key', action: 'up', control }]);
+        }}
+        onCompositionStart={() => {
+          composingRef.current = true;
+        }}
+        onCompositionEnd={(event) => {
+          composingRef.current = false;
+          applyDraft(event.currentTarget.value);
+        }}
+        onInput={(event) => {
+          if (composingRef.current) return;
+          applyDraft(event.currentTarget.value);
+        }}
+      />
+    </div>
+  );
+}

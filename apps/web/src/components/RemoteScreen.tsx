@@ -15,6 +15,9 @@ import {
 } from '../lib/gestures.ts';
 import { applyTouchEffects, isNarrowViewport } from '../lib/touchInput.ts';
 import { MobileChrome } from './MobileChrome.tsx';
+import { SoftKeyboardBar } from './SoftKeyboardBar.tsx';
+import { useKeyboardViewport } from '../hooks/useKeyboardViewport.ts';
+import type { Locale } from '../lib/i18n.ts';
 import { DiagnosticsPanel } from './DiagnosticsPanel.tsx';
 import { offsetPointerMessages } from '../lib/displays.ts';
 import { isImeEvent } from '../lib/keys.ts';
@@ -80,6 +83,7 @@ interface RemoteScreenProps {
     linkHealth: 'waiting' | 'good' | 'fair' | 'poor';
   };
   onCopyDiagnostics: (text: string) => void;
+  locale?: Locale;
 }
 
 interface Drag {
@@ -123,6 +127,7 @@ export function RemoteScreen({
   decodeError,
   linkQuality,
   onCopyDiagnostics,
+  locale = 'en',
 }: RemoteScreenProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const captureRef = useRef<HTMLInputElement>(null);
@@ -158,6 +163,7 @@ export function RemoteScreen({
   const longTimerRef = useRef<number | null>(null);
   const touchCursorRef = useRef({ x: 0, y: 0 });
   const touchModeRef = useRef(touchMode);
+  const anchorRef = useRef({ x: 0, y: 0 });
   boxRef.current = box;
   touchModeRef.current = touchMode;
   viewOnlyRef.current = viewOnly;
@@ -181,17 +187,40 @@ export function RemoteScreen({
     onHeldRef.current(offsetPointerMessages([message], originRef.current)[0] ?? null);
   };
 
+  const keyboardLayout = useKeyboardViewport({
+    enabled: true,
+    softKeys: keyboardOpen,
+    stage: stageRef,
+    read: () => ({
+      mode: viewMode,
+      zoom,
+      view: transformRef.current,
+      remoteW: frameRef.current.width,
+      remoteH: frameRef.current.height,
+      anchor: anchorRef.current,
+    }),
+    apply: (size, next) => {
+      setBox({ width: size.w, height: size.h });
+      setViewMode(next.mode);
+      setZoom(Number.isFinite(next.zoom) && next.zoom > 0 ? next.zoom : 1);
+      setPan({ panX: next.view.panX, panY: next.view.panY });
+    },
+  });
+
   const transform = computeViewTransform(box.width, box.height, frameWidth, frameHeight, viewMode, zoom, pan, {
     allowEdgePan: true,
     edgePadding: 48,
-    bottomInset: keyboardOpen ? 112 : 0,
+    bottomInset: keyboardOpen && !keyboardLayout.viewport ? 112 : 0,
   });
   transformRef.current = transform;
 
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) return;
-    const measure = () => setBox({ width: stage.clientWidth, height: stage.clientHeight });
+    const measure = () => {
+      if (keyboardLayout.pending.current) return;
+      setBox({ width: stage.clientWidth, height: stage.clientHeight });
+    };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(stage);
@@ -457,6 +486,7 @@ export function RemoteScreen({
     const remote = frameRef.current;
     const pos = remotePoint(local.x, local.y, remote.width, remote.height, transformRef.current, false);
     if (!pos) return;
+    anchorRef.current = pos;
     const button = desktopPointerButton(event.button, swapRef.current);
     if (!button) return;
     event.preventDefault();
@@ -542,6 +572,7 @@ export function RemoteScreen({
       ref={stageRef}
       className="stage"
       data-testid="stage"
+      data-keyboard-avoiding={keyboardLayout.viewport ? 'true' : undefined}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -550,7 +581,11 @@ export function RemoteScreen({
       onContextMenu={(event) => event.preventDefault()}
       style={{
         position: 'fixed',
-        inset: 0,
+        inset: keyboardLayout.viewport ? 'auto' : 0,
+        left: keyboardLayout.viewport?.left,
+        top: keyboardLayout.viewport?.top,
+        width: keyboardLayout.viewport?.width,
+        height: keyboardLayout.viewport?.height,
         background: '#101418',
         touchAction: 'none',
         cursor: showCursor ? 'none' : 'default',
@@ -639,14 +674,24 @@ export function RemoteScreen({
           open={menuOpen}
           keyboardOpen={keyboardOpen}
           touchMode={touchMode}
-          viewOnly={viewOnly}
           onToggleOpen={() => setMenuOpen((current) => !current)}
           onToggleKeyboard={() => {
             setMenuOpen(true);
-            setKeyboardOpen((current) => !current);
+            setKeyboardOpen((current) => {
+              const next = !current;
+              if (next) keyboardLayout.begin();
+              return next;
+            });
           }}
           onToggleTouchMode={() => setTouchMode((current) => !current)}
+        />
+      ) : null}
+      {keyboardOpen && isNarrowViewport(box.width) ? (
+        <SoftKeyboardBar
+          locale={locale}
+          viewOnly={viewOnly}
           onSend={onKeyboard}
+          onHide={() => setKeyboardOpen(false)}
         />
       ) : null}
       <SessionToolbar
