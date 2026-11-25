@@ -37,7 +37,7 @@ export function encodeMessage(value: Record<string, unknown>): Uint8Array {
   return MessageType.encode(MessageType.create(value)).finish();
 }
 
-export function decodeMessage(bytes: Uint8Array): Record<string, unknown> {
+export function decodeMessage(bytes: Uint8Array): Record<string, any> {
   return decodeType(MessageType, bytes, 'host');
 }
 
@@ -45,7 +45,7 @@ export function encodeRendezvous(value: Record<string, unknown>): Uint8Array {
   return RendezvousType.encode(RendezvousType.create(value)).finish();
 }
 
-export function decodeRendezvous(bytes: Uint8Array): Record<string, unknown> {
+export function decodeRendezvous(bytes: Uint8Array): Record<string, any> {
   return decodeType(RendezvousType, bytes, 'id-server');
 }
 
@@ -74,7 +74,7 @@ function decodeType(
   type: protobuf.Type,
   bytes: Uint8Array,
   kind: 'host' | 'id-server',
-): Record<string, unknown> {
+): Record<string, any> {
   try {
     return type.toObject(type.decode(bytes), { ...objectOptions, bytes: Array }) as Record<string, unknown>;
   } catch (error) {
