@@ -103,7 +103,9 @@ try {
   await tapElement(select('mobile-dock-expand'));
   await tap(100, 360);
   assert.deepEqual((await sent()).filter(e => e.type === 'mouse').map(e => e.action), ['move', 'down', 'up']);
-  console.log('Expanded toolbar: remote tap reaches the gateway.');
+  await until(select('mobile-dock-expand'));
+  console.log('Expanded toolbar: an outside tap collapses the toolbar and reaches the gateway.');
+  await tapElement(select('mobile-dock-expand'));
   await tapElement(select('dock-display'));
   const fps = select('fps-select');
   await tapElement(fps);
@@ -120,8 +122,12 @@ try {
   await tapElement(fps);
   const before = (await sent()).length;
   await tap(75, 350);
-  assert.equal(await evaluate(fps + '.getAttribute("aria-expanded")'), 'false');
+  await until(select('mobile-dock-expand'));
+  assert.equal(await evaluate(list + ' === null'), true);
+  assert.equal(await evaluate(select('session-menu') + ' === null'), true);
   assert.deepEqual((await sent()).slice(before).map(e => e.action), ['move', 'down', 'up']);
+  await tapElement(select('mobile-dock-expand'));
+  await tapElement(select('dock-display'));
   const beforeDrag = (await sent()).length;
   await touch('touchStart', [{ x: 80, y: 345 }]);
   await delay(440);
@@ -140,7 +146,8 @@ try {
   await touch('touchMove', fingers.map(point => ({ ...point, y: 380 })));
   await touch('touchEnd');
   assert.ok((await sent()).slice(beforeScroll).some(e => e.action === 'wheel'));
-  console.log('Display panel: remote taps, drags and three-finger scrolling work outside the panel.');
+  assert.equal(await evaluate('Boolean(' + select('session-menu') + ')'), true);
+  console.log('Display panel: outside taps dismiss it, while drags and three-finger scrolling leave it open.');
   await tapElement(select('dock-display'));
   assert.equal(await evaluate(select('session-menu') + ' === null'), true);
   await tapElement(select('dock-collapse'));

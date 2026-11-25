@@ -2061,7 +2061,9 @@ export default function App() {
             break;
           }
           case 'tap-click': {
-            if (!remoteInputRef.current || displayPrefsRef.current.viewOnly) break;
+            if (!remoteInputRef.current) break;
+            if (isTouchLayout && chromeRef.current.menu) closeChrome();
+            if (displayPrefsRef.current.viewOnly) break;
             const pos = touchModeRef.current
               ? remoteFromLocal(ef.x, ef.y)
               : cursorPoint();
@@ -2119,9 +2121,11 @@ export default function App() {
       textCursor,
       clearLongPress,
       clickButton,
+      closeChrome,
       cursorPoint,
       finishPendingClick,
       flushMove,
+      isTouchLayout,
       panBy,
       placeCursor,
       queueMove,
