@@ -45,6 +45,11 @@ test('normalizeDisplayPrefs restores safe defaults and clamps bounds', () => {
   assert.equal(normalized.swapMouseButtons, true);
 });
 
+test('automatic mobile keyboard defaults on and respects a saved opt-out', () => {
+  assert.equal(normalizeDisplayPrefs({}).autoKeyboard, true);
+  assert.equal(normalizeDisplayPrefs({ autoKeyboard: false }).autoKeyboard, false);
+});
+
 test('resolveQualityLevel and resolveTargetFps map presets and custom values', () => {
   assert.equal(resolveQualityLevel('best', 50), 'best');
   assert.equal(resolveQualityLevel('balanced', 50), 'balanced');

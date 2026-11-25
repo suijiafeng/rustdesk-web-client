@@ -617,6 +617,13 @@ export function RemoteScreen({
         isPrimary: event.isPrimary,
       });
       gestureRef.current = next.state;
+      if (canAutoOpenKeyboard && event.isPrimary && touchModeRef.current && !viewOnlyRef.current
+        && next.state.phase === 'single' && !next.state.single?.dragging) {
+        // Get the remote cursor shape while the finger is down so pointer-up can still open the IME.
+        const position = remotePoint(local.x, local.y, frameWidth, frameHeight, transformRef.current, false);
+        const move = position && pointerMoveMessage(position, false);
+        if (move) sendPointer([move]);
+      }
       runTouch(next.effects);
       return;
     }
@@ -696,8 +703,9 @@ export function RemoteScreen({
       if (!point) return;
       anchorRef.current = point;
 
-      if (autoKeyboard && chrome === 'dock' && !swapMouseButtons && !cursorEmbedded
-        && cursor && cursorShape && isTextCursorTap(point, cursor, cursorShape)) openSoftKeyboard();
+      if (canAutoOpenKeyboard && cursor && cursorShape && isTextCursorTap(point, cursor, cursorShape)) {
+        openSoftKeyboard();
+      }
       return;
     }
     const drag = dragRef.current;
@@ -729,6 +737,7 @@ export function RemoteScreen({
     keyboardOpen,
     viewportNarrow,
   });
+  const canAutoOpenKeyboard = autoKeyboard && chrome === 'dock' && !swapMouseButtons && !cursorEmbedded;
   const confirmRestart = () => {
     const dialog = restartDialogRef.current;
     if (dialog && !dialog.open) dialog.showModal();
