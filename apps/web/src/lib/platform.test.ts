@@ -16,6 +16,7 @@ import {
   remoteFeatures,
   resolutionAllowed,
   twoFactorStatus,
+  validateTwoFactorCode,
   validateChatText,
   validateClipboardText,
 } from './platform.ts';
@@ -97,6 +98,8 @@ test('clipboard, keyboard lock, reconnect, chat, and 2FA follow browser and size
   assert.equal(validateChatText('  hello '), 'ok');
   assert.equal(validateChatText('   '), 'empty');
   assert.equal(validateChatText('x'.repeat(4097)), 'too-large');
+  assert.equal(validateTwoFactorCode('123456'), true);
+  assert.equal(validateTwoFactorCode('12'), false);
   assert.equal(twoFactorStatus(0, 0), 'ok');
   assert.equal(twoFactorStatus(3, 0), 'exhausted');
   assert.equal(twoFactorStatus(1, 60_000), 'expired');

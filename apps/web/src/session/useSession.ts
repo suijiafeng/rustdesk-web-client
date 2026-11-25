@@ -16,7 +16,7 @@ import {
   sweepTimeouts,
 } from '../lib/linkHealth.ts';
 import { sessionEndLock } from '../lib/displays.ts';
-import { classifyBrowser, clipboardDelivery, reconnectDelayMs, validateChatText, validateClipboardText } from '../lib/platform.ts';
+import { classifyBrowser, clipboardDelivery, reconnectDelayMs, twoFactorStatus, validateChatText, validateClipboardText, validateTwoFactorCode } from '../lib/platform.ts';
 import { RemoteAudio, clampVolume, webAudioStatus } from '../lib/remoteAudio.ts';
 import { filterCodecSupport, resolveQualityLevel, resolveTargetFps, type DisplayPrefs } from '../lib/displayPrefs.ts';
 import {
@@ -88,6 +88,8 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
   const reconnectTimerRef = useRef<number | null>(null);
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const [chatLines, setChatLines] = useState<{ direction: 'in' | 'out'; text: string }[]>([]);
+  const [twoFactor, setTwoFactor] = useState<null | 'required' | 'failed' | 'expired'>(null);
+  const twoFactorMeta = useRef({ started: 0, attempts: 0 });
   const heldReleaseRef = useRef<ClientMessage | null>(null);
   const armedKeysRef = useRef<ClientMessage[]>([]);
   phaseRef.current = session.phase;
@@ -413,6 +415,16 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
         }
         return;
       }
+      if (parsed.type === 'twoFactorRequired') {
+        if (!twoFactorMeta.current.started) twoFactorMeta.current.started = Date.now();
+        const status = twoFactorStatus(twoFactorMeta.current.attempts, Date.now() - twoFactorMeta.current.started);
+        setTwoFactor(status === 'ok' ? 'required' : status === 'expired' ? 'expired' : 'failed');
+        return;
+      }
+      if (parsed.type === 'status' && parsed.state === 'live') {
+        twoFactorMeta.current = { started: 0, attempts: 0 };
+        setTwoFactor(null);
+      }
       if (parsed.type === 'chat') {
         const text = typeof parsed.text === 'string' ? parsed.text : '';
         if (validateChatText(text) === 'ok') {
@@ -512,6 +524,19 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
 
   const dismissClipboard = useCallback(() => setClipboardFallback(null), []);
 
+  const submitTwoFactor = useCallback((code: string) => {
+    const elapsed = Date.now() - twoFactorMeta.current.started;
+    const status = twoFactorStatus(twoFactorMeta.current.attempts, elapsed);
+    if (status !== 'ok') {
+      setTwoFactor(status === 'expired' ? 'expired' : 'failed');
+      return;
+    }
+    const trimmed = code.trim();
+    if (!validateTwoFactorCode(trimmed)) return;
+    twoFactorMeta.current.attempts += 1;
+    sendInput([{ type: 'auth2fa', code: trimmed }]);
+  }, [sendInput]);
+
   const sendChat = useCallback((text: string) => {
     if (validateChatText(text) !== 'ok' || phaseRef.current !== 'live') return;
     const trimmed = text.trim();
@@ -594,5 +619,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     cancelReconnect,
     chatLines,
     sendChat,
+    twoFactor,
+    submitTwoFactor,
   };
 }

@@ -78,6 +78,7 @@ export type ServerMessage =
     }
   | { type: 'clipboard'; text: string }
   | { type: 'chat'; text: string }
+  | { type: 'twoFactorRequired' }
   | { type: 'cursor'; x: number; y: number }
   | { type: 'cursorShape'; shape: CursorShape | null }
   | { type: 'error'; message: string }
@@ -124,6 +125,7 @@ export type ClientMessage =
   | { type: 'text'; text?: string }
   | { type: 'clipboard'; text?: string }
   | { type: 'chat'; text?: string }
+  | { type: 'auth2fa'; code?: string }
   | { type: 'followWindow'; enabled: boolean }
   | { type: 'switchDisplay'; display?: number }
   | { type: 'refresh' }

@@ -72,6 +72,7 @@ export type ClientMessage =
   | { type: 'privacy'; enabled: boolean }
   | { type: 'restart' }
   | { type: 'chat'; text?: string }
+  | { type: 'auth2fa'; code?: string }
   | { type: 'audio'; enabled: boolean }
   | { type: 'followWindow'; enabled: boolean }
   | {

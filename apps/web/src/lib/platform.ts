@@ -131,6 +131,10 @@ export function reconnectDelayMs(attempt: number): number | null {
   return Math.min(30_000, 1000 * 2 ** (attempt - 1));
 }
 
+export function validateTwoFactorCode(code: string): boolean {
+  return /^\d{4,8}$/.test(code.trim());
+}
+
 export function twoFactorStatus(attemptsUsed: number, elapsedMs: number): 'ok' | 'exhausted' | 'expired' {
   if (elapsedMs >= TWO_FACTOR_TIMEOUT_MS) return 'expired';
   if (attemptsUsed >= TWO_FACTOR_MAX_ATTEMPTS) return 'exhausted';

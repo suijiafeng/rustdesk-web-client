@@ -143,6 +143,23 @@ function extractEncodedFrames(
 
 export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
   let state: 'awaiting-connect' | 'connecting' | 'live' | 'closed' = 'awaiting-connect';
+  let twoFactor: { resolve: (code: string | null) => void; attempts: number; started: number } | null = null;
+  const askTwoFactor = (): Promise<string | null> => {
+    const started = twoFactor?.started ?? Date.now();
+    const attempts = twoFactor?.attempts ?? 0;
+    if (attempts >= 3 || Date.now() - started >= 60_000) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      twoFactor = { resolve, attempts, started };
+      sendJson({ type: 'twoFactorRequired' });
+      setTimeout(() => {
+        if (twoFactor && twoFactor.started === started && Date.now() - twoFactor.started >= 60_000) {
+          const pending = twoFactor;
+          twoFactor = null;
+          pending.resolve(null);
+        }
+      }, 60_000);
+    });
+  };
   let resolutionDisplay = 0;
   let sizes: { width: number; height: number }[] = [];
   let hostConn: ConnectedHost | null = null;
@@ -441,6 +458,25 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
       return;
     }
 
+    if (twoFactor && parsed.type === 'auth2fa') {
+      const code = typeof parsed.code === 'string' ? parsed.code.trim() : '';
+      const valid = /^\d{4,8}$/.test(code);
+      twoFactor.attempts += 1;
+      const expired = Date.now() - twoFactor.started >= 60_000;
+      if (!valid || expired || twoFactor.attempts > 3) {
+        if (expired || twoFactor.attempts >= 3) {
+          const pending = twoFactor;
+          twoFactor = null;
+          pending.resolve(null);
+        }
+        return;
+      }
+      const pending = twoFactor;
+      twoFactor = null;
+      pending.resolve(code);
+      return;
+    }
+
     if (parsed.type === 'ping') {
       const seq = Number.isFinite(Number(parsed.seq)) ? Number(parsed.seq) : 0;
       const clientTs = Number.isFinite(Number(parsed.clientTs)) ? Number(parsed.clientTs) : 0;
@@ -520,6 +556,7 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
                   preferCodec: parsed.codec,
                 },
                 codecs,
+                askTwoFactor,
               )
             : await connectDirect(
                 {
@@ -531,6 +568,7 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
                   preferCodec: parsed.codec,
                 },
                 codecs,
+                askTwoFactor,
               );
 
         if ((state as string) !== 'connecting') {

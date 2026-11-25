@@ -77,6 +77,7 @@ async function loginHost(
   quality?: string,
   fps?: number,
   preferCodec?: string,
+  askTwoFactor?: (hwid?: Uint8Array) => Promise<string | null>,
 ): Promise<ConnectedHost> {
   const loginOption = buildLoginOptions(codecs, quality, fps, preferCodec);
   const loginReq = {
@@ -133,7 +134,16 @@ async function loginHost(
       };
     }
     if (msg.auth_2fa) {
-      throw new Error('The host requires two-factor authentication, which is not yet enabled on this gateway.');
+      const hwid = msg.auth_2fa.hwid instanceof Uint8Array ? msg.auth_2fa.hwid : undefined;
+      const code = askTwoFactor ? await askTwoFactor(hwid) : null;
+      if (!code) throw new Error('2FA Required');
+      const auth: { code: string; trust_this_device: boolean; hwid?: Uint8Array } = {
+        code,
+        trust_this_device: false,
+      };
+      if (hwid) auth.hwid = hwid;
+      await stream.sendRaw(encodeMessage({ auth_2fa: auth }));
+      continue;
     }
     if (msg.misc?.close_reason) {
       const reason = String(msg.misc.close_reason).trim();
@@ -150,6 +160,7 @@ async function loginHost(
 export async function connectDirect(
   target: DirectTarget,
   codecs: CodecCaps,
+  askTwoFactor?: (hwid?: Uint8Array) => Promise<string | null>,
 ): Promise<ConnectedHost> {
   const host = target.host.trim();
   if (!host) throw new Error('host address is empty');
@@ -173,6 +184,7 @@ export async function connectDirect(
       target.quality,
       target.fps,
       target.preferCodec,
+      askTwoFactor,
     );
   } catch (err) {
     stream.close();
@@ -302,6 +314,7 @@ async function connectRelayEndpoint(
 export async function connectViaId(
   target: IdTarget,
   codecs: CodecCaps,
+  askTwoFactor?: (hwid?: Uint8Array) => Promise<string | null>,
 ): Promise<ConnectedHost> {
   const peerId = target.peerId.replace(/\s+/g, '');
   const idServer = target.idServer.trim();
@@ -388,6 +401,7 @@ export async function connectViaId(
                 target.quality,
                 target.fps,
                 target.preferCodec,
+                askTwoFactor,
               );
             } catch {
               if (peerStream) {
@@ -424,6 +438,7 @@ export async function connectViaId(
           target.quality,
           target.fps,
           target.preferCodec,
+          askTwoFactor,
         );
       }
 
@@ -468,6 +483,7 @@ export async function connectViaId(
           target.quality,
           target.fps,
           target.preferCodec,
+          askTwoFactor,
         );
       }
     }

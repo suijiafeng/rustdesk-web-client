@@ -84,6 +84,7 @@ export function App() {
   const [host, setHost] = useState(prefs.host ?? '');
   const [port, setPort] = useState(prefs.port ?? '21118');
   const [password, setPassword] = useState('');
+  const [twoFactorCode, setTwoFactorCode] = useState('');
   const [peerId, setPeerId] = useState(prefs.peerId ?? '');
   const [idServer, setIdServer] = useState(prefs.idServer ?? '');
   const [relayServer, setRelayServer] = useState(prefs.relayServer ?? '');
@@ -211,7 +212,7 @@ export function App() {
   const {
     session, connect, disconnect, sendInput, setHeldRelease, setArmedKeys, canvasRef, frameSize, decoderError,
     stats, quality: linkQuality, audio, startAudio, stopAudio, setAudioVolume,
-    clipboardFallback, sendClipboard, dismissClipboard,     privacy, togglePrivacy, restartNotice, requestRestart,     reconnectAttempt, cancelReconnect, chatLines, sendChat,
+    clipboardFallback, sendClipboard, dismissClipboard,     privacy, togglePrivacy, restartNotice, requestRestart,     reconnectAttempt, cancelReconnect,     chatLines, sendChat, twoFactor, submitTwoFactor,
   } = useSession({
     readInput: () => formRef.current,
     onPasswordRejected: rejectSavedPassword,
@@ -237,6 +238,32 @@ export function App() {
     }
   }, [displayPrefs.followWindow, sendInput, session.currentDisplay, session.focusedDisplay, session.peer, session.phase]);
 
+  const twoFactorForm = twoFactor ? (
+    <form
+      className="rd-reconnect-banner"
+      data-testid="two-factor"
+      onSubmit={(event) => {
+        event.preventDefault();
+        submitTwoFactor(twoFactorCode);
+        setTwoFactorCode('');
+      }}
+    >
+      <label>
+        {t(locale, 'twoFactorPrompt')}
+        <input
+          value={twoFactorCode}
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          aria-label={t(locale, 'twoFactorTitle')}
+          onChange={(event) => setTwoFactorCode(event.target.value)}
+        />
+      </label>
+      <button type="submit">{t(locale, 'send')}</button>
+      {twoFactor === 'failed' ? <span>{t(locale, 'twoFactorFailed')}</span> : null}
+      {twoFactor === 'expired' ? <span>{t(locale, 'twoFactorExpired')}</span> : null}
+    </form>
+  ) : null;
+
   const reconnectBanner = reconnectAttempt > 0 ? (
     <div className="rd-reconnect-banner" data-testid="reconnect-banner">
       <span>{t(locale, 'reconnecting')}</span>
@@ -249,6 +276,7 @@ export function App() {
     return (
       <>
       {reconnectBanner}
+      {twoFactorForm}
       <RemoteScreen
         canvasRef={canvasRef}
         frameWidth={frameSize.width}
@@ -346,6 +374,7 @@ export function App() {
   return (
     <>
     {reconnectBanner}
+    {twoFactorForm}
     <RustDeskShell
       locale={locale}
       localePreference={localePreference}
