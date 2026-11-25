@@ -104,12 +104,14 @@ export function normalizeDisplayPrefs(raw: unknown): DisplayPrefs {
 }
 
 export function loadDisplayPrefs(): DisplayPrefs {
+  const touchMode = window.matchMedia('(pointer: coarse)').matches;
   try {
     const raw = window.localStorage.getItem(DISPLAY_PREFS_STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_DISPLAY_PREFS };
-    return normalizeDisplayPrefs(JSON.parse(raw));
+    if (!raw) return { ...DEFAULT_DISPLAY_PREFS, touchMode };
+    const saved = JSON.parse(raw);
+    return normalizeDisplayPrefs({ touchMode, ...saved });
   } catch {
-    return { ...DEFAULT_DISPLAY_PREFS };
+    return { ...DEFAULT_DISPLAY_PREFS, touchMode };
   }
 }
 

@@ -25,7 +25,6 @@ function DeviceActions({
   starClass,
   extraClass,
   iconSize,
-  onToggleMenu,
   onCloseMenu,
   onToggleFavorite,
   onRename,
@@ -38,7 +37,6 @@ function DeviceActions({
   starClass: string;
   extraClass: string;
   iconSize: number;
-  onToggleMenu: () => void;
   onCloseMenu: () => void;
   onToggleFavorite: () => void;
   onRename: (alias: string) => void;
@@ -64,18 +62,6 @@ function DeviceActions({
       </button>
       <button
         type="button"
-        className={extraClass}
-        aria-label={t(locale, 'renameDevice')}
-        title={t(locale, 'renameDevice')}
-        onClick={() => {
-          const alias = window.prompt(t(locale, 'renameDevice'), title);
-          if (alias) onRename(alias);
-        }}
-      >
-        <span className="text-xs">Aa</span>
-      </button>
-      <button
-        type="button"
         className={`${extraClass} hover:bg-[var(--bad-bg)] hover:text-[var(--bad)]`}
         aria-label={`${t(locale, 'removeDevice')} ${title}`}
         data-tooltip={t(locale, 'removeDevice')}
@@ -83,20 +69,6 @@ function DeviceActions({
         onClick={onRemove}
       >
         <Trash2 size={iconSize - 1} />
-      </button>
-      <button
-        type="button"
-        className="rd-peer-more rounded-lg border-0 bg-transparent text-[var(--ink-soft)]"
-        data-peer-more=""
-        aria-label={t(locale, 'moreActions')}
-        aria-expanded={menuOpen}
-        aria-haspopup="menu"
-        onClick={(event) => {
-          event.stopPropagation();
-          onToggleMenu();
-        }}
-      >
-        …
       </button>
       {menuOpen ? (
         <div className="rd-peer-menu" data-peer-menu="" role="menu" onPointerDown={(event) => event.stopPropagation()}>
@@ -136,7 +108,7 @@ export function PeerList({
         setMenuKey(null);
         return;
       }
-      if (target.closest('[data-peer-menu], [data-peer-more]')) return;
+      if (target.closest('[data-peer-menu]')) return;
       setMenuKey(null);
     };
     window.addEventListener('pointerdown', close);
@@ -146,7 +118,7 @@ export function PeerList({
   const startPress = (key: string, event: ReactPointerEvent) => {
     if (event.pointerType === 'mouse') return;
     const target = event.target;
-    if (target instanceof Element && target.closest('[data-peer-menu], [data-peer-more]')) return;
+    if (target instanceof Element && target.closest('[data-peer-menu]')) return;
     if (pressRef.current) window.clearTimeout(pressRef.current.timer);
     const state = { timer: 0, fired: false };
     state.timer = window.setTimeout(() => {
@@ -214,7 +186,10 @@ export function PeerList({
               onPointerUp={endPress}
               onPointerCancel={endPress}
               onClickCapture={suppressSelect}
-              onContextMenu={(event) => event.preventDefault()}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                setMenuKey(device.key);
+              }}
             >
               <div className="flex items-start gap-2.5">
                 <button
@@ -242,8 +217,7 @@ export function PeerList({
                   menuOpen={menuKey === device.key}
                   iconSize={15}
                   starClass="w-8 h-8 inline-flex items-center justify-center rounded-lg border-0 bg-transparent text-[var(--ink-soft)] hover:bg-[var(--rd-hover-bg)] hover:text-[#f59e0b]"
-                  extraClass="rd-peer-extra w-8 h-8 inline-flex items-center justify-center rounded-lg border-0 bg-transparent text-[var(--ink-soft)] hover:bg-[var(--rd-hover-bg)]"
-                  onToggleMenu={() => setMenuKey((current) => current === device.key ? null : device.key)}
+                  extraClass="w-8 h-8 inline-flex items-center justify-center rounded-lg border-0 bg-transparent text-[var(--ink-soft)] hover:bg-[var(--rd-hover-bg)]"
                   onCloseMenu={() => setMenuKey(null)}
                   onToggleFavorite={() => onToggleFavorite(device.key)}
                   onRename={(alias) => onRename(device.key, alias)}
@@ -283,7 +257,10 @@ export function PeerList({
             onPointerUp={endPress}
             onPointerCancel={endPress}
             onClickCapture={suppressSelect}
-            onContextMenu={(event) => event.preventDefault()}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              setMenuKey(device.key);
+            }}
           >
             <button
               type="button"
@@ -312,8 +289,7 @@ export function PeerList({
               menuOpen={menuKey === device.key}
               iconSize={16}
               starClass="w-9 h-9 inline-flex items-center justify-center rounded-lg border-0 bg-transparent text-[var(--ink-soft)] hover:bg-[var(--rd-hover-bg)] hover:text-[#f59e0b]"
-              extraClass="rd-peer-extra w-9 h-9 inline-flex items-center justify-center rounded-lg border-0 bg-transparent text-[var(--ink-soft)] hover:bg-[var(--rd-hover-bg)]"
-              onToggleMenu={() => setMenuKey((current) => current === device.key ? null : device.key)}
+              extraClass="w-9 h-9 inline-flex items-center justify-center rounded-lg border-0 bg-transparent text-[var(--ink-soft)] hover:bg-[var(--rd-hover-bg)]"
               onCloseMenu={() => setMenuKey(null)}
               onToggleFavorite={() => onToggleFavorite(device.key)}
               onRename={(alias) => onRename(device.key, alias)}

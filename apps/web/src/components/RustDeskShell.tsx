@@ -389,7 +389,7 @@ export function RustDeskShell({
           </div>
 
           <h1 className="text-[18px] font-semibold text-[var(--rd-topbar-ink)] m-0 tracking-[0.01em] truncate">
-            RustDesk
+            RustDesk Web
           </h1>
 
           <div className="w-20 flex items-center justify-end gap-0.5">

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Server, X } from 'lucide-react';
 import { t, type Locale } from '../../lib/i18n';
-import { connectionSettingsError, DEFAULT_CONNECTION_SETTINGS } from '../../lib/serverSettings.ts';
+import { connectionSettingsError } from '../../lib/serverSettings.ts';
 
 export type ServerField = 'idServer' | 'relayServer' | 'serverKey' | 'gatewayToken';
 
@@ -154,20 +154,6 @@ export function IdServerModal({
         </div>
 
         <div className="flex items-center justify-end gap-2 mt-4">
-          <button
-            type="button"
-            className="rd-btn"
-            style={{ minHeight: 42 }}
-            onClick={() => {
-              onChangeField('idServer', DEFAULT_CONNECTION_SETTINGS.idServer);
-              onChangeField('relayServer', DEFAULT_CONNECTION_SETTINGS.relayServer);
-              onChangeField('serverKey', DEFAULT_CONNECTION_SETTINGS.serverKey);
-              onChangeForceRelay(DEFAULT_CONNECTION_SETTINGS.forceRelay);
-              setSettingsError('');
-            }}
-          >
-            {t(locale, 'reset')}
-          </button>
           <button
             type="button"
             className="rd-btn"
