@@ -8,6 +8,7 @@ import {
   classifyLocalOs,
   classifyRemoteOs,
   clipboardDelivery,
+  keyboardLockAction,
   keyboardLockAvailable,
   mapOutgoingControl,
   primaryShortcutModifier,
@@ -88,6 +89,10 @@ test('clipboard, keyboard lock, reconnect, chat, and 2FA follow browser and size
   assert.equal(keyboardLockAvailable('firefox', true), false);
   assert.equal(keyboardLockAvailable('safari', true), false);
   assert.equal(keyboardLockAvailable('chromium', false), false);
+  assert.equal(keyboardLockAction('chromium', true, true), 'lock');
+  assert.equal(keyboardLockAction('chromium', true, false), 'unlock');
+  assert.equal(keyboardLockAction('safari', true, true), 'skip');
+  assert.equal(keyboardLockAction('firefox', true, true), 'skip');
   assert.deepEqual([1, 2, 3, 4, 5, 6].map(reconnectDelayMs), [1000, 2000, 4000, 8000, 16000, null]);
   assert.equal(validateChatText('  hello '), 'ok');
   assert.equal(validateChatText('   '), 'empty');

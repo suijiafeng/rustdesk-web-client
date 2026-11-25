@@ -115,6 +115,17 @@ export function keyboardLockAvailable(browser: BrowserKind, secureContext: boole
   return secureContext && browser === 'chromium';
 }
 
+export function keyboardLockAction(browser: BrowserKind, secureContext: boolean, fullscreen: boolean): 'lock' | 'unlock' | 'skip' {
+  if (!keyboardLockAvailable(browser, secureContext)) return 'skip';
+  return fullscreen ? 'lock' : 'unlock';
+}
+
+export function readKeyboardLock(nav: Navigator): { lock: () => Promise<void>; unlock: () => void } | null {
+  const candidate = (nav as Navigator & { keyboard?: { lock?: () => Promise<void>; unlock?: () => void } }).keyboard;
+  if (!candidate || typeof candidate.lock !== 'function' || typeof candidate.unlock !== 'function') return null;
+  return { lock: () => candidate.lock!(), unlock: () => candidate.unlock!() };
+}
+
 export function reconnectDelayMs(attempt: number): number | null {
   if (attempt < 1 || attempt > RECONNECT_MAX_ATTEMPTS) return null;
   return Math.min(30_000, 1000 * 2 ** (attempt - 1));

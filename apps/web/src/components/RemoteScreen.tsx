@@ -34,7 +34,7 @@ import {
   type QuickKeyName,
   type TrackedKey,
 } from '../lib/keyboard.ts';
-import { adaptKeyMessages, classifyLocalOs, classifyRemoteOs, remoteFeatures } from '../lib/platform.ts';
+import { adaptKeyMessages, classifyBrowser, classifyLocalOs, classifyRemoteOs, keyboardLockAction, readKeyboardLock, remoteFeatures } from '../lib/platform.ts';
 import { shouldIsolateKeyboardEvent } from '../lib/inputIsolation.ts';
 import {
   desktopPointerButton,
@@ -658,6 +658,20 @@ export function RemoteScreen({
     keyboardOpen,
     viewportNarrow,
   });
+  useEffect(() => {
+    const sync = () => {
+      const action = keyboardLockAction(classifyBrowser(navigator.userAgent), window.isSecureContext, document.fullscreenElement === stageRef.current);
+      const keyboard = readKeyboardLock(navigator);
+      if (!keyboard) return;
+      if (action === 'lock') void keyboard.lock().catch(() => undefined);
+      else if (action === 'unlock') keyboard.unlock();
+    };
+    document.addEventListener('fullscreenchange', sync);
+    return () => {
+      document.removeEventListener('fullscreenchange', sync);
+      readKeyboardLock(navigator)?.unlock();
+    };
+  }, []);
   const autoKeyboardArmed = useRef(false);
   useEffect(() => {
     if (!autoKeyboard || chrome !== 'dock' || autoKeyboardArmed.current) return;
