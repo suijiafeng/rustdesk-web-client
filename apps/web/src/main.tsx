@@ -2,8 +2,13 @@
 
 import { createRoot } from 'react-dom/client';
 import { App } from './App.tsx';
+import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import './index.css';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('missing root element');
-createRoot(root).render(<App />);
+createRoot(root).render(
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>,
+);
