@@ -1,18 +1,15 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
+import { FRAME_HEADER_LENGTH, hasRoomForHeader } from '@rustdesk-web/protocol';
+import { GATEWAY_SERVICE, HEALTH_PATH, type HealthResponse } from '@rustdesk-web/shared';
 import express from 'express';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-export const GATEWAY_SERVICE = 'rustdesk-web-gateway';
-export const HEALTH_PATH = '/api/health';
-
-export interface HealthResponse {
-  ok: true;
-  service: typeof GATEWAY_SERVICE;
-}
-
 export function createApp() {
+  if (!hasRoomForHeader(FRAME_HEADER_LENGTH)) {
+    throw new Error('protocol frame header length is invalid');
+  }
   const app = express();
   app.disable('x-powered-by');
   app.get(HEALTH_PATH, (_req, res) => {

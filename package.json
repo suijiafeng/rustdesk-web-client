@@ -17,9 +17,9 @@
     "dev:gateway": "yarn workspace @rustdesk-web/gateway dev",
     "start": "node --env-file-if-exists=.env apps/gateway/dist/index.js",
     "build": "yarn workspace @rustdesk-web/web build && yarn workspace @rustdesk-web/gateway build",
-    "typecheck": "tsc --noEmit -p tsconfig.json && yarn workspace @rustdesk-web/web typecheck && yarn workspace @rustdesk-web/gateway typecheck",
+    "typecheck": "tsc --noEmit -p tsconfig.json && yarn workspace @rustdesk-web/shared typecheck && yarn workspace @rustdesk-web/protocol typecheck && yarn workspace @rustdesk-web/web typecheck && yarn workspace @rustdesk-web/gateway typecheck",
     "lint": "yarn typecheck",
-    "test": "yarn workspace @rustdesk-web/gateway test"
+    "test": "yarn workspace @rustdesk-web/protocol test && yarn workspace @rustdesk-web/gateway test"
   },
   "devDependencies": {
     "@types/node": "22.20.5",

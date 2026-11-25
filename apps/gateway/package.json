@@ -10,6 +10,8 @@
     "test": "node --import tsx --test src/health.test.ts"
   },
   "dependencies": {
+    "@rustdesk-web/protocol": "0.0.0",
+    "@rustdesk-web/shared": "0.0.0",
     "express": "4.22.3"
   },
   "devDependencies": {

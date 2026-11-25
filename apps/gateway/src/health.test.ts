@@ -2,7 +2,8 @@
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createApp, GATEWAY_SERVICE, HEALTH_PATH, type HealthResponse } from './index.ts';
+import { GATEWAY_SERVICE, HEALTH_PATH, type HealthResponse } from '@rustdesk-web/shared';
+import { createApp } from './index.ts';
 
 test('GET /api/health reports the gateway is up', async () => {
   const server = createApp().listen(0, '127.0.0.1');

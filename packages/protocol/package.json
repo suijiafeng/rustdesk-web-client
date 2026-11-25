@@ -1,0 +1,13 @@
+{
+  "name": "@rustdesk-web/protocol",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --import tsx --test src/header.test.ts"
+  }
+}
