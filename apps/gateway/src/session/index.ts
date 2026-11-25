@@ -10,6 +10,7 @@ import {
   hasAnyCodec,
   humanizeError,
   selectCodecs,
+  normalizeChatText,
   toHostMessage,
 } from '../control/index.ts';
 import { CursorShapes } from '../media/cursor.ts';
@@ -274,6 +275,8 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
             });
             publishResolutions(Number(sd.display ?? 0), sd.resolutions);
           }
+          const chatText = normalizeChatText(msg.misc.chat_message?.text);
+          if (chatText) sendJson({ type: 'chat', text: chatText });
           if (msg.misc.close_reason) {
             const reason = String(msg.misc.close_reason);
             sendJson({ type: 'status', state: 'error', detail: humanizeError(reason) });
@@ -599,7 +602,11 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
         if (audioRequested && audioFormat) sendJson({ type: 'audioFormat', ...audioFormat });
       }
       let hostMsg;
-      if (parsed.type === 'resolution') {
+      if (parsed.type === 'chat') {
+        const text = normalizeChatText(parsed.text);
+        if (!text) return;
+        hostMsg = { misc: { chat_message: { text } } };
+      } else if (parsed.type === 'resolution') {
         const { display, width, height } = parsed;
         if (display !== resolutionDisplay || !sizes.some(size => size.width === width && size.height === height)) {
           sendJson({ type: 'error', message: 'The active display does not offer that resolution.' });

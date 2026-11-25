@@ -25,6 +25,7 @@ import { offsetPointerMessages } from '../lib/displays.ts';
 import { isImeEvent } from '../lib/keys.ts';
 import { SessionToolbar } from './SessionToolbar.tsx';
 import { ClipboardPanel } from './ClipboardPanel.tsx';
+import { ChatPanel } from './ChatPanel.tsx';
 import {
   noteKeyDown,
   noteKeyUp,
@@ -106,6 +107,8 @@ interface RemoteScreenProps {
   restartNotice: null | 'requested' | 'waiting' | 'failed' | 'ended';
   onRestart: () => void;
   onScreenshot: () => void;
+  chatLines: readonly { direction: 'in' | 'out'; text: string }[];
+  onSendChat: (text: string) => void;
   viewStyle: DefaultViewStyle;
   scrollStyle: ScrollStyle;
   followRemoteCursor: boolean;
@@ -171,6 +174,8 @@ export function RemoteScreen({
   restartNotice,
   onRestart,
   onScreenshot,
+  chatLines,
+  onSendChat,
   viewStyle,
   scrollStyle,
   followRemoteCursor,
@@ -194,6 +199,7 @@ export function RemoteScreen({
   const [touchMode, setTouchMode] = useState(true);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [clipboardOpen, setClipboardOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [coarsePointer, setCoarsePointer] = useState(() => window.matchMedia('(pointer: coarse)').matches);
   const [viewportNarrow, setViewportNarrow] = useState(() => window.matchMedia('(max-width: 768px)').matches);
 
@@ -229,6 +235,9 @@ export function RemoteScreen({
   useEffect(() => {
     if (clipboardFallback) setClipboardOpen(true);
   }, [clipboardFallback]);
+  useEffect(() => {
+    if (chatLines.length > 0) setChatOpen(true);
+  }, [chatLines]);
   useEffect(() => {
     setViewMode(viewStyle === 'stretch' ? 'stretch' : viewStyle === 'original' ? 'original' : 'fit');
   }, [viewStyle]);
@@ -826,6 +835,7 @@ export function RemoteScreen({
           restartNotice={restartNotice}
           onRestart={onRestart}
           onScreenshot={onScreenshot}
+          onOpenChat={() => setChatOpen(true)}
         />
       ) : null}
       {chrome === 'keyboard' ? (
@@ -869,8 +879,10 @@ export function RemoteScreen({
           restartNotice={restartNotice}
           onRestart={onRestart}
           onScreenshot={onScreenshot}
+          onOpenChat={() => setChatOpen(true)}
         />
       ) : null}
+      <ChatPanel locale={locale} open={chatOpen} lines={chatLines} onSend={onSendChat} onClose={() => setChatOpen(false)} />
       <ClipboardPanel
         locale={locale}
         open={clipboardOpen}

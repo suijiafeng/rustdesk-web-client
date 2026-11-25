@@ -83,6 +83,8 @@ test('session controls have both English and Chinese labels', () => {
     'reconnecting',
     'reconnectCancel',
     'screenshot',
+    'chat',
+    'chatPlaceholder',
     'mouseModeGestures',
     'renameDevice',
     'removeDevice',

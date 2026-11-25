@@ -71,6 +71,7 @@ export type ClientMessage =
     }
   | { type: 'privacy'; enabled: boolean }
   | { type: 'restart' }
+  | { type: 'chat'; text?: string }
   | { type: 'audio'; enabled: boolean }
   | { type: 'followWindow'; enabled: boolean }
   | {
@@ -179,6 +180,13 @@ const CONTROL_KEY_MAP: Record<string, number> = {
   CtrlAltDel: ControlKeyValues.CtrlAltDel,
   LockScreen: ControlKeyValues.LockScreen,
 };
+
+export function normalizeChatText(text: unknown): string | null {
+  if (typeof text !== 'string' || text.includes('\0')) return null;
+  const trimmed = text.trim();
+  if (!trimmed || trimmed.length > 4096) return null;
+  return trimmed;
+}
 
 export function controlKeyEnum(name: string): number | undefined {
   return CONTROL_KEY_MAP[name];

@@ -141,7 +141,7 @@ export function validateChatText(text: string): 'ok' | 'empty' | 'too-large' {
   const trimmed = text.trim();
   if (!trimmed) return 'empty';
   if (trimmed.length > CHAT_MAX_CHARS) return 'too-large';
-  if (trimmed.includes('\0')) return 'empty';
+  if (text.includes('\0')) return 'empty';
   return 'ok';
 }
 

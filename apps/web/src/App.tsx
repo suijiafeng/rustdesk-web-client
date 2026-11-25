@@ -211,7 +211,7 @@ export function App() {
   const {
     session, connect, disconnect, sendInput, setHeldRelease, setArmedKeys, canvasRef, frameSize, decoderError,
     stats, quality: linkQuality, audio, startAudio, stopAudio, setAudioVolume,
-    clipboardFallback, sendClipboard, dismissClipboard,     privacy, togglePrivacy, restartNotice, requestRestart, reconnectAttempt, cancelReconnect,
+    clipboardFallback, sendClipboard, dismissClipboard,     privacy, togglePrivacy, restartNotice, requestRestart,     reconnectAttempt, cancelReconnect, chatLines, sendChat,
   } = useSession({
     readInput: () => formRef.current,
     onPasswordRejected: rejectSavedPassword,
@@ -323,6 +323,8 @@ export function App() {
         onRestart={() => {
           if (window.confirm(t(locale, 'confirmRestart'))) requestRestart();
         }}
+        chatLines={chatLines}
+        onSendChat={sendChat}
         onScreenshot={() => {
           const canvas = canvasRef.current;
           if (!canvas || canvas.width === 0 || canvas.height === 0) return;

@@ -77,6 +77,7 @@ export type ServerMessage =
       name?: string;
     }
   | { type: 'clipboard'; text: string }
+  | { type: 'chat'; text: string }
   | { type: 'cursor'; x: number; y: number }
   | { type: 'cursorShape'; shape: CursorShape | null }
   | { type: 'error'; message: string }
@@ -122,6 +123,7 @@ export type ClientMessage =
     }
   | { type: 'text'; text?: string }
   | { type: 'clipboard'; text?: string }
+  | { type: 'chat'; text?: string }
   | { type: 'followWindow'; enabled: boolean }
   | { type: 'switchDisplay'; display?: number }
   | { type: 'refresh' }

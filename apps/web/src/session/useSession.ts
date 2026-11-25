@@ -16,7 +16,7 @@ import {
   sweepTimeouts,
 } from '../lib/linkHealth.ts';
 import { sessionEndLock } from '../lib/displays.ts';
-import { classifyBrowser, clipboardDelivery, reconnectDelayMs, validateClipboardText } from '../lib/platform.ts';
+import { classifyBrowser, clipboardDelivery, reconnectDelayMs, validateChatText, validateClipboardText } from '../lib/platform.ts';
 import { RemoteAudio, clampVolume, webAudioStatus } from '../lib/remoteAudio.ts';
 import { filterCodecSupport, resolveQualityLevel, resolveTargetFps, type DisplayPrefs } from '../lib/displayPrefs.ts';
 import {
@@ -87,6 +87,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
   const reconnectAttemptRef = useRef(0);
   const reconnectTimerRef = useRef<number | null>(null);
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const [chatLines, setChatLines] = useState<{ direction: 'in' | 'out'; text: string }[]>([]);
   const heldReleaseRef = useRef<ClientMessage | null>(null);
   const armedKeysRef = useRef<ClientMessage[]>([]);
   phaseRef.current = session.phase;
@@ -412,6 +413,13 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
         }
         return;
       }
+      if (parsed.type === 'chat') {
+        const text = typeof parsed.text === 'string' ? parsed.text : '';
+        if (validateChatText(text) === 'ok') {
+          setChatLines((lines) => [...lines, { direction: 'in' as const, text: text.trim() }].slice(-50));
+        }
+        return;
+      }
       if (parsed.type === 'privacyResult') {
         setPrivacy((current) => nextPrivacyState(current, parsed));
       }
@@ -504,6 +512,13 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
 
   const dismissClipboard = useCallback(() => setClipboardFallback(null), []);
 
+  const sendChat = useCallback((text: string) => {
+    if (validateChatText(text) !== 'ok' || phaseRef.current !== 'live') return;
+    const trimmed = text.trim();
+    sendInput([{ type: 'chat', text: trimmed }]);
+    setChatLines((lines) => [...lines, { direction: 'out' as const, text: trimmed }].slice(-50));
+  }, [sendInput]);
+
   const cancelReconnect = useCallback(() => {
     userClosedRef.current = true;
     reconnectAttemptRef.current = 0;
@@ -577,5 +592,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     requestRestart,
     reconnectAttempt,
     cancelReconnect,
+    chatLines,
+    sendChat,
   };
 }

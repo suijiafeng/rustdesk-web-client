@@ -14,6 +14,7 @@ import {
   Layers2,
   LogOut,
   Maximize2,
+  MessageSquare,
   Shield,
   ShieldAlert,
   Monitor,
@@ -88,6 +89,7 @@ interface MobileSessionDockProps {
   restartNotice: null | 'requested' | 'waiting' | 'failed' | 'ended';
   onRestart: () => void;
   onScreenshot: () => void;
+  onOpenChat: () => void;
 }
 
 export function MobileSessionDock({
@@ -127,6 +129,7 @@ export function MobileSessionDock({
   restartNotice,
   onRestart,
   onScreenshot,
+  onOpenChat,
 }: MobileSessionDockProps) {
   const features = remoteFeatures(classifyRemoteOs(remotePlatform));
   const [menuOpen, setMenuOpen] = useState(false);
@@ -265,6 +268,10 @@ export function MobileSessionDock({
                   {label('lockScreen')}
                 </button>
               ) : null}
+              <button type="button" className="tool-row" onClick={onOpenChat}>
+                <MessageSquare size={18} />
+                {label('chat')}
+              </button>
               <button type="button" className="tool-row" onClick={onOpenClipboard}>
                 <Clipboard size={18} />
                 {label('clipboard')}

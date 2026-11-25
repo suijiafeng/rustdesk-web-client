@@ -1,7 +1,7 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
 import type { DisplayInfo, QualityLevel } from '@rustdesk-web/shared';
-import { Camera, Clipboard, Eye, LockKeyhole, LogOut, Maximize2, Monitor, RotateCcw, Shield, ShieldAlert, SlidersHorizontal, Volume2 } from 'lucide-react';
+import { Camera, Clipboard, Eye, LockKeyhole, LogOut, Maximize2, MessageSquare, Monitor, RotateCcw, Shield, ShieldAlert, SlidersHorizontal, Volume2 } from 'lucide-react';
 import { t, translateAudioIssue, type Locale } from '../lib/i18n.ts';
 import { classifyRemoteOs, remoteFeatures } from '../lib/platform.ts';
 
@@ -37,6 +37,7 @@ interface SessionToolbarProps {
   restartNotice: null | 'requested' | 'waiting' | 'failed' | 'ended';
   onRestart: () => void;
   onScreenshot: () => void;
+  onOpenChat: () => void;
 }
 
 const QUALITIES: QualityLevel[] = ['low', 'balanced', 'best'];
@@ -73,6 +74,7 @@ export function SessionToolbar({
   restartNotice,
   onRestart,
   onScreenshot,
+  onOpenChat,
 }: SessionToolbarProps) {
   const features = remoteFeatures(classifyRemoteOs(remotePlatform));
   return (
@@ -181,6 +183,10 @@ export function SessionToolbar({
         </button>
       ) : null}
       <span className="rd-session-sep" aria-hidden="true" />
+      <button type="button" className="rd-session-btn" onClick={onOpenChat}>
+        <MessageSquare size={15} />
+        {t(locale, 'chat')}
+      </button>
       <button type="button" className="rd-session-btn" onClick={onOpenClipboard}>
         <Clipboard size={15} />
         {t(locale, 'clipboard')}
