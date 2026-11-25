@@ -3,29 +3,51 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "Unofficial RustDesk-compatible web client",
-  "license": "AGPL-3.0-only",
+  "scripts": {
+    "dev": "tsx server.ts",
+    "start": "node server.js",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=esm --packages=external --outfile=server.js",
+    "preview": "vite preview",
+    "clean": "rm -rf dist server.js",
+    "lint": "tsc --noEmit",
+    "test": "node --import tsx --test src/lib/*.test.ts server/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@noble/hashes": "^2.4.0",
+    "buffer": "^6.0.3",
+    "dotenv": "^17.2.3",
+    "express": "^4.21.2",
+    "fzstd": "^0.1.1",
+    "lucide-react": "^0.546.0",
+    "protobufjs": "^8.8.1",
+    "react": "^19.0.1",
+    "react-dom": "^19.0.1",
+    "tweetnacl": "^1.0.3",
+    "ws": "^8.23.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/ws": "^8.18.2",
+    "@vitejs/plugin-react": "^6.1.1",
+    "esbuild": "^0.25.0",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.21.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0"
+  },
+  "description": "Browser client and Node.js gateway for RustDesk remote desktop sessions.",
   "engines": {
     "node": ">=24 <25"
   },
   "packageManager": "yarn@1.22.22",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
-  "scripts": {
-    "dev": "node scripts/dev.mjs",
-    "dev:web": "yarn workspace @rustdesk-web/web dev",
-    "dev:gateway": "yarn workspace @rustdesk-web/gateway dev",
-    "start": "node --env-file-if-exists=.env apps/gateway/dist/index.js",
-    "build": "yarn workspace @rustdesk-web/web build && yarn workspace @rustdesk-web/gateway build",
-    "typecheck": "tsc --noEmit -p tsconfig.json && yarn workspace @rustdesk-web/shared typecheck && yarn workspace @rustdesk-web/protocol typecheck && yarn workspace @rustdesk-web/web typecheck && yarn workspace @rustdesk-web/gateway typecheck",
-    "lint": "yarn typecheck",
-    "test": "yarn workspace @rustdesk-web/protocol test && yarn workspace @rustdesk-web/gateway test && yarn workspace @rustdesk-web/web test"
-  },
-  "devDependencies": {
-    "@types/node": "22.20.5",
-    "tsx": "4.23.15",
-    "typescript": "7.0.2"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/suijiafeng/rustdesk.git",
+    "directory": "web-client"
   }
 }

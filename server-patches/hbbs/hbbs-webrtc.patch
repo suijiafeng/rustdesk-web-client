@@ -1,0 +1,302 @@
+diff --git a/src/rendezvous_server.rs b/src/rendezvous_server.rs
+index 84c0293..3e8c066 100644
+--- a/src/rendezvous_server.rs
++++ b/src/rendezvous_server.rs
+@@ -1,3 +1,5 @@
++#[path = "webrtc_signal.rs"]
++mod webrtc_signal;
+ use crate::common::*;
+ use crate::peer::*;
+ use hbb_common::{
+@@ -51,6 +53,7 @@ const REG_TIMEOUT: i64 = 30_000;
+ type TcpStreamSink = SplitSink<Framed<TcpStream, BytesCodec>, Bytes>;
+ type WsSink = SplitSink<tokio_tungstenite::WebSocketStream<TcpStream>, tungstenite::Message>;
+ enum Sink {
++    Encrypted(TcpStreamSink, Arc<Mutex<hbb_common::tcp::Encrypt>>),
+     TcpStream(TcpStreamSink),
+     Ws(WsSink),
+ }
+@@ -571,6 +574,13 @@ impl RendezvousServer {
+     ) -> bool {
+         if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(bytes) {
+             match msg_in.union {
++                Some(rendezvous_message::Union::IceCandidate(ice)) => {
++                    if let Err(err) = self.forward_webrtc_candidate(ice, addr).await {
++                        log::debug!("WebRTC candidate rejected: {}", err);
++                        return false;
++                    }
++                    return true;
++                }
+                 Some(rendezvous_message::Union::PunchHoleRequest(ph)) => {
+                     // there maybe several attempt, so sink can be none
+                     if let Some(sink) = sink.take() {
+@@ -609,6 +619,7 @@ impl RendezvousServer {
+                         return false;
+                     }
+                     let addr_b = AddrMangle::decode(&rr.socket_addr);
++                    if !webrtc_signal::valid_answer_source(addr_b, addr, rr.id()).await { return false; }
+                     rr.socket_addr = Default::default();
+                     let id = rr.id();
+                     if !id.is_empty() {
+@@ -716,6 +727,7 @@ impl RendezvousServer {
+     ) -> ResultType<()> {
+         // punch hole sent from B, tell A that B is ready to be connected
+         let addr_a = AddrMangle::decode(&phs.socket_addr);
++        if !webrtc_signal::valid_answer_source(addr_a, addr, &phs.id).await { bail!("Invalid WebRTC answer source"); }
+         log::debug!(
+             "{} punch hole response to {:?} from {:?}",
+             if socket.is_none() { "TCP" } else { "UDP" },
+@@ -725,6 +737,7 @@ impl RendezvousServer {
+         let mut msg_out = RendezvousMessage::new();
+         let mut p = PunchHoleResponse {
+             socket_addr: AddrMangle::encode(addr).into(),
++            webrtc_sdp_answer: phs.webrtc_sdp_answer,
+             pk: self.get_pk(&phs.version, phs.id).await,
+             relay_server: phs.relay_server.clone(),
+             ..Default::default()
+@@ -791,7 +804,7 @@ impl RendezvousServer {
+             });
+             return Ok((msg_out, None));
+         }
+-        let id = ph.id;
++        let id = ph.id.clone();
+         // punch hole request from A, relay to B,
+         // check if in same intranet first,
+         // fetch local addrs if in same intranet.
+@@ -830,7 +843,8 @@ impl RendezvousServer {
+                 }
+                 ph.nat_type = NatType::SYMMETRIC.into(); // will force relay
+             }
+-            let same_intranet: bool = !ws
++            let webrtc = self.prepare_webrtc(&ph, addr, peer_addr).await?;
++            let same_intranet: bool = !webrtc && !ws
+                 && (peer_is_lan && is_lan || {
+                     match (peer_addr, addr) {
+                         (SocketAddr::V4(a), SocketAddr::V4(b)) => a.ip() == b.ip(),
+@@ -859,6 +873,7 @@ impl RendezvousServer {
+                     addr
+                 );
+                 msg_out.set_punch_hole(PunchHole {
++                    webrtc_sdp_offer: if webrtc { ph.webrtc_sdp_offer.clone() } else { String::new() },
+                     socket_addr,
+                     nat_type: ph.nat_type,
+                     relay_server,
+@@ -907,6 +922,11 @@ impl RendezvousServer {
+ 
+     #[inline]
+     async fn send_to_tcp(&mut self, msg: RendezvousMessage, addr: SocketAddr) {
++        match self.send_webrtc_reply(&msg, addr).await {
++            Ok(true) => return,
++            Err(err) => { log::debug!("WebRTC reply failed: {}", err); return; }
++            Ok(false) => {}
++        }
+         let mut tcp = self.tcp_punch.lock().await.remove(&try_into_v4(addr));
+         tokio::spawn(async move {
+             Self::send_to_sink(&mut tcp, msg).await;
+@@ -918,6 +938,10 @@ impl RendezvousServer {
+         if let Some(sink) = sink.as_mut() {
+             if let Ok(bytes) = msg.write_to_bytes() {
+                 match sink {
++                    Sink::Encrypted(s, cipher) => {
++                        let bytes = cipher.lock().await.enc(&bytes);
++                        allow_err!(s.send(Bytes::from(bytes)).await);
++                    }
+                     Sink::TcpStream(s) => {
+                         allow_err!(s.send(Bytes::from(bytes)).await);
+                     }
+@@ -935,6 +959,7 @@ impl RendezvousServer {
+         msg: RendezvousMessage,
+         addr: SocketAddr,
+     ) -> ResultType<()> {
++        if self.send_webrtc_reply(&msg, addr).await? { return Ok(()); }
+         let mut sink = self.tcp_punch.lock().await.remove(&try_into_v4(addr));
+         Self::send_to_sink(&mut sink, msg).await;
+         Ok(())
+@@ -1251,6 +1276,9 @@ impl RendezvousServer {
+         key: &str,
+         ws: bool,
+     ) -> ResultType<()> {
++        if !ws && webrtc_signal::enabled() && self.inner.sk.is_some() {
++            return self.handle_webrtc_tcp(stream, addr, key).await;
++        }
+         let mut sink;
+         if ws {
+             use tokio_tungstenite::tungstenite::handshake::server::{Request, Response};
+diff --git a/src/webrtc_signal.rs b/src/webrtc_signal.rs
+new file mode 100644
+index 0000000..bedeca1
+--- /dev/null
++++ b/src/webrtc_signal.rs
+@@ -0,0 +1,172 @@
++use super::*;
++use hbb_common::sodiumoxide::crypto::box_;
++use hbb_common::tcp::Encrypt;
++
++struct Route {
++    started: Instant,
++    peer: SocketAddr,
++    peer_id: String,
++    session_key: String,
++    sink: Arc<Mutex<Sink>>,
++    sent: usize,
++    received: usize,
++}
++static ROUTES: Lazy<Mutex<HashMap<SocketAddr, Route>>> = Lazy::new(Default::default);
++
++pub(super) fn enabled() -> bool {
++    std::env::var("ENABLE_WEBRTC").map(|v| v == "Y").unwrap_or(false)
++}
++
++fn offer_key(endpoint: &str) -> ResultType<String> {
++    if endpoint.len() > 4096 { bail!("WebRTC offer too large"); }
++    let encoded = endpoint.strip_prefix("webrtc://").ok_or_else(|| hbb_common::anyhow::anyhow!("Invalid WebRTC offer"))?;
++    let value: serde_json::Value = serde_json::from_slice(&base64::decode(encoded)?)?;
++    if value["type"] != "offer" { bail!("Expected WebRTC offer"); }
++    let sdp = value["sdp"].as_str().ok_or_else(|| hbb_common::anyhow::anyhow!("Missing SDP"))?;
++    let mut fingerprints = sdp.lines().filter_map(|line| line.strip_prefix("a=fingerprint:"));
++    let fingerprint = fingerprints.next().ok_or_else(|| hbb_common::anyhow::anyhow!("Missing fingerprint"))?;
++    if fingerprints.any(|v| v != fingerprint) { bail!("Conflicting fingerprints"); }
++    let digest = fingerprint.strip_prefix("sha-256 ").ok_or_else(|| hbb_common::anyhow::anyhow!("Expected SHA-256 fingerprint"))?;
++    if digest.len() != 95 || !digest.split(':').all(|pair| pair.len() == 2 && pair.bytes().all(|b| b.is_ascii_hexdigit())) {
++        bail!("Invalid fingerprint");
++    }
++    Ok(fingerprint.to_owned())
++}
++
++pub(super) async fn valid_answer_source(controller: SocketAddr, source: SocketAddr, id: &str) -> bool {
++    if !enabled() { return true; }
++    let routes = ROUTES.lock().await;
++    match routes.get(&try_into_v4(controller)) {
++        Some(route) => route.started.elapsed() < Duration::from_secs(30)
++            && try_into_v4(source).ip() == try_into_v4(route.peer).ip()
++            && (id.is_empty() || id == route.peer_id),
++        None => true,
++    }
++}
++
++async fn write(sink: Arc<Mutex<Sink>>, message: &RendezvousMessage) -> ResultType<()> {
++    let bytes = message.write_to_bytes()?;
++    timeout(5000, async move {
++        let mut sink = sink.lock().await;
++        match &mut *sink {
++            Sink::TcpStream(s) => s.send(Bytes::from(bytes)).await?,
++            Sink::Encrypted(s, cipher) => {
++                let encrypted = cipher.lock().await.enc(&bytes);
++                s.send(Bytes::from(encrypted)).await?;
++            }
++            Sink::Ws(s) => s.send(tungstenite::Message::Binary(Bytes::from(bytes))).await?,
++        }
++        Ok::<(), hbb_common::anyhow::Error>(())
++    }).await??;
++    Ok(())
++}
++
++impl RendezvousServer {
++    pub(super) async fn prepare_webrtc(&mut self, ph: &PunchHoleRequest, controller: SocketAddr, peer: SocketAddr) -> ResultType<bool> {
++        if !enabled() || self.inner.sk.is_none() || ph.webrtc_sdp_offer.is_empty() { return Ok(false); }
++        let session_key = offer_key(&ph.webrtc_sdp_offer)?;
++        let controller = try_into_v4(controller);
++        let mut routes = ROUTES.lock().await;
++        routes.retain(|_, route| route.started.elapsed() < Duration::from_secs(30));
++        if let Some(route) = routes.get(&controller) {
++            if route.peer_id != ph.id || route.session_key != session_key { bail!("WebRTC session changed"); }
++            return Ok(true);
++        }
++        if routes.len() >= 1024 { bail!("Too many pending WebRTC sessions"); }
++        let sink = self.tcp_punch.lock().await.remove(&controller).ok_or_else(|| hbb_common::anyhow::anyhow!("Missing WebRTC controller connection"))?;
++        routes.insert(controller, Route {
++            started: Instant::now(), peer, peer_id: ph.id.clone(), session_key,
++            sink: Arc::new(Mutex::new(sink)), sent: 0, received: 0,
++        });
++        Ok(true)
++    }
++
++    pub(super) async fn send_webrtc_reply(&mut self, message: &RendezvousMessage, controller: SocketAddr) -> ResultType<bool> {
++        if !enabled() { return Ok(false); }
++        let sink = {
++            let routes = ROUTES.lock().await;
++            routes.get(&try_into_v4(controller)).map(|r| r.sink.clone())
++        };
++        let Some(sink) = sink else { return Ok(false); };
++        if message.compute_size() > 48 * 1024 { bail!("WebRTC response too large"); }
++        write(sink, message).await?;
++        Ok(true)
++    }
++
++    pub(super) async fn forward_webrtc_candidate(&mut self, mut ice: IceCandidate, source: SocketAddr) -> ResultType<()> {
++        if !enabled() || ice.candidate.len() > 8192 || ice.session_key.len() > 128 { bail!("Invalid ICE candidate"); }
++        let candidate: serde_json::Value = serde_json::from_str(&ice.candidate)?;
++        if !candidate["candidate"].is_string() { bail!("Invalid ICE candidate JSON"); }
++        let source = try_into_v4(source);
++        if !ice.id.is_empty() {
++            let target = {
++                let mut routes = ROUTES.lock().await;
++                let route = routes.get_mut(&source).ok_or_else(|| hbb_common::anyhow::anyhow!("Unknown WebRTC controller"))?;
++                if route.started.elapsed() >= Duration::from_secs(30) || route.peer_id != ice.id || route.session_key != ice.session_key || route.sent >= 256 {
++                    bail!("ICE candidate outside session");
++                }
++                route.sent += 1;
++                route.peer
++            };
++            ice.socket_addr = AddrMangle::encode(source).into();
++            let mut message = RendezvousMessage::new();
++            message.set_ice_candidate(ice);
++            self.tx.send(Data::Msg(message.into(), target))?;
++        } else {
++            let controller = try_into_v4(AddrMangle::decode(&ice.socket_addr));
++            let sink = {
++                let mut routes = ROUTES.lock().await;
++                let route = routes.get_mut(&controller).ok_or_else(|| hbb_common::anyhow::anyhow!("Unknown WebRTC session"))?;
++                if route.started.elapsed() >= Duration::from_secs(30) || source.ip() != try_into_v4(route.peer).ip() || route.session_key != ice.session_key || route.received >= 256 {
++                    bail!("ICE candidate outside session");
++                }
++                route.received += 1;
++                route.sink.clone()
++            };
++            ice.socket_addr = Default::default();
++            let mut message = RendezvousMessage::new();
++            message.set_ice_candidate(ice);
++            write(sink, &message).await?;
++        }
++        Ok(())
++    }
++
++    pub(super) async fn handle_webrtc_tcp(&mut self, socket: TcpStream, addr: SocketAddr, key: &str) -> ResultType<()> {
++        let mut framed = Framed::new(socket, BytesCodec::new());
++        framed.codec_mut().set_max_packet_length(*MAX_MESSAGE);
++        let (pk, sk) = box_::gen_keypair();
++        let signing = self.inner.sk.as_ref().ok_or_else(|| hbb_common::anyhow::anyhow!("WebRTC requires the hbbs signing key"))?;
++        let mut hello = RendezvousMessage::new();
++        // Version zero uses the existing NaCl stream cipher, compatible with old and new clients.
++        hello.set_key_exchange(KeyExchange { keys: vec![sign::sign(&pk.0, signing).into()], ..Default::default() });
++        timeout(5000, framed.send(Bytes::from(hello.write_to_bytes()?))).await??;
++        let first = timeout(10_000, framed.next()).await?.ok_or_else(|| hbb_common::anyhow::anyhow!("Connection closed during key exchange"))??;
++        let first_message = RendezvousMessage::parse_from_bytes(&first)?;
++        let mut cipher = None;
++        let mut initial = Some(first);
++        if let Some(rendezvous_message::Union::KeyExchange(exchange)) = first_message.union {
++            if exchange.keys.len() != 2 { bail!("Invalid key exchange"); }
++            cipher = Some(Arc::new(Mutex::new(Encrypt::new(Encrypt::decode(&exchange.keys[1], &exchange.keys[0], &sk)?))));
++            initial = None;
++        }
++        let (outgoing, mut incoming) = framed.split();
++        let mut sink = Some(match &cipher {
++            Some(cipher) => Sink::Encrypted(outgoing, cipher.clone()),
++            None => Sink::TcpStream(outgoing),
++        });
++        let result = async {
++            if let Some(bytes) = initial {
++                if !self.handle_tcp(&bytes, &mut sink, addr, key, false).await { return Ok(()); }
++            }
++            while let Some(frame) = timeout(30_000, incoming.next()).await? {
++                let mut bytes = frame?;
++                if let Some(cipher) = &cipher { cipher.lock().await.dec(&mut bytes)?; }
++                if !self.handle_tcp(&bytes, &mut sink, addr, key, false).await { break; }
++            }
++            Ok::<(), hbb_common::anyhow::Error>(())
++        }.await;
++        ROUTES.lock().await.remove(&try_into_v4(addr));
++        self.tcp_punch.lock().await.remove(&try_into_v4(addr));
++        result
++    }
++}
