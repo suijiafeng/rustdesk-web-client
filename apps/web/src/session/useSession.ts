@@ -16,7 +16,7 @@ import {
   sweepTimeouts,
 } from '../lib/linkHealth.ts';
 import { sessionEndLock } from '../lib/displays.ts';
-import { classifyBrowser, clipboardDelivery, validateClipboardText } from '../lib/platform.ts';
+import { classifyBrowser, clipboardDelivery, reconnectDelayMs, validateClipboardText } from '../lib/platform.ts';
 import { RemoteAudio, clampVolume, webAudioStatus } from '../lib/remoteAudio.ts';
 import { filterCodecSupport, resolveQualityLevel, resolveTargetFps, type DisplayPrefs } from '../lib/displayPrefs.ts';
 import {
@@ -83,6 +83,10 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
   const lastConnectRef = useRef<ConnectRequest | null>(null);
   const restartDeadlineRef = useRef(0);
   const restartModeRef = useRef<null | 'requested' | 'waiting'>(null);
+  const userClosedRef = useRef(false);
+  const reconnectAttemptRef = useRef(0);
+  const reconnectTimerRef = useRef<number | null>(null);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const heldReleaseRef = useRef<ClientMessage | null>(null);
   const armedKeysRef = useRef<ClientMessage[]>([]);
   phaseRef.current = session.phase;
@@ -204,6 +208,11 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
   }, []);
 
   const disconnect = useCallback(() => {
+    userClosedRef.current = true;
+    reconnectAttemptRef.current = 0;
+    setReconnectAttempt(0);
+    if (reconnectTimerRef.current !== null) window.clearTimeout(reconnectTimerRef.current);
+    reconnectTimerRef.current = null;
     const eventGeneration = ++generation.current;
     const lock = sessionEndLock(
       readInput().displayPrefs.lockAfterSessionEnd,
@@ -230,6 +239,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     apply(eventGeneration, { type: 'disconnect' });
   }, [apply, closeAudio, closeSocket, readInput, releaseDecoder, releaseHeldInput, sendInput]);
 
+  const connectRef = useRef<(request?: ConnectRequest) => Promise<void>>(async () => {});
   const connect = useCallback(async (request?: ConnectRequest) => {
     const input = readInput();
     const mode = request?.mode ?? input.mode;
@@ -256,6 +266,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
       return;
     }
 
+    userClosedRef.current = false;
     lastConnectRef.current = {
       mode,
       peerId,
@@ -423,10 +434,23 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
       if (restartModeRef.current === 'requested') {
         restartModeRef.current = 'waiting';
         setRestartNotice('waiting');
+      } else if (!userClosedRef.current && phaseRef.current === 'live' && lastConnectRef.current && reconnectTimerRef.current === null) {
+        const delay = reconnectDelayMs(reconnectAttemptRef.current + 1);
+        if (delay !== null) {
+          const attempt = reconnectAttemptRef.current + 1;
+          reconnectAttemptRef.current = attempt;
+          setReconnectAttempt(attempt);
+          reconnectTimerRef.current = window.setTimeout(() => {
+            reconnectTimerRef.current = null;
+            const saved = lastConnectRef.current;
+            if (!userClosedRef.current && saved) void connectRef.current(saved);
+          }, delay);
+        }
       }
       apply(eventGeneration, { type: 'socket-close' });
     };
   }, [apply, closeAudio, closeSocket, ensureDecoder, readInput, releaseDecoder]);
+  connectRef.current = connect;
 
   useEffect(() => {
     if (session.phase !== 'live') return;
@@ -479,6 +503,14 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
   }, [readInput, sendInput]);
 
   const dismissClipboard = useCallback(() => setClipboardFallback(null), []);
+
+  const cancelReconnect = useCallback(() => {
+    userClosedRef.current = true;
+    reconnectAttemptRef.current = 0;
+    setReconnectAttempt(0);
+    if (reconnectTimerRef.current !== null) window.clearTimeout(reconnectTimerRef.current);
+    reconnectTimerRef.current = null;
+  }, []);
 
   const requestRestart = useCallback(() => {
     if (phaseRef.current !== 'live' || sessionRef.current.peer?.restartAllowed !== true || restartModeRef.current) return;
@@ -543,5 +575,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     togglePrivacy,
     restartNotice,
     requestRestart,
+    reconnectAttempt,
+    cancelReconnect,
   };
 }

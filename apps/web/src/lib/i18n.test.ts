@@ -80,6 +80,8 @@ test('session controls have both English and Chinese labels', () => {
     'viewStyleStretch',
     'followRemoteCursorLabel',
     'autoKeyboard',
+    'reconnecting',
+    'reconnectCancel',
     'mouseModeGestures',
     'renameDevice',
     'removeDevice',

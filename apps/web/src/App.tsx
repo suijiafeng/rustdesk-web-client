@@ -211,7 +211,7 @@ export function App() {
   const {
     session, connect, disconnect, sendInput, setHeldRelease, setArmedKeys, canvasRef, frameSize, decoderError,
     stats, quality: linkQuality, audio, startAudio, stopAudio, setAudioVolume,
-    clipboardFallback, sendClipboard, dismissClipboard,     privacy, togglePrivacy, restartNotice, requestRestart,
+    clipboardFallback, sendClipboard, dismissClipboard,     privacy, togglePrivacy, restartNotice, requestRestart, reconnectAttempt, cancelReconnect,
   } = useSession({
     readInput: () => formRef.current,
     onPasswordRejected: rejectSavedPassword,
@@ -237,9 +237,18 @@ export function App() {
     }
   }, [displayPrefs.followWindow, sendInput, session.currentDisplay, session.focusedDisplay, session.peer, session.phase]);
 
+  const reconnectBanner = reconnectAttempt > 0 ? (
+    <div className="rd-reconnect-banner" data-testid="reconnect-banner">
+      <span>{t(locale, 'reconnecting')}</span>
+      <button type="button" onClick={cancelReconnect}>{t(locale, 'reconnectCancel')}</button>
+    </div>
+  ) : null;
+
   if (session.phase === 'live') {
     const toolbarQuality = resolveQualityLevel(displayPrefs.qualityPreset, displayPrefs.customBitrate);
     return (
+      <>
+      {reconnectBanner}
       <RemoteScreen
         canvasRef={canvasRef}
         frameWidth={frameSize.width}
@@ -320,10 +329,13 @@ export function App() {
         autoKeyboard={displayPrefs.autoKeyboard}
         locale={locale}
       />
+      </>
     );
   }
 
   return (
+    <>
+    {reconnectBanner}
     <RustDeskShell
       locale={locale}
       localePreference={localePreference}
@@ -403,5 +415,6 @@ export function App() {
       onDismissError={disconnect}
       onClose={disconnect}
     />
+    </>
   );
 }
