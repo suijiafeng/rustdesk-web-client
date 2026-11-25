@@ -8,6 +8,7 @@ export {
   BoolOption,
   Chroma,
   ClipboardFormat,
+  HostPermission,
   ConnType,
   ControlKey,
   ImageQuality,
@@ -44,6 +45,8 @@ export {
   type CodecIdValue,
   type Rdv1Frame,
 } from './codec/rdv1.ts';
+
+export { getEncodedVideoFrames, isHostVideoKeyframe, type HostVideoFrame } from './codec/hostVideo.ts';
 
 export { decodeBase64, encodeBase64, decodeEndpoint, encodeEndpoint, FragmentReader,
   FRAGMENT_PAYLOAD, MAX_CANDIDATES, MAX_MESSAGE_BYTES, sdpFingerprint, validateCandidate } from './webrtc.ts';

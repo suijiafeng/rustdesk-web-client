@@ -22,6 +22,7 @@ export const BoolOption = enumValues('rustdesk.OptionMessage.BoolOption');
 export const PreferCodec = enumValues('rustdesk.SupportedDecoding.PreferCodec');
 export const Chroma = enumValues('rustdesk.Chroma');
 export const ClipboardFormat = enumValues('rustdesk.ClipboardFormat');
+export const HostPermission = enumValues('rustdesk.PermissionInfo.Permission');
 export const NatType = enumValues('rustdesk.NatType');
 export const ConnType = enumValues('rustdesk.ConnType');
 export const PunchFailure = enumValues('rustdesk.PunchHoleResponse.Failure');

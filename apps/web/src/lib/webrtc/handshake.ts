@@ -6,7 +6,7 @@ import { decodeBase64, decodeIdPk, decodeMessage, encodeMessage } from '@rustdes
 import { buildLoginOptions, type CodecCaps, type ClientMessage } from '@rustdesk-web/protocol';
 import { MAX_MESSAGE_BYTES } from '@rustdesk-web/protocol';
 import type { DataChannelStream } from './stream.ts';
-import type { NativeConnection } from './session.ts';
+import type { NativeConnection } from './peerInfo.ts';
 
 export type ConnectRequest = Extract<ClientMessage, { type: 'connect' }>;
 export class LoginError extends Error { name = 'WebRtcLoginError'; }

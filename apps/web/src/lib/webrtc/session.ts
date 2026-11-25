@@ -1,275 +1,170 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
+import {
+  buildRefreshVideoMessage,
+  buildVideoReceivedMessage,
+  decodeMessage,
+  encodeBase64,
+  encodeMessage,
+  HostPermission,
+  humanizeError,
+  normalizeChatText,
+  selectCodecs,
+  toHostMessage,
+  type ClientMessage,
+  type CodecCaps,
+} from '@rustdesk-web/protocol';
+import type { ServerMessage } from '@rustdesk-web/shared';
 import { decodeClipboard } from './clipboard.ts';
-import { type ClientMessage, type CodecCaps, buildRefreshVideoMessage, buildVideoReceivedMessage, humanizeError, normalizeChatText, selectCodecs, toHostMessage } from '@rustdesk-web/protocol';
-import { decodeMessage, encodeMessage } from '@rustdesk-web/protocol';
-import { CodecId, encodeBase64, encodeRdv1Frame, vp8KeyframeSize } from '@rustdesk-web/protocol';
 import { CursorShapes } from './cursor.ts';
-import type { DataChannelStream } from './stream.ts';
+import { activeDisplaySize, hostAllowsRestart, peerInfoMessage, sessionPermissions, usesModernDisplayCommands, type NativeConnection } from './peerInfo.ts';
+import { createNativeVideo } from './video.ts';
 
-export interface NativeConnection {
-  stream: DataChannelStream;
-  route: 'webrtc-direct' | 'webrtc-relay' | 'webrtc';
-  encrypted: boolean;
-  peerInfo: Record<string, any>;
-  username: string;
-  privacyAllowed: boolean;
-  clipboardAllowed: boolean;
-  restartAllowed: boolean;
-}
+const MAX_AUDIO_PACKET_BYTES = 8192;
 
-function permissions(conn: NativeConnection) {
-  return {
-    privacyAllowed: conn.privacyAllowed && conn.peerInfo.features?.privacy_mode === true,
-    clipboardAllowed: conn.clipboardAllowed,
-  };
-}
-
-function canRestart(conn: NativeConnection): boolean {
-  return conn.restartAllowed && ['windows', 'mac os', 'macos', 'linux'].includes(String(conn.peerInfo.platform).toLowerCase());
-}
-
-function peerToJson(peer: Record<string, any>, conn: NativeConnection): Record<string, unknown> {
-  const displays = Array.isArray(peer.displays)
-    ? peer.displays.map((d: any, index: number) => ({
-        index,
-        name: String(d.name ?? ''),
-        x: Number(d.x ?? 0),
-        y: Number(d.y ?? 0),
-        width: Number(d.width ?? 0),
-        height: Number(d.height ?? 0),
-        online: Boolean(d.online ?? true),
-        cursorEmbedded: Boolean(d.cursor_embedded),
-      }))
-    : [];
-
-  const encoding = peer.encoding
-    ? {
-        vp8: Boolean(peer.encoding.vp8),
-        h264: Boolean(peer.encoding.h264),
-        h265: Boolean(peer.encoding.h265),
-        av1: Boolean(peer.encoding.av1),
-      }
-    : null;
-
-  return {
-    type: 'peer',
-    hostname: String(peer.hostname ?? ''),
-    platform: String(peer.platform ?? ''),
-    username: String(peer.username ?? ''),
-    version: String(peer.version ?? ''),
-    currentDisplay: Number(peer.current_display ?? 0),
-    displays,
-    encoding,
-    encrypted: conn.encrypted,
-    route: conn.route,
-    ...permissions(conn),
-    restartAllowed: canRestart(conn),
-  };
-}
-
-function initialDisplaySize(peer: Record<string, any>): { width: number; height: number } {
-  const displays = Array.isArray(peer.displays) ? peer.displays : [];
-  const idx = Number(peer.current_display ?? 0);
-  const chosen = displays[idx] ?? displays[0];
-  if (!chosen) return { width: 0, height: 0 };
-  return {
-    width: Math.max(0, Number(chosen.width ?? 0)),
-    height: Math.max(0, Number(chosen.height ?? 0)),
-  };
-}
-
-function isH264AnnexBKeyframe(data: Uint8Array): boolean {
-  const limit = Math.min(data.length, 4096);
-  for (let i = 0; i + 4 < limit; i++) {
-    if (data[i] === 0 && data[i + 1] === 0) {
-      let nalOffset = -1;
-      if (data[i + 2] === 1) {
-        nalOffset = i + 3;
-      } else if (data[i + 2] === 0 && data[i + 3] === 1) {
-        nalOffset = i + 4;
-      }
-      if (nalOffset !== -1 && nalOffset < data.length) {
-        const nalType = data[nalOffset] & 0x1f;
-        if (nalType === 5 || nalType === 7) return true; // IDR slice (5) or SPS (7)
-      }
-    }
-  }
-  return false;
-}
-
-function isVp9Keyframe(data: Uint8Array): boolean {
-  if (data.length < 4) return false;
-  const b0 = data[0];
-  // VP9 uncompressed header: frame_marker (2 bits) == 0b10
-  if ((b0 >> 6) !== 2) return false;
-  const profileLow = (b0 >> 5) & 1;
-  const profileHigh = (b0 >> 4) & 1;
-  const profile = (profileHigh << 1) | profileLow;
-  // For profile 0..2: bit 3 is show_existing_frame (must be 0), bit 2 is frame_type (0 = key)
-  if (profile < 3) {
-    if ((b0 & 0x08) !== 0 || (b0 & 0x04) !== 0) return false;
-    return data[1] === 0x49 && data[2] === 0x83 && data[3] === 0x42;
-  }
-  return false;
-}
-
-function extractEncodedFrames(
-  vf: Record<string, any>,
-): { codec: number; frames: any[] } | null {
-  if (vf.vp8s?.frames?.length) return { codec: CodecId.VP8, frames: vf.vp8s.frames };
-  if (vf.vp9s?.frames?.length) return { codec: CodecId.VP9, frames: vf.vp9s.frames };
-  if (vf.h264s?.frames?.length) return { codec: CodecId.H264, frames: vf.h264s.frames };
-  if (vf.h265s?.frames?.length) return { codec: CodecId.H265, frames: vf.h265s.frames };
-  if (vf.av1s?.frames?.length) return { codec: CodecId.AV1, frames: vf.av1s.frames };
-  return null;
-}
-
-// Keep the gateway's session path unchanged. This adapter emits the same UI messages locally.
+// Translate browser-side WebRTC traffic into the same UI events as the gateway.
 export function createNativeSession(
-  conn: NativeConnection, availableCodecs: Partial<CodecCaps> | undefined,
+  connection: NativeConnection, availableCodecs: Partial<CodecCaps> | undefined,
   onData: (data: string | ArrayBuffer) => void, onClose: () => void,
 ) {
   const sessionCodecs = selectCodecs(availableCodecs);
   let state: 'live' | 'closed' = 'live';
-  const hostConn = conn;
-  let resolutionDisplay = 0;
-  let sizes: { width: number; height: number }[] = [];
-  let privacyImpl = '';
+  let displayWithResolutionOptions = 0;
+  let supportedResolutions: { width: number; height: number }[] = [];
+  let privacyImplementation = '';
   let audioRequested = false;
   let audioAllowed = true;
   let audioFormat: { sampleRate: number; channels: number } | null = null;
-  let warnedRawVideo = false;
-  let currentSize = { width: 0, height: 0 };
-  const sendJson = (value: object) => { if (state === 'live') onData(JSON.stringify(value)); };
+  const sendJson = (value: ServerMessage) => { if (state === 'live') onData(JSON.stringify(value)); };
   const sendBinary = (value: Uint8Array) => { if (state === 'live') onData(new Uint8Array(value).buffer); };
-  const cleanup = (_sendClosedStatus = false) => {
+  const video = createNativeVideo(sendJson, sendBinary);
+  const sendHostMessage = (message: Record<string, unknown>) => connection.stream.sendRaw(encodeMessage(message));
+
+  const close = () => {
     if (state === 'closed') return;
     state = 'closed';
-    conn.stream.close();
+    connection.stream.close();
     onClose();
   };
   const fail = (error: unknown) => {
+    if (state === 'closed') return;
     sendJson({ type: 'status', state: 'error', detail: humanizeError(error) });
-    cleanup();
+    close();
   };
-  const startHostPump = async (conn: NativeConnection) => {
-    const publishResolutions = (display: number, supported?: { resolutions?: typeof sizes }) => {
-      resolutionDisplay = display;
-      sizes = (supported?.resolutions ?? []).filter(({ width, height }) =>
+  const readHostMessages = async () => {
+    const publishResolutions = (display: number, supported?: { resolutions?: typeof supportedResolutions }) => {
+      displayWithResolutionOptions = display;
+      supportedResolutions = (supported?.resolutions ?? []).filter(({ width, height }) =>
         Number.isInteger(width) && Number.isInteger(height) && width > 0 && height > 0);
-      sendJson({ type: 'resolutions', display, sizes });
+      sendJson({ type: 'resolutions', display, sizes: supportedResolutions });
     };
     const cursorShapes = new CursorShapes();
-    currentSize = initialDisplaySize(conn.peerInfo);
-    sendJson(peerToJson(conn.peerInfo, conn));
-    publishResolutions(Number(conn.peerInfo.current_display ?? 0), conn.peerInfo.resolutions);
+    video.setDisplaySize(activeDisplaySize(connection.peerInfo));
+    sendJson(peerInfoMessage(connection.peerInfo, connection));
+    publishResolutions(Number(connection.peerInfo.current_display ?? 0), connection.peerInfo.resolutions);
     sendJson({
       type: 'status',
       state: 'live',
-      detail: conn.encrypted ? 'encrypted' : 'direct',
-      username: conn.username,
+      detail: connection.encrypted ? 'encrypted' : 'direct',
+      username: connection.username,
     });
 
     try {
       while (state === 'live') {
-        const raw = await conn.stream.next();
-        if (!raw) {
+        const hostPacket = await connection.stream.next();
+        if (!hostPacket) {
           if (state === 'live') {
             throw new Error('host closed the connection');
           }
           break;
         }
-        const msg = decodeMessage(raw);
+        const hostMessage = decodeMessage(hostPacket);
 
-        if (msg.test_delay?.from_client) {
-          sendJson({ type: 'pong', seq: Number(msg.test_delay.time), clientTs: 0, serverTs: Date.now() });
+        const delayProbe = hostMessage.test_delay;
+        if (delayProbe?.from_client) {
+          sendJson({ type: 'pong', seq: Number(delayProbe.time), clientTs: 0, serverTs: Date.now() });
         }
-        // 1. TestDelay echo + RTT reporting
-        if (msg.test_delay && !msg.test_delay.from_client) {
-          void conn.stream.sendRaw(encodeMessage({ test_delay: msg.test_delay })).catch(fail);
-          const lastDelay = Number(msg.test_delay.last_delay ?? 0);
-          if (lastDelay > 0) {
-            sendJson({ type: 'rtt', ms: lastDelay });
+        if (delayProbe && !delayProbe.from_client) {
+          void sendHostMessage({ test_delay: delayProbe }).catch(fail);
+          const roundTripMs = Number(delayProbe.last_delay ?? 0);
+          if (roundTripMs > 0) {
+            sendJson({ type: 'rtt', ms: roundTripMs });
           }
         }
 
-        // 2. Misc control events
-        if (msg.misc) {
-          if (Number.isInteger(msg.misc.follow_current_display)) {
-            sendJson({ type: 'focusedDisplay', display: msg.misc.follow_current_display });
+        const hostEvent = hostMessage.misc;
+        if (hostEvent) {
+          if (Number.isInteger(hostEvent.follow_current_display)) {
+            sendJson({ type: 'focusedDisplay', display: hostEvent.follow_current_display });
           }
-          if (msg.misc.switch_display) {
-            const sd = msg.misc.switch_display;
-            const w = Number(sd.width ?? 0);
-            const h = Number(sd.height ?? 0);
-            if (w > 0 && h > 0) {
-              currentSize = { width: w, height: h };
+          if (hostEvent.switch_display) {
+            const switchedDisplay = hostEvent.switch_display;
+            const width = Number(switchedDisplay.width ?? 0);
+            const height = Number(switchedDisplay.height ?? 0);
+            if (width > 0 && height > 0) {
+              video.setDisplaySize({ width, height });
             }
             sendJson({
               type: 'display',
-              display: Number(sd.display ?? 0),
-              width: w,
-              height: h,
-              x: Number(sd.x ?? 0),
-              y: Number(sd.y ?? 0),
-              cursorEmbedded: Boolean(sd.cursor_embedded),
+              display: Number(switchedDisplay.display ?? 0),
+              width,
+              height,
+              x: Number(switchedDisplay.x ?? 0),
+              y: Number(switchedDisplay.y ?? 0),
+              cursorEmbedded: Boolean(switchedDisplay.cursor_embedded),
               name: '',
             });
-            publishResolutions(Number(sd.display ?? 0), sd.resolutions);
+            publishResolutions(Number(switchedDisplay.display ?? 0), switchedDisplay.resolutions);
           }
-          if (msg.misc.close_reason) {
-            const reason = String(msg.misc.close_reason);
-            sendJson({ type: 'status', state: 'error', detail: humanizeError(reason) });
-            // Appendix B fix #8: actively close the stream on close_reason
-            cleanup(false);
+          if (hostEvent.close_reason) {
+            fail(String(hostEvent.close_reason));
             return;
           }
         }
 
-        const permission = msg.misc?.permission_info;
-        if (permission?.permission === 8 || permission?.permission === 2) {
-          if (permission.permission === 8) conn.privacyAllowed = permission.enabled === true;
-          else conn.clipboardAllowed = permission.enabled === true;
-          sendJson({ type: 'permissions', ...permissions(conn) });
+        const permission = hostEvent?.permission_info;
+        if (permission?.permission === HostPermission.PrivacyMode || permission?.permission === HostPermission.Clipboard) {
+          if (permission.permission === HostPermission.PrivacyMode) connection.privacyAllowed = permission.enabled === true;
+          else connection.clipboardAllowed = permission.enabled === true;
+          sendJson({ type: 'permissions', ...sessionPermissions(connection) });
         }
-        const chat = msg.misc?.chat_message?.text;
+        const chat = hostEvent?.chat_message?.text;
         if (typeof chat === 'string' && normalizeChatText(chat)) sendJson({ type: 'chat', text: chat });
-        const notice = msg.misc?.back_notification;
+        const notice = hostEvent?.back_notification;
         if (typeof notice?.privacy_mode_state === 'number') {
           const code = notice.privacy_mode_state;
-          if (code === 4) privacyImpl = notice.impl_key || '';
+          if (code === 4) privacyImplementation = notice.impl_key || '';
           if (code === 3) {
-            conn.privacyAllowed = false;
-            sendJson({ type: 'permissions', ...permissions(conn) });
+            connection.privacyAllowed = false;
+            sendJson({ type: 'permissions', ...sessionPermissions(connection) });
           }
-          const enabled = code === 4 ? true : [3,5,6,7,8,9,11].includes(code) ? false : undefined;
-          sendJson({ type: 'privacyResult', enabled, failed: ![4,8,9].includes(code) });
+          const enabled = code === 4 ? true : [3, 5, 6, 7, 8, 9, 11].includes(code) ? false : undefined;
+          sendJson({ type: 'privacyResult', enabled, failed: ![4, 8, 9].includes(code) });
         }
-        if (permission?.permission === 5) {
-          conn.restartAllowed = permission.enabled === true;
-          sendJson({ type: 'restartPermission', allowed: canRestart(conn) });
+        if (permission?.permission === HostPermission.Restart) {
+          connection.restartAllowed = permission.enabled === true;
+          sendJson({ type: 'restartPermission', allowed: hostAllowsRestart(connection) });
         }
-        if (permission?.permission === 3) {
+        if (permission?.permission === HostPermission.Audio) {
           audioAllowed = permission.enabled === true;
           if (!audioAllowed && audioRequested) {
             audioRequested = false;
             sendJson({ type: 'audioDenied' });
           }
         }
-        if (msg.misc?.audio_format) {
-          const { sample_rate: sampleRate, channels } = msg.misc.audio_format;
+        if (hostEvent?.audio_format) {
+          const { sample_rate: sampleRate, channels } = hostEvent.audio_format;
           audioFormat = { sampleRate, channels };
           if (audioRequested && audioAllowed) sendJson({ type: 'audioFormat', ...audioFormat });
         }
-        const packet = msg.audio_frame?.data;
-        if (audioAllowed && audioRequested && packet?.length > 0 && packet.length <= 8192 && true) {
-          sendJson({ type: 'audioFrame', packet: encodeBase64(Uint8Array.from(packet)) });
+        const audioPacket = hostMessage.audio_frame?.data;
+        if (audioAllowed && audioRequested && audioPacket?.length > 0 && audioPacket.length <= MAX_AUDIO_PACKET_BYTES) {
+          sendJson({ type: 'audioFrame', packet: encodeBase64(Uint8Array.from(audioPacket)) });
         }
 
-        // 3. Clipboard (single or RustDesk 1.4/1.5 MultiClipboards, bounded UTF-8)
-        if (conn.clipboardAllowed) {
-          const clips = [msg.clipboard, ...(msg.multi_clipboards?.clipboards ?? [])];
+        // Accept the first supported text format from single-item and multi-item clipboard messages.
+        if (connection.clipboardAllowed) {
+          const clips = [hostMessage.clipboard, ...(hostMessage.multi_clipboards?.clipboards ?? [])];
           for (const clip of clips) {
             const text = decodeClipboard(clip);
             if (text !== null) {
@@ -279,172 +174,112 @@ export function createNativeSession(
           }
         }
 
-        // 4. Cursor shape and position
-        if (msg.cursor_data) {
-          sendJson({ type: 'cursorShape', shape: cursorShapes.decode(msg.cursor_data) });
-        } else if (msg.cursor_id !== undefined) {
-          sendJson({ type: 'cursorShape', shape: cursorShapes.get(msg.cursor_id) });
-        } else if (msg.cursor_position) {
+        if (hostMessage.cursor_data) {
+          sendJson({ type: 'cursorShape', shape: cursorShapes.decode(hostMessage.cursor_data) });
+        } else if (hostMessage.cursor_id !== undefined) {
+          sendJson({ type: 'cursorShape', shape: cursorShapes.get(hostMessage.cursor_id) });
+        } else if (hostMessage.cursor_position) {
           sendJson({
             type: 'cursor',
-            x: Number(msg.cursor_position.x ?? 0),
-            y: Number(msg.cursor_position.y ?? 0),
+            x: Number(hostMessage.cursor_position.x ?? 0),
+            y: Number(hostMessage.cursor_position.y ?? 0),
           });
         }
 
-        // 4b. Mid-session PeerInfo update (e.g. display hotplug or RustDesk 1.5 refreshed peer_info)
-        if (msg.peer_info) {
-          const updatedSize = initialDisplaySize(msg.peer_info);
+        // A host can send updated display information after a monitor is connected.
+        if (hostMessage.peer_info) {
+          const updatedSize = activeDisplaySize(hostMessage.peer_info);
           if (updatedSize.width > 0 && updatedSize.height > 0) {
-            currentSize = updatedSize;
+            video.setDisplaySize(updatedSize);
           }
-          sendJson(peerToJson(msg.peer_info, conn));
-          publishResolutions(Number(msg.peer_info.current_display ?? 0), msg.peer_info.resolutions);
+          sendJson(peerInfoMessage(hostMessage.peer_info, connection));
+          publishResolutions(Number(hostMessage.peer_info.current_display ?? 0), hostMessage.peer_info.resolutions);
         }
 
-        // 5. VideoFrame
-        if (msg.video_frame) {
-          const vf = msg.video_frame;
-          if ((vf.rgb || vf.yuv) && !warnedRawVideo) {
-            warnedRawVideo = true;
-            sendJson({
-              type: 'error',
-              message:
-                'the host sent uncompressed video; this client only decodes vp8, vp9, h264, h265, and av1',
-            });
-          }
-
-          const extracted = extractEncodedFrames(vf);
-          if (extracted) {
-            const display = Math.max(0, Number(vf.display ?? 0));
-            const nowMs = BigInt(Date.now());
-            for (const f of extracted.frames) {
-              const payload = f.data ? new Uint8Array(f.data) : new Uint8Array(0);
-              const isKey =
-                Boolean(f.key) ||
-                (extracted.codec === CodecId.H264 && isH264AnnexBKeyframe(payload)) ||
-                (extracted.codec === CodecId.VP9 && isVp9Keyframe(payload));
-              if (extracted.codec === CodecId.VP8 && isKey) {
-                const parsedSize = vp8KeyframeSize(payload);
-                if (parsedSize) {
-                  currentSize = parsedSize;
-                }
-              }
-              const pts = BigInt(f.pts ?? 0);
-              const packet = encodeRdv1Frame({
-                codec: extracted.codec,
-                key: isKey,
-                display,
-                width: currentSize.width,
-                height: currentSize.height,
-                pts,
-                gatewayUnixMs: nowMs,
-                data: payload,
-              });
-              sendBinary(packet);
-            }
-            // RustDesk 1.5 QoS ACK once per message containing video frames (non-blocking)
-            void conn.stream
-              .sendRaw(encodeMessage(buildVideoReceivedMessage()))
-              .catch(fail);
-          }
+        if (hostMessage.video_frame && video.handleVideoFrame(hostMessage.video_frame)) {
+          // RustDesk 1.5 expects one acknowledgement per message, even for a batch.
+          void sendHostMessage(buildVideoReceivedMessage()).catch(fail);
         }
       }
-    } catch (err) {
-      if (state === 'live') {
-        sendJson({ type: 'status', state: 'error', detail: humanizeError(err) });
-        cleanup(false);
-      }
+    } catch (error) {
+      fail(error);
     }
   };
 
-  const sendControl = async (parsed: ClientMessage) => {
-    if (parsed.type === 'ping') {
-      await conn.stream.sendRaw(encodeMessage({ test_delay: { time: parsed.seq, from_client: true } }));
+  const sendControl = async (command: ClientMessage) => {
+    if (command.type === 'ping') {
+      await sendHostMessage({ test_delay: { time: command.seq, from_client: true } });
       return;
     }
-    if (parsed.type === 'disconnect') { cleanup(); return; }
-    if (hostConn) {
-      if (parsed.type === 'clipboard' && (!hostConn.clipboardAllowed || typeof parsed.text !== 'string')) return;
-      if (parsed.type === 'privacy') {
-        if (!permissions(hostConn).privacyAllowed || typeof parsed.enabled !== 'boolean') {
-          sendJson({ type: 'privacyResult', failed: true });
-          return;
-        }
-        const [major, minor, patch] = String(hostConn.peerInfo.version).split('.').map(Number);
-        const modern = major > 1 || (major === 1 && (minor > 2 || (minor === 2 && patch >= 4)));
-        const misc = modern ? { toggle_privacy_mode: { on: parsed.enabled, impl_key: privacyImpl } }
-          : { option: { privacy_mode: parsed.enabled ? 2 : 1 } };
-        try {
-          await hostConn.stream.sendRaw(encodeMessage({ misc }));
-        } catch {
-          sendJson({ type: 'privacyResult', failed: true });
-        }
-        return;
-      }
-      if (parsed.type === 'restart') {
-        const conn = hostConn;
-        if (!canRestart(conn)) {
-          sendJson({ type: 'restartResult', sent: false });
-          return;
-        }
-        try {
-          await conn.stream.sendRaw(encodeMessage({ misc: { restart_remote_device: true } }));
-          sendJson({ type: 'restartResult', sent: true });
-        } catch {
-          sendJson({ type: 'restartResult', sent: false });
-        }
-        return;
-      }
-      if (parsed.type === 'audio') {
-        if (typeof parsed.enabled !== 'boolean') return;
-        if (parsed.enabled && !audioAllowed) {
-          sendJson({ type: 'audioDenied' });
-          return;
-        }
-        audioRequested = parsed.enabled;
-        if (audioRequested && audioFormat) sendJson({ type: 'audioFormat', ...audioFormat });
-      }
-      let hostMsg;
-      if (parsed.type === 'chat') {
-        const text = normalizeChatText(parsed.text);
-        if (!text) return;
-        hostMsg = { misc: { chat_message: { text } } };
-      } else if (parsed.type === 'resolution') {
-        const { display, width, height } = parsed;
-        if (display !== resolutionDisplay || !sizes.some(size => size.width === width && size.height === height)) {
-          sendJson({ type: 'error', message: 'The active display does not offer that resolution.' });
-          return;
-        }
-        const [major, minor, patch] = String(hostConn.peerInfo.version ?? '').split('.').map(Number);
-        const modern = major > 1 || (major === 1 && (minor > 2 || (minor === 2 && patch >= 4)));
-        const resolution = { width, height };
-        hostMsg = { misc: modern
-          ? { change_display_resolution: { display, resolution } }
-          : { change_resolution: resolution } };
-      } else {
-        hostMsg = toHostMessage(parsed, sessionCodecs);
-      }
-      if (hostMsg) {
-        const activeHost = hostConn;
-        void activeHost.stream.sendRaw(encodeMessage(hostMsg)).catch((err) => {
-          if (state === 'live') {
-            sendJson({ type: 'status', state: 'error', detail: humanizeError(err) });
-            cleanup(false);
-          }
-        });
-        if (parsed.type === 'quality') {
-          void activeHost.stream
-            .sendRaw(encodeMessage(buildRefreshVideoMessage()))
-            .catch(fail);
-        }
-      }
+    if (command.type === 'disconnect') {
+      close();
+      return;
     }
-
+    if (command.type === 'clipboard' && (!connection.clipboardAllowed || typeof command.text !== 'string')) return;
+    if (command.type === 'privacy') {
+      if (!sessionPermissions(connection).privacyAllowed || typeof command.enabled !== 'boolean') {
+        sendJson({ type: 'privacyResult', failed: true });
+        return;
+      }
+      const misc = usesModernDisplayCommands(connection.peerInfo)
+        ? { toggle_privacy_mode: { on: command.enabled, impl_key: privacyImplementation } }
+        : { option: { privacy_mode: command.enabled ? 2 : 1 } };
+      try {
+        await sendHostMessage({ misc });
+      } catch {
+        sendJson({ type: 'privacyResult', failed: true });
+      }
+      return;
+    }
+    if (command.type === 'restart') {
+      if (!hostAllowsRestart(connection)) {
+        sendJson({ type: 'restartResult', sent: false });
+        return;
+      }
+      try {
+        await sendHostMessage({ misc: { restart_remote_device: true } });
+        sendJson({ type: 'restartResult', sent: true });
+      } catch {
+        sendJson({ type: 'restartResult', sent: false });
+      }
+      return;
+    }
+    if (command.type === 'audio') {
+      if (typeof command.enabled !== 'boolean') return;
+      if (command.enabled && !audioAllowed) {
+        sendJson({ type: 'audioDenied' });
+        return;
+      }
+      audioRequested = command.enabled;
+      if (audioRequested && audioFormat) sendJson({ type: 'audioFormat', ...audioFormat });
+    }
+    let hostCommand: Record<string, unknown> | null;
+    if (command.type === 'chat') {
+      const text = normalizeChatText(command.text);
+      if (!text) return;
+      hostCommand = { misc: { chat_message: { text } } };
+    } else if (command.type === 'resolution') {
+      const { display, width, height } = command;
+      if (display !== displayWithResolutionOptions || !supportedResolutions.some(size => size.width === width && size.height === height)) {
+        sendJson({ type: 'error', message: 'The active display does not offer that resolution.' });
+        return;
+      }
+      const resolution = { width, height };
+      hostCommand = { misc: usesModernDisplayCommands(connection.peerInfo)
+        ? { change_display_resolution: { display, resolution } }
+        : { change_resolution: resolution } };
+    } else {
+      hostCommand = toHostMessage(command, sessionCodecs);
+    }
+    if (!hostCommand) return;
+    void sendHostMessage(hostCommand).catch(fail);
+    if (command.type === 'quality') {
+      void sendHostMessage(buildRefreshVideoMessage()).catch(fail);
+    }
   };
   return {
-    start: () => { void startHostPump(conn); },
+    start: () => { void readHostMessages().catch(fail); },
     send: (message: ClientMessage) => { if (state === 'live') void sendControl(message).catch(fail); },
-    close: cleanup,
+    close,
   };
 }
