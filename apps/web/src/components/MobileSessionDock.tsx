@@ -3,25 +3,21 @@
 import { useState } from 'react';
 import type { DisplayInfo, QualityLevel } from '@rustdesk-web/shared';
 import {
-  Camera,
+  Activity,
+  Focus,
   ChevronLeft,
   ChevronRight,
   CircleHelp,
-  Eye,
   Clipboard,
   Keyboard,
   LockKeyhole,
   Layers2,
   LogOut,
-  Maximize2,
-  MessageSquare,
   Shield,
-  ShieldAlert,
   Monitor,
   MousePointer2,
   Pointer,
   RotateCcw,
-  SlidersHorizontal,
   Volume2,
 } from 'lucide-react';
 import { t, translateAudioIssue, type I18nKey, type Locale } from '../lib/i18n.ts';
@@ -59,23 +55,23 @@ interface MobileSessionDockProps extends Pick<SessionDisplayControlsProps, 'targ
   quality: QualityLevel;
   audioEnabled: boolean;
   audioIssue: string;
-  volume: number;
   viewOnly: boolean;
   privacyAllowed: boolean;
+  followWindow: boolean;
+  clipboardSync: boolean;
+  clipboardPermitted: boolean;
+  onToggleFollowWindow: () => void;
+  onToggleClipboardSync: () => void;
   diagnosticsOpen: boolean;
   onToggleKeyboard: () => void;
   onToggleTouchMode: () => void;
   onSwitchDisplay: (display: number) => void;
   onQuality: (quality: QualityLevel) => void;
   onToggleAudio: () => void;
-  onVolume: (volume: number) => void;
-  onToggleViewOnly: () => void;
-  onFullscreen: () => void;
   onDisconnect: () => void;
   onToggleDiagnostics: () => void;
   remotePlatform: string;
   onQuickKey: (name: 'Ctrl+Alt+Del' | 'Lock') => void;
-  onOpenClipboard: () => void;
   privacyEnabled: boolean;
   privacyPending: boolean;
   privacyFailed: boolean;
@@ -87,8 +83,6 @@ interface MobileSessionDockProps extends Pick<SessionDisplayControlsProps, 'targ
   restartAllowed: boolean;
   restartNotice: null | 'requested' | 'waiting' | 'failed' | 'ended';
   onRestart: () => void;
-  onScreenshot: () => void;
-  onOpenChat: () => void;
 }
 
 export function MobileSessionDock({
@@ -104,23 +98,23 @@ export function MobileSessionDock({
   onCodec,
   audioEnabled,
   audioIssue,
-  volume,
   viewOnly,
   privacyAllowed,
+  followWindow,
+  clipboardSync,
+  clipboardPermitted,
+  onToggleFollowWindow,
+  onToggleClipboardSync,
   diagnosticsOpen,
   onToggleKeyboard,
   onToggleTouchMode,
   onSwitchDisplay,
   onQuality,
   onToggleAudio,
-  onVolume,
-  onToggleViewOnly,
-  onFullscreen,
   onDisconnect,
   onToggleDiagnostics,
   remotePlatform,
   onQuickKey,
-  onOpenClipboard,
   privacyEnabled,
   privacyPending,
   privacyFailed,
@@ -132,8 +126,6 @@ export function MobileSessionDock({
   restartAllowed,
   restartNotice,
   onRestart,
-  onScreenshot,
-  onOpenChat,
 }: MobileSessionDockProps) {
   const features = remoteFeatures(classifyRemoteOs(remotePlatform));
   const [menuOpen, setMenuOpen] = useState(false);
@@ -141,16 +133,19 @@ export function MobileSessionDock({
   const active = menuOpen ? panel : null;
   const label = (key: I18nKey) => t(locale, key);
   const openPanel = (next: Exclude<DockPanel, 'toolbar'>) => {
-    setPanel(menuOpen && panel === next ? 'toolbar' : next);
+    setPanel(next);
     setMenuOpen(true);
   };
 
-  const openSessionPanel = (open: () => void) => {
-    setPanel('toolbar');
-    open();
-  };
+  const toggle = (Icon: typeof Monitor, key: I18nKey, checked: boolean, onChange: () => void, disabled = false) => (
+    <label className="tool-row">
+      <Icon size={18} aria-hidden="true" />
+      <span>{label(key)}</span>
+      <input type="checkbox" role="switch" checked={checked} onChange={onChange} disabled={disabled} />
+    </label>
+  );
 
-  const sheet = active && active !== 'toolbar' ? (
+  const sheet = active ? (
     <div
       className="remote-menu-backdrop"
       data-testid="session-backdrop"
@@ -159,140 +154,89 @@ export function MobileSessionDock({
         if (event.target === event.currentTarget) setMenuOpen(false);
       }}
     >
-      <section className="remote-menu-panel" role="dialog" aria-label={label(active === 'display' ? 'screens' : active === 'gestures' ? 'dockGuide' : 'moreActions')} data-testid="session-menu">
-        {active === 'display' ? (
-          <div className="tool-group tool-options">
-            {displays.length === 0 ? (
-              <button type="button" aria-pressed disabled>
-                <Monitor size={18} />
-                {`${label('displayFallback')} 1`}
-              </button>
-            ) : displays.map((display, index) => (
-              <button
-                key={`${display.name}-${index}`}
-                type="button"
-                aria-pressed={index === currentDisplay}
-                disabled={display.online === false}
-                onClick={() => onSwitchDisplay(index)}
-              >
-                <Monitor size={18} />
-                {display.name || `${label('displayFallback')} ${index + 1}`}
-              </button>
-            ))}
-            <SessionDisplayControls locale={locale} quality={quality} targetFps={targetFps} codec={codec}
-              codecSupport={codecSupport} onQuality={onQuality} onFps={onFps} onCodec={onCodec} />
-            {features.resolutionChange && resolutions.length > 0 ? (
-              <div className="tool-row">
-                <span>{label('remoteResolution')}</span>
-                <ResolutionSelect
-                  label={label('remoteResolution')}
-                  resolutions={resolutions}
-                  frameWidth={frameWidth}
-                  frameHeight={frameHeight}
-                  disabled={viewOnly}
-                  onSelect={onResolution}
-                />
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-        {active === 'gestures' ? (
-          <div className="tool-group">
-            <h2>{label(touchMode ? 'touchModeGestures' : 'mouseModeGestures')}</h2>
-            <dl data-testid="gesture-guide">
-              {gestureRows[touchMode ? 'touch' : 'mouse'].map(([name, desc]) => (
-                <div key={name}>
-                  <dt>{label(name)}</dt>
-                  <dd>{label(desc)}</dd>
+      {active !== 'toolbar' ? (
+        <section className="remote-menu-panel" role="dialog" aria-label={label(active === 'display' ? 'screens' : active === 'gestures' ? 'dockGuide' : 'moreActions')} data-testid="session-menu">
+          {active === 'display' ? (
+            <>
+              {displays.length > 1 ? (
+                <div className="tool-group tool-options">
+                  {displays.map((display, index) => (
+                    <button key={`${display.name}-${index}`} type="button" aria-pressed={index === currentDisplay}
+                      disabled={display.online === false} onClick={() => onSwitchDisplay(index)}>
+                      <Monitor size={18} aria-hidden="true" />
+                      {display.name || `${label('screens')} ${index + 1}`}
+                    </button>
+                  ))}
                 </div>
-              ))}
-            </dl>
-          </div>
-        ) : null}
-        {active === 'actions' ? (
-          <>
-            <div className="tool-group">
-              <label className="tool-row">
-                <Volume2 size={18} />
-                <span>{audioEnabled ? label('audioOn') : label('audioOff')}</span>
-                <input type="checkbox" role="switch" checked={audioEnabled} onChange={onToggleAudio} />
-              </label>
-              {audioIssue ? <p role="alert">{translateAudioIssue(locale, audioIssue)}</p> : null}
-              <label className="tool-row">
-                <span>{label('sessionVolume')}</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={volume}
-                  aria-label={label('sessionVolume')}
-                  onChange={(event) => onVolume(Number(event.target.value))}
-                />
-              </label>
-              <label className="tool-row">
-                <Eye size={18} />
-                <span>{label('viewOnlyLabel')}</span>
-                <input type="checkbox" role="switch" checked={viewOnly} onChange={onToggleViewOnly} />
-              </label>
-              {features.privacyMode && privacyAllowed ? (
-                <label className="tool-row">
-                  <Shield size={18} />
-                  <span>{label(privacyPending ? 'privacyWaiting' : 'privacyMode')}</span>
-                  <input type="checkbox" role="switch" checked={privacyEnabled} disabled={viewOnly || privacyPending} onChange={onTogglePrivacy} />
-                </label>
               ) : null}
-              {privacyFailed ? <p role="alert">{label('privacyFailed')}</p> : null}
-              {!privacyAllowed ? <p>{label('privacyUnavailable')}</p> : null}
+              <div className="tool-group">
+                {features.resolutionChange && resolutions.length > 0 ? (
+                  <div className="tool-row">
+                    <Monitor size={18} aria-hidden="true" />
+                    <span>{label('remoteResolution')}</span>
+                    <ResolutionSelect label={label('remoteResolution')} resolutions={resolutions}
+                      frameWidth={frameWidth} frameHeight={frameHeight} disabled={viewOnly} onSelect={onResolution} />
+                  </div>
+                ) : null}
+                <SessionDisplayControls locale={locale} quality={quality} targetFps={targetFps} codec={codec}
+                  codecSupport={codecSupport} onQuality={onQuality} onFps={onFps} onCodec={onCodec} rows />
+              </div>
+              {displays.length > 1 ? (
+                <div className="tool-group">{toggle(Focus, 'followWindow', followWindow, onToggleFollowWindow)}</div>
+              ) : null}
+            </>
+          ) : null}
+          {active === 'gestures' ? (
+            <div className="tool-group">
+              <h2>{label(touchMode ? 'touchModeGestures' : 'mouseModeGestures')}</h2>
+              <dl data-testid="gesture-guide">
+                {gestureRows[touchMode ? 'touch' : 'mouse'].map(([name, desc]) => (
+                  <div key={name}>
+                    <dt>{label(name)}</dt>
+                    <dd>{label(desc)}</dd>
+                  </div>
+                ))}
+              </dl>
             </div>
-            <div className="tool-group">
-              <button type="button" className="tool-row" aria-pressed={diagnosticsOpen} onClick={onToggleDiagnostics}>
-                <SlidersHorizontal size={18} />
-                {label('diagTitle')}
-              </button>
-              {features.ctrlAltDel ? (
-                <button type="button" className="tool-row" disabled={viewOnly} onClick={() => onQuickKey('Ctrl+Alt+Del')}>
-                  <ShieldAlert size={18} />
-                  {label('ctrlAltDel')}
+          ) : null}
+          {active === 'actions' ? (
+            <>
+              <div className="tool-group">
+                {toggle(Volume2, 'remoteAudio', audioEnabled, onToggleAudio)}
+                {toggle(Clipboard, 'clipSync', clipboardSync, onToggleClipboardSync, !clipboardPermitted)}
+                {features.privacyMode && privacyAllowed
+                  ? toggle(Shield, 'privacyMode', privacyEnabled, onTogglePrivacy, viewOnly || privacyPending)
+                  : null}
+                {audioIssue ? <p role="alert">{translateAudioIssue(locale, audioIssue)}</p> : null}
+                {privacyFailed ? <p role="alert">{label('privacyFailed')}</p> : null}
+              </div>
+              <div className="tool-group">
+                <button type="button" className="tool-row" aria-pressed={diagnosticsOpen} onClick={onToggleDiagnostics}>
+                  <Activity size={18} aria-hidden="true" />
+                  {label('diagTitle')}
                 </button>
-              ) : null}
-              {features.lockScreen ? (
-                <button type="button" className="tool-row" disabled={viewOnly} onClick={() => onQuickKey('Lock')}>
-                  <LockKeyhole size={18} />
+              </div>
+              <div className="tool-group">
+                {features.restart && restartAllowed ? (
+                  <button type="button" className="tool-row" disabled={restartNotice === 'requested' || restartNotice === 'waiting'} onClick={onRestart}>
+                    <RotateCcw size={18} aria-hidden="true" />
+                    {label('restartDevice')}
+                  </button>
+                ) : null}
+                {restartNotice ? <p role="status">{label(restartNotice === 'requested' ? 'restartWaiting' : restartNotice === 'waiting' ? 'retryWaiting' : restartNotice === 'failed' ? 'restartFailed' : 'retryEnded')}</p> : null}
+                <button type="button" className="tool-row" disabled={!features.lockScreen || viewOnly} onClick={() => onQuickKey('Lock')}>
+                  <LockKeyhole size={18} aria-hidden="true" />
                   {label('lockScreen')}
                 </button>
-              ) : null}
-              <button type="button" className="tool-row" onClick={() => openSessionPanel(onOpenChat)}>
-                <MessageSquare size={18} />
-                {label('chat')}
-              </button>
-              <button type="button" className="tool-row" onClick={() => openSessionPanel(onOpenClipboard)}>
-                <Clipboard size={18} />
-                {label('clipboard')}
-              </button>
-              <button type="button" className="tool-row" onClick={onScreenshot}>
-                <Camera size={18} />
-                {label('screenshot')}
-              </button>
-              <button type="button" className="tool-row" onClick={onFullscreen}>
-                <Maximize2 size={18} />
-                {label('sessionFullscreen')}
-              </button>
-              {features.restart && restartAllowed ? (
-                <button type="button" className="tool-row" disabled={restartNotice === 'requested' || restartNotice === 'waiting'} onClick={onRestart}>
-                  <RotateCcw size={18} />
-                  {label('restartDevice')}
+                <button type="button" className="tool-row destructive" onClick={onDisconnect}>
+                  <LogOut size={18} aria-hidden="true" />
+                  {label('disconnectRemote')}
                 </button>
-              ) : null}
-              {restartNotice ? <p role="status">{label(restartNotice === 'requested' ? 'restartWaiting' : restartNotice === 'waiting' ? 'retryWaiting' : restartNotice === 'failed' ? 'restartFailed' : 'retryEnded')}</p> : null}
-              <button type="button" className="tool-row destructive" onClick={onDisconnect}>
-                <LogOut size={18} />
-                {label('disconnect')}
-              </button>
-            </div>
-          </>
-        ) : null}
-      </section>
+              </div>
+            </>
+          ) : null}
+        </section>
+      ) : null}
     </div>
   ) : null;
 
@@ -327,7 +271,8 @@ export function MobileSessionDock({
           type="button"
           data-testid="dock-input-mode"
           aria-label={label('toggleInputMode')}
-          aria-pressed={touchMode}
+          aria-pressed={!touchMode}
+          className={!touchMode ? 'selected' : undefined}
           onClick={onToggleTouchMode}
         >
           <ModeIcon size={20} />

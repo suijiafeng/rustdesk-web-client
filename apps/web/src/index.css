@@ -2564,3 +2564,16 @@ button:focus-visible {
 
 .remote-menu-panel .session-display-controls { padding-block: 6px; }
 .rd-settings-card > .adaptive-select-trigger { width: 100%; min-height: 40px; }
+
+.remote-menu-panel .tool-row .adaptive-select-trigger {
+  flex: 0 1 auto;
+  max-width: min(48%, 180px);
+}
+
+.remote-menu-panel .tool-row .adaptive-select-trigger > span {
+  flex: 1 1 auto;
+}
+
+.remote-menu-panel .mobile-quality > .tool-row + .tool-row {
+  border-top: 1px solid #393d44;
+}

@@ -392,6 +392,12 @@ export function App() {
         defaultTouchMode={displayPrefs.touchMode}
         scrollStyle={displayPrefs.scrollStyle}
         followRemoteCursor={displayPrefs.followRemoteCursor}
+        followWindow={displayPrefs.followWindow}
+        onToggleFollowWindow={() => setDisplayPrefs((current) => {
+          const next = { ...current, followWindow: !current.followWindow };
+          persistDisplayPrefs(next);
+          return next;
+        })}
         autoKeyboard={displayPrefs.autoKeyboard}
         locale={locale}
       />

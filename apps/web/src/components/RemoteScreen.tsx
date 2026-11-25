@@ -124,6 +124,8 @@ interface RemoteScreenProps extends Pick<SessionDisplayControlsProps, 'targetFps
   defaultTouchMode: boolean;
   scrollStyle: ScrollStyle;
   followRemoteCursor: boolean;
+  followWindow: boolean;
+  onToggleFollowWindow: () => void;
   autoKeyboard: boolean;
   locale?: Locale;
 }
@@ -204,6 +206,8 @@ export function RemoteScreen({
   defaultTouchMode,
   scrollStyle,
   followRemoteCursor,
+  followWindow,
+  onToggleFollowWindow,
   autoKeyboard,
   locale = 'en',
 }: RemoteScreenProps) {
@@ -262,6 +266,9 @@ export function RemoteScreen({
   useEffect(() => {
     if (clipboardFallback) setClipboardOpen(true);
   }, [clipboardFallback]);
+  useEffect(() => {
+    if (clipboardSyncNeedsRead) setClipboardOpen(true);
+  }, [clipboardSyncNeedsRead]);
   useEffect(() => {
     if (chatLines.length > 0) setChatOpen(true);
   }, [chatLines]);
@@ -444,7 +451,7 @@ export function RemoteScreen({
       if (!(target instanceof Element)) return false;
       const capture = captureRef.current;
       if (capture && (target === capture || capture.contains(target))) return false;
-      return Boolean(target.closest('input, textarea, select, dialog[open], .rd-clipboard-panel, [data-adaptive-select], [contenteditable="true"]'));
+      return Boolean(target.closest('input, textarea, select, dialog[open], .remote-menu-panel, .rd-clipboard-panel, [data-adaptive-select], [contenteditable="true"]'));
     };
     const onKeyDown = (event: KeyboardEvent) => {
       const isolate = shouldIsolateKeyboardEvent({
@@ -873,23 +880,23 @@ export function RemoteScreen({
           onCodec={onCodec}
           audioEnabled={audioEnabled}
           audioIssue={audioIssue}
-          volume={volume}
           viewOnly={viewOnly}
           privacyAllowed={privacyAllowed}
+          followWindow={followWindow}
+          onToggleFollowWindow={onToggleFollowWindow}
+          clipboardSync={clipboardSync}
+          clipboardPermitted={clipboardPermitted && !clipboardDisabled}
+          onToggleClipboardSync={onToggleClipboardSync}
           diagnosticsOpen={diagnosticsOpen}
           onToggleKeyboard={openSoftKeyboard}
           onToggleTouchMode={() => setTouchMode((current) => !current)}
           onSwitchDisplay={onSwitchDisplay}
           onQuality={onQuality}
           onToggleAudio={onToggleAudio}
-          onVolume={onVolume}
-          onToggleViewOnly={onToggleViewOnly}
-          onFullscreen={() => toggleFullscreen(stageRef.current)}
           onDisconnect={onDisconnect}
           onToggleDiagnostics={onToggleDiagnostics}
           remotePlatform={remotePlatform}
           onQuickKey={sendQuickKey}
-          onOpenClipboard={() => setClipboardOpen(true)}
           privacyEnabled={privacyEnabled}
           privacyPending={privacyPending}
           privacyFailed={privacyFailed}
@@ -901,8 +908,6 @@ export function RemoteScreen({
           restartAllowed={restartAllowed}
           restartNotice={restartNotice}
           onRestart={confirmRestart}
-          onScreenshot={onScreenshot}
-          onOpenChat={() => setChatOpen(true)}
         />
       ) : null}
       {chrome === 'keyboard' ? (
