@@ -183,7 +183,10 @@ export function App() {
     setSavedPasswords((saved) => removeSavedPassword(saved, key));
     setPassword('');
   }, []);
-  const { session, connect, disconnect, sendInput, setHeldRelease, setArmedKeys, canvasRef, frameSize, decoderError } = useSession({
+  const {
+    session, connect, disconnect, sendInput, setHeldRelease, setArmedKeys, canvasRef, frameSize, decoderError,
+    audio, startAudio, stopAudio, setAudioVolume,
+  } = useSession({
     readInput: () => formRef.current,
     onPasswordRejected: rejectSavedPassword,
   });
@@ -249,6 +252,14 @@ export function App() {
             return next;
           });
         }}
+        audioEnabled={audio.enabled}
+        audioIssue={audio.issue}
+        volume={audio.volume}
+        onToggleAudio={() => {
+          if (audio.enabled) stopAudio();
+          else startAudio();
+        }}
+        onVolume={setAudioVolume}
       />
     );
   }

@@ -11,6 +11,11 @@ interface SessionToolbarProps {
   onSwitchDisplay: (display: number) => void;
   onQuality: (quality: QualityLevel) => void;
   onToggleViewOnly: () => void;
+  audioEnabled: boolean;
+  audioIssue: string;
+  volume: number;
+  onToggleAudio: () => void;
+  onVolume: (volume: number) => void;
 }
 
 const QUALITIES: QualityLevel[] = ['low', 'balanced', 'best'];
@@ -24,6 +29,11 @@ export function SessionToolbar({
   onSwitchDisplay,
   onQuality,
   onToggleViewOnly,
+  audioEnabled,
+  audioIssue,
+  volume,
+  onToggleAudio,
+  onVolume,
 }: SessionToolbarProps) {
   return (
     <div
@@ -69,6 +79,22 @@ export function SessionToolbar({
       <button type="button" aria-pressed={viewOnly} onClick={onToggleViewOnly} style={{ cursor: 'pointer' }}>
         {viewOnly ? 'View only' : 'Control'}
       </button>
+      <button type="button" aria-pressed={audioEnabled} onClick={onToggleAudio} style={{ cursor: 'pointer' }}>
+        {audioEnabled ? 'Audio on' : 'Audio off'}
+      </button>
+      <label>
+        Volume{' '}
+        <input
+          aria-label="Volume"
+          type="range"
+          min={0}
+          max={1}
+          step={0.05}
+          value={volume}
+          onChange={(event) => onVolume(Number(event.target.value))}
+        />
+      </label>
+      {audioIssue ? <span data-testid="audio-issue">{audioIssue}</span> : null}
       {!privacyAllowed ? <span data-testid="privacy-revoked">Privacy control unavailable</span> : null}
     </div>
   );

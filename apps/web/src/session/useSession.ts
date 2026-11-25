@@ -7,6 +7,7 @@ import type { ConnectRequest } from '../components/RustDeskShell.tsx';
 import { probeCodecs, webCodecsStatus } from '../lib/codecs.ts';
 import { RemoteDecoder } from '../lib/decoder.ts';
 import { sessionEndLock } from '../lib/displays.ts';
+import { RemoteAudio, clampVolume, webAudioStatus } from '../lib/remoteAudio.ts';
 import { filterCodecSupport, resolveQualityLevel, resolveTargetFps, type DisplayPrefs } from '../lib/displayPrefs.ts';
 import {
   CONNECT_TIMEOUT_MS,
@@ -41,6 +42,8 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
   const [session, setSession] = useState<SessionSnapshot>(initialSession);
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
   const [decoderError, setDecoderError] = useState('');
+  const [audio, setAudio] = useState({ enabled: false, denied: false, volume: 1, issue: '' });
+  const audioRef = useRef<RemoteAudio | null>(null);
   const generation = useRef(0);
   const socketRef = useRef<WebSocket | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -100,7 +103,8 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     for (const message of messages) {
       if (
         message.type !== 'mouse' && message.type !== 'key' && message.type !== 'text' &&
-        message.type !== 'switchDisplay' && message.type !== 'quality' && message.type !== 'followWindow'
+        message.type !== 'switchDisplay' && message.type !== 'quality' && message.type !== 'followWindow' &&
+        message.type !== 'audio'
       ) continue;
       socket.send(JSON.stringify(message));
     }
@@ -125,6 +129,42 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     for (const message of keys) socket.send(JSON.stringify(message));
   }, []);
 
+  const closeAudio = useCallback(() => {
+    audioRef.current?.close();
+    audioRef.current = null;
+  }, []);
+
+  const startAudio = useCallback(() => {
+    const status = webAudioStatus();
+    if (!status.ok) {
+      setAudio((current) => ({ ...current, enabled: false, issue: status.reason }));
+      return;
+    }
+    if (!audioRef.current) {
+      audioRef.current = new RemoteAudio(() => {
+        setAudio((current) => ({ ...current, enabled: false, issue: 'Audio playback failed.' }));
+      });
+      audioRef.current.setVolume(audio.volume);
+    }
+    void audioRef.current.resume().then(() => {
+      sendInput([{ type: 'audio', enabled: true }]);
+      setAudio((current) => ({ ...current, enabled: true, denied: false, issue: '' }));
+    }).catch(() => {
+      setAudio((current) => ({ ...current, enabled: false, issue: 'The browser blocked audio until a user gesture.' }));
+    });
+  }, [audio.volume, sendInput]);
+
+  const stopAudio = useCallback(() => {
+    if (phaseRef.current === 'live') sendInput([{ type: 'audio', enabled: false }]);
+    closeAudio();
+    setAudio((current) => ({ ...current, enabled: false }));
+  }, [closeAudio, sendInput]);
+
+  const setAudioVolume = useCallback((value: number) => {
+    const volume = audioRef.current?.setVolume(value) ?? clampVolume(value);
+    setAudio((current) => ({ ...current, volume }));
+  }, []);
+
   const disconnect = useCallback(() => {
     const eventGeneration = ++generation.current;
     const lock = sessionEndLock(
@@ -133,12 +173,14 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     );
     if (lock.length > 0) sendInput(lock);
     releaseHeldInput();
+    closeAudio();
+    setAudio({ enabled: false, denied: false, volume: 1, issue: '' });
     closeSocket(socketRef.current, true);
     socketRef.current = null;
     releaseDecoder();
     setDecoderError('');
     apply(eventGeneration, { type: 'disconnect' });
-  }, [apply, closeSocket, readInput, releaseDecoder, releaseHeldInput, sendInput]);
+  }, [apply, closeAudio, closeSocket, readInput, releaseDecoder, releaseHeldInput, sendInput]);
 
   const connect = useCallback(async (request?: ConnectRequest) => {
     const input = readInput();
@@ -168,6 +210,8 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
 
     const eventGeneration = ++generation.current;
     releaseDecoder();
+    closeAudio();
+    setAudio({ enabled: false, denied: false, volume: 1, issue: '' });
     setDecoderError('');
     apply(eventGeneration, { type: 'connect-started' });
     const rawSupport = await probeCodecs();
@@ -245,6 +289,19 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
         return;
       }
       if (!parsed || typeof parsed !== 'object' || typeof parsed.type !== 'string') return;
+      if (parsed.type === 'audioFormat') {
+        audioRef.current?.configure(parsed.sampleRate, parsed.channels);
+        return;
+      }
+      if (parsed.type === 'audioFrame') {
+        audioRef.current?.push(parsed.packet);
+        return;
+      }
+      if (parsed.type === 'audioDenied') {
+        closeAudio();
+        setAudio((current) => ({ ...current, enabled: false, denied: true, issue: 'The host refused audio.' }));
+        return;
+      }
       apply(eventGeneration, { type: 'server', message: parsed });
     };
     socket.onerror = () => {
@@ -259,7 +316,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
       releaseDecoder();
       apply(eventGeneration, { type: 'socket-close' });
     };
-  }, [apply, closeSocket, ensureDecoder, readInput, releaseDecoder]);
+  }, [apply, closeAudio, closeSocket, ensureDecoder, readInput, releaseDecoder]);
 
   useEffect(() => () => {
     generation.current += 1;
@@ -276,7 +333,23 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     socketRef.current = null;
     decoderRef.current?.close();
     decoderRef.current = null;
+    audioRef.current?.close();
+    audioRef.current = null;
   }, [closeSocket]);
 
-  return { session, connect, disconnect, sendInput, setHeldRelease, setArmedKeys, canvasRef, frameSize, decoderError };
+  return {
+    session,
+    connect,
+    disconnect,
+    sendInput,
+    setHeldRelease,
+    setArmedKeys,
+    canvasRef,
+    frameSize,
+    decoderError,
+    audio,
+    startAudio,
+    stopAudio,
+    setAudioVolume,
+  };
 }

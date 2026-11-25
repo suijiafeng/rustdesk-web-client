@@ -51,6 +51,11 @@ interface RemoteScreenProps {
   onSwitchDisplay: (display: number) => void;
   onQuality: (quality: QualityLevel) => void;
   onToggleViewOnly: () => void;
+  audioEnabled: boolean;
+  audioIssue: string;
+  volume: number;
+  onToggleAudio: () => void;
+  onVolume: (volume: number) => void;
 }
 
 interface Drag {
@@ -84,6 +89,11 @@ export function RemoteScreen({
   onSwitchDisplay,
   onQuality,
   onToggleViewOnly,
+  audioEnabled,
+  audioIssue,
+  volume,
+  onToggleAudio,
+  onVolume,
 }: RemoteScreenProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const captureRef = useRef<HTMLInputElement>(null);
@@ -458,6 +468,11 @@ export function RemoteScreen({
         onSwitchDisplay={onSwitchDisplay}
         onQuality={onQuality}
         onToggleViewOnly={onToggleViewOnly}
+        audioEnabled={audioEnabled}
+        audioIssue={audioIssue}
+        volume={volume}
+        onToggleAudio={onToggleAudio}
+        onVolume={onVolume}
       />
       <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 8, zIndex: 3 }}>
         <button type="button" onClick={() => toggleFullscreen(stageRef.current)} style={{ cursor: 'pointer' }}>
