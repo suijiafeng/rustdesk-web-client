@@ -18,6 +18,7 @@ import { MobileChrome } from './MobileChrome.tsx';
 import { SoftKeyboardBar } from './SoftKeyboardBar.tsx';
 import { useKeyboardViewport } from '../hooks/useKeyboardViewport.ts';
 import { t, type Locale } from '../lib/i18n.ts';
+import { sessionToolbarVisible } from '../lib/sessionChrome.ts';
 import { DiagnosticsPanel } from './DiagnosticsPanel.tsx';
 import { offsetPointerMessages } from '../lib/displays.ts';
 import { isImeEvent } from '../lib/keys.ts';
@@ -145,6 +146,7 @@ export function RemoteScreen({
   const [pan, setPan] = useState({ panX: 0, panY: 0 });
   const [touchMode, setTouchMode] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [chromeOpen, setChromeOpen] = useState(true);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [portrait, setPortrait] = useState(true);
 
@@ -566,6 +568,7 @@ export function RemoteScreen({
   };
 
   const cursorScreen = showCursor && cursor ? mapFromRemote(cursor.x, cursor.y, transform) : null;
+  const showSessionChrome = sessionToolbarVisible(isNarrowViewport(box.width), keyboardOpen, chromeOpen);
 
   return (
     <div
@@ -660,13 +663,15 @@ export function RemoteScreen({
         }}
         style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 1, height: 1 }}
       />
-      <DiagnosticsPanel
-        locale={locale}
-        open={diagnosticsOpen}
-        snapshot={{ ...stats, now: 0, decodeError }}
-        linkQuality={linkQuality}
-        onCopy={onCopyDiagnostics}
-      />
+      {showSessionChrome ? (
+        <DiagnosticsPanel
+          locale={locale}
+          open={diagnosticsOpen}
+          snapshot={{ ...stats, now: 0, decodeError }}
+          linkQuality={linkQuality}
+          onCopy={onCopyDiagnostics}
+        />
+      ) : null}
       {isNarrowViewport(box.width) ? (
         <MobileChrome
           locale={locale}
@@ -676,12 +681,23 @@ export function RemoteScreen({
           open={menuOpen}
           keyboardOpen={keyboardOpen}
           touchMode={touchMode}
-          onToggleOpen={() => setMenuOpen((current) => !current)}
+          onToggleOpen={() => {
+            if (keyboardOpen && !chromeOpen) {
+              setChromeOpen(true);
+              return;
+            }
+            setMenuOpen((current) => !current);
+          }}
           onToggleKeyboard={() => {
-            setMenuOpen(true);
             setKeyboardOpen((current) => {
               const next = !current;
-              if (next) keyboardLayout.begin();
+              if (next) {
+                setChromeOpen(false);
+                setMenuOpen(false);
+                keyboardLayout.begin();
+              } else {
+                setChromeOpen(true);
+              }
               return next;
             });
           }}
@@ -693,9 +709,13 @@ export function RemoteScreen({
           locale={locale}
           viewOnly={viewOnly}
           onSend={onKeyboard}
-          onHide={() => setKeyboardOpen(false)}
+          onHide={() => {
+            setKeyboardOpen(false);
+            setChromeOpen(true);
+          }}
         />
       ) : null}
+      {showSessionChrome ? (
       <SessionToolbar
         locale={locale}
         displays={displays}
@@ -712,6 +732,8 @@ export function RemoteScreen({
         onToggleAudio={onToggleAudio}
         onVolume={onVolume}
       />
+      ) : null}
+      {showSessionChrome ? (
       <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 8, zIndex: 3 }}>
         <button type="button" onClick={() => toggleFullscreen(stageRef.current)} style={{ cursor: 'pointer' }}>
           {t(locale, 'sessionFullscreen')}
@@ -720,6 +742,7 @@ export function RemoteScreen({
           {t(locale, 'disconnect')}
         </button>
       </div>
+      ) : null}
     </div>
   );
 }
