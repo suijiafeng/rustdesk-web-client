@@ -187,7 +187,7 @@ export function App() {
   }, []);
   const {
     session, connect, disconnect, sendInput, setHeldRelease, setArmedKeys, canvasRef, frameSize, decoderError,
-    stats, audio, startAudio, stopAudio, setAudioVolume,
+    stats, quality: linkQuality, audio, startAudio, stopAudio, setAudioVolume,
   } = useSession({
     readInput: () => formRef.current,
     onPasswordRejected: rejectSavedPassword,
@@ -264,6 +264,7 @@ export function App() {
         onVolume={setAudioVolume}
         diagnosticsOpen={diagnosticsOpen}
         stats={stats}
+        linkQuality={linkQuality}
         decodeError={decoderError}
         onCopyDiagnostics={(text) => {
           void navigator.clipboard?.writeText(text);

@@ -7,6 +7,14 @@ import type { ConnectRequest } from '../components/RustDeskShell.tsx';
 import { probeCodecs, webCodecsStatus } from '../lib/codecs.ts';
 import { RemoteDecoder } from '../lib/decoder.ts';
 import { acceptRtt } from '../lib/diagnostics.ts';
+import { computeFrameRates, createFrameStats, recordRxFrame } from '../lib/frameStats.ts';
+import {
+  computeDiagnosticsSummary,
+  createDiagnosticsState,
+  recordPingSent,
+  recordPongReceived,
+  sweepTimeouts,
+} from '../lib/linkHealth.ts';
 import { sessionEndLock } from '../lib/displays.ts';
 import { RemoteAudio, clampVolume, webAudioStatus } from '../lib/remoteAudio.ts';
 import { filterCodecSupport, resolveQualityLevel, resolveTargetFps, type DisplayPrefs } from '../lib/displayPrefs.ts';
@@ -45,6 +53,17 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
   const [decoderError, setDecoderError] = useState('');
   const [audio, setAudio] = useState({ enabled: false, denied: false, volume: 1, issue: '' });
   const [stats, setStats] = useState({ startedAt: 0, frames: 0, bytes: 0, rttMs: null as number | null });
+  const [quality, setQuality] = useState({
+    fps: 0,
+    bitrate: 0,
+    streamState: 'waiting' as 'waiting' | 'active' | 'idle',
+    browserRttMs: null as number | null,
+    lossPct: 0,
+    linkHealth: 'waiting' as 'waiting' | 'good' | 'fair' | 'poor',
+  });
+  const frameStatsRef = useRef(createFrameStats());
+  const linkRef = useRef(createDiagnosticsState());
+  const pingSeqRef = useRef(0);
   const audioRef = useRef<RemoteAudio | null>(null);
   const generation = useRef(0);
   const socketRef = useRef<WebSocket | null>(null);
@@ -106,7 +125,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
       if (
         message.type !== 'mouse' && message.type !== 'key' && message.type !== 'text' &&
         message.type !== 'switchDisplay' && message.type !== 'quality' && message.type !== 'followWindow' &&
-        message.type !== 'audio'
+        message.type !== 'audio' && message.type !== 'ping'
       ) continue;
       socket.send(JSON.stringify(message));
     }
@@ -178,6 +197,10 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     closeAudio();
     setAudio({ enabled: false, denied: false, volume: 1, issue: '' });
     setStats({ startedAt: 0, frames: 0, bytes: 0, rttMs: null });
+    frameStatsRef.current = createFrameStats();
+    linkRef.current = createDiagnosticsState();
+    pingSeqRef.current = 0;
+    setQuality({ fps: 0, bitrate: 0, streamState: 'waiting', browserRttMs: null, lossPct: 0, linkHealth: 'waiting' });
     closeSocket(socketRef.current, true);
     socketRef.current = null;
     releaseDecoder();
@@ -268,6 +291,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
       if (ev.data instanceof ArrayBuffer) {
         const frame = decodeRdv1Frame(new Uint8Array(ev.data));
         if (!frame) return;
+        recordRxFrame(frameStatsRef.current, Date.now(), ev.data.byteLength);
         setStats((current) => ({
           startedAt: current.startedAt || Date.now(),
           frames: current.frames + 1,
@@ -298,6 +322,17 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
         return;
       }
       if (!parsed || typeof parsed !== 'object' || typeof parsed.type !== 'string') return;
+      if (parsed.type === 'pong') {
+        linkRef.current = recordPongReceived(linkRef.current, parsed.seq, Date.now());
+        const summary = computeDiagnosticsSummary(linkRef.current, Date.now());
+        setQuality((current) => ({
+          ...current,
+          browserRttMs: summary.currentRttMs,
+          lossPct: summary.packetLossPct,
+          linkHealth: summary.health,
+        }));
+        return;
+      }
       if (parsed.type === 'rtt') {
         const rttMs = acceptRtt(parsed.ms);
         if (rttMs !== null) setStats((current) => ({ ...current, rttMs }));
@@ -335,6 +370,29 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     };
   }, [apply, closeAudio, closeSocket, ensureDecoder, readInput, releaseDecoder]);
 
+  useEffect(() => {
+    if (session.phase !== 'live') return;
+    const timer = window.setInterval(() => {
+      const now = Date.now();
+      linkRef.current = sweepTimeouts(linkRef.current, now);
+      const seq = pingSeqRef.current + 1;
+      pingSeqRef.current = seq;
+      linkRef.current = recordPingSent(linkRef.current, seq, now);
+      sendInput([{ type: 'ping', seq, clientTs: now }]);
+      const rates = computeFrameRates(frameStatsRef.current, now);
+      const summary = computeDiagnosticsSummary(linkRef.current, now);
+      setQuality({
+        fps: rates.fps,
+        bitrate: rates.bitrate,
+        streamState: rates.streamState,
+        browserRttMs: summary.currentRttMs,
+        lossPct: summary.packetLossPct,
+        linkHealth: summary.health,
+      });
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [sendInput, session.phase]);
+
   useEffect(() => () => {
     generation.current += 1;
     const mouse = heldReleaseRef.current;
@@ -365,6 +423,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     frameSize,
     decoderError,
     stats,
+    quality,
     audio,
     startAudio,
     stopAudio,

@@ -2,15 +2,38 @@
 
 import { exportDiagnostics, type DiagnosticSnapshot } from '../lib/diagnostics.ts';
 
+interface LinkQuality {
+  fps: number;
+  bitrate: number;
+  streamState: string;
+  browserRttMs: number | null;
+  lossPct: number;
+  linkHealth: string;
+}
+
 interface DiagnosticsPanelProps {
   open: boolean;
   snapshot: DiagnosticSnapshot;
+  linkQuality: LinkQuality | null;
   onCopy: (text: string) => void;
 }
 
-export function DiagnosticsPanel({ open, snapshot, onCopy }: DiagnosticsPanelProps) {
+export function DiagnosticsPanel({ open, snapshot, linkQuality, onCopy }: DiagnosticsPanelProps) {
   if (!open) return null;
-  const report = exportDiagnostics({ ...snapshot, now: Date.now() });
+  const base = exportDiagnostics({ ...snapshot, now: Date.now() });
+  const report = {
+    durationMs: base.durationMs,
+    framesPerSecond: base.framesPerSecond,
+    received: base.received,
+    rttMs: base.rttMs,
+    decode: base.decode,
+    samplingFps: linkQuality?.fps ?? null,
+    bitrateBps: linkQuality?.bitrate ?? null,
+    streamState: linkQuality?.streamState ?? null,
+    browserRttMs: linkQuality?.browserRttMs ?? null,
+    packetLossPct: linkQuality?.lossPct ?? null,
+    linkHealth: linkQuality?.linkHealth ?? null,
+  };
   const text = JSON.stringify(report);
   return (
     <aside
@@ -28,8 +51,11 @@ export function DiagnosticsPanel({ open, snapshot, onCopy }: DiagnosticsPanelPro
       }}
     >
       <div>Duration {report.durationMs} ms</div>
-      <div>Frames/s {report.framesPerSecond}</div>
+      <div>Frames/s {report.samplingFps ?? report.framesPerSecond}</div>
+      <div>Bitrate {report.bitrateBps ?? 0} bit/s</div>
+      <div>Stream {report.streamState ?? 'waiting'}</div>
       <div>Received {report.received}</div>
+      <div>Browser RTT {report.browserRttMs ?? 'n/a'} ms ({report.linkHealth}, loss {report.packetLossPct}%)</div>
       <div>Host RTT {report.rttMs ?? 'n/a'} ms</div>
       <div>Decode {report.decode || 'ok'}</div>
       <button type="button" onClick={() => onCopy(text)} style={{ cursor: 'pointer', marginTop: 8 }}>

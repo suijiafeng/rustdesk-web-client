@@ -71,6 +71,14 @@ interface RemoteScreenProps {
   diagnosticsOpen: boolean;
   stats: { startedAt: number; frames: number; bytes: number; rttMs: number | null };
   decodeError: string;
+  linkQuality: {
+    fps: number;
+    bitrate: number;
+    streamState: 'waiting' | 'active' | 'idle';
+    browserRttMs: number | null;
+    lossPct: number;
+    linkHealth: 'waiting' | 'good' | 'fair' | 'poor';
+  };
   onCopyDiagnostics: (text: string) => void;
 }
 
@@ -113,6 +121,7 @@ export function RemoteScreen({
   diagnosticsOpen,
   stats,
   decodeError,
+  linkQuality,
   onCopyDiagnostics,
 }: RemoteScreenProps) {
   const stageRef = useRef<HTMLDivElement>(null);
@@ -619,6 +628,7 @@ export function RemoteScreen({
       <DiagnosticsPanel
         open={diagnosticsOpen}
         snapshot={{ ...stats, now: 0, decodeError }}
+        linkQuality={linkQuality}
         onCopy={onCopyDiagnostics}
       />
       {isNarrowViewport(box.width) ? (
