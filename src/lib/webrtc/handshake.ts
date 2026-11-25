@@ -52,7 +52,7 @@ export async function loginWebRtc(
   } }));
   onVerified();
   const connection: NativeConnection = {
-    stream, route: 'webrtc-direct', encrypted: true, peerInfo: {}, username: peerId,
+    stream, route: 'webrtc', encrypted: true, peerInfo: {}, username: peerId,
     privacyAllowed: true, clipboardAllowed: true, restartAllowed: true,
   };
   const option = buildLoginOptions(codecs, request.quality, request.fps, request.codec);

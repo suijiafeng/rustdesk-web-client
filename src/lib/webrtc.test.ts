@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import nacl from 'tweetnacl';
 import { FragmentReader, FRAGMENT_PAYLOAD, decodeEndpoint, encodeEndpoint, sdpFingerprint } from '../../shared/webrtc.ts';
 import { IdPkProto, decodeRendezvous, encodeRendezvous } from '../../server/protos.ts';
+import { readWebRtcRoute } from './webrtc/connect.ts';
 import { verifiedPeerKey, verifyFingerprint } from './webrtc/handshake.ts';
 
 const fingerprint = 'sha-256 ' + Array(32).fill('A1').join(':');
@@ -58,4 +59,37 @@ test('browser cursor decoding preserves native Zstandard RGBA pixels', () => {
   const shape = new CursorShapes().decode({ id: '1', width: 2, height: 1, hotx: 1, colors: zstdCompressSync(pixels) });
   assert.equal(shape?.rgba, pixels.toString('base64'));
   assert.equal(shape?.hotX, 1);
+});
+
+test('WebRTC prefers the selected candidate pair and recognizes TURN on either side', async () => {
+  for (const [local, remote, expected] of [
+    ['host', 'srflx', 'webrtc-direct'],
+    ['relay', 'host', 'webrtc-relay'],
+    ['host', 'relay', 'webrtc-relay'],
+    ['host', undefined, 'webrtc'],
+  ]) {
+    const reports = new Map<string, unknown>([
+      ['transport', { type: 'transport', selectedCandidatePairId: 'selected' }],
+      ['selected', { type: 'candidate-pair', localCandidateId: 'local', remoteCandidateId: 'remote' }],
+      ['other', { type: 'candidate-pair', nominated: true, state: 'succeeded', localCandidateId: 'turn' }],
+      ['local', { candidateType: local }],
+      ['remote', { candidateType: remote }],
+      ['turn', { candidateType: 'relay' }],
+    ]);
+    assert.equal(await readWebRtcRoute({ getStats: async () => reports as unknown as RTCStatsReport }), expected);
+  }
+});
+
+test('WebRTC accepts a nominated pair when transport selection is absent', async () => {
+  const reports = new Map<string, unknown>([
+    ['pair', { type: 'candidate-pair', nominated: true, state: 'succeeded', localCandidateId: 'local', remoteCandidateId: 'remote' }],
+    ['local', { candidateType: 'host' }],
+    ['remote', { candidateType: 'prflx' }],
+  ]);
+  assert.equal(await readWebRtcRoute({ getStats: async () => reports as unknown as RTCStatsReport }), 'webrtc-direct');
+});
+
+test('unavailable WebRTC statistics leave the authenticated route unknown', async () => {
+  assert.equal(await readWebRtcRoute({ getStats: async () => { throw new Error('unavailable'); } }), 'webrtc');
+  assert.equal(await readWebRtcRoute({ getStats: () => new Promise(() => {}) }, 5), 'webrtc');
 });

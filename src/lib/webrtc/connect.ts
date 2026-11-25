@@ -2,6 +2,48 @@ import { selectCodecs } from '../../../server/control';
 import { decodeEndpoint, encodeEndpoint, MAX_CANDIDATES, sdpFingerprint, validateCandidate } from '../../../shared/webrtc';
 import { loginWebRtc, verifiedPeerKey, type ConnectRequest } from './handshake';
 import { DataChannelStream } from './stream';
+import type { NativeConnection } from './session';
+
+const ROUTE_STATS_TIMEOUT_MS = 300;
+const DIRECT_CANDIDATE_TYPES = new Set(['host', 'srflx', 'prflx']);
+
+export async function readWebRtcRoute(
+  pc: Pick<RTCPeerConnection, 'getStats'>,
+  timeoutMs = ROUTE_STATS_TIMEOUT_MS,
+): Promise<NativeConnection['route']> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const timeout = new Promise<null>(resolve => {
+      timer = setTimeout(() => resolve(null), timeoutMs);
+    });
+    const stats = await Promise.race([pc.getStats(), timeout]);
+    if (!stats) return 'webrtc';
+
+    let pair: { localCandidateId: string; remoteCandidateId: string } | undefined;
+    let nominatedPair: typeof pair;
+    stats.forEach(report => {
+      if (report.type === 'transport' && report.selectedCandidatePairId) {
+        pair = stats.get(report.selectedCandidatePairId) ?? pair;
+      } else if (report.type === 'candidate-pair' && report.nominated && report.state === 'succeeded') {
+        nominatedPair = report;
+      }
+    });
+    const selected = pair ?? nominatedPair;
+    if (!selected) return 'webrtc';
+
+    const local = stats.get(selected.localCandidateId)?.candidateType;
+    const remote = stats.get(selected.remoteCandidateId)?.candidateType;
+    if (local === 'relay' || remote === 'relay') return 'webrtc-relay';
+    return DIRECT_CANDIDATE_TYPES.has(local) && DIRECT_CANDIDATE_TYPES.has(remote)
+      ? 'webrtc-direct'
+      : 'webrtc';
+  } catch {
+    // Route statistics are optional after the peer has authenticated.
+    return 'webrtc';
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export function connectWebRtc(url: string, request: ConnectRequest, abort: AbortSignal) {
   return new Promise<Awaited<ReturnType<typeof loginWebRtc>>>((resolve, reject) => {
@@ -54,19 +96,7 @@ export function connectWebRtc(url: string, request: ConnectRequest, abort: Abort
         clearTimeout(timer);
         signal.close();
       }).then(async connection => {
-        const stats = await pc.getStats();
-        let pair: any;
-        stats.forEach(report => {
-          if (report.type === 'transport' && report.selectedCandidatePairId) pair = stats.get(report.selectedCandidatePairId);
-        });
-        if (!pair) stats.forEach(report => {
-          if (report.type === 'candidate-pair' && report.nominated && report.state === 'succeeded') pair = report;
-        });
-        const local = pair && stats.get(pair.localCandidateId);
-        const remote = pair && stats.get(pair.remoteCandidateId);
-        connection.route = local && remote
-          ? (local.candidateType === 'relay' || remote.candidateType === 'relay' ? 'webrtc-relay' : 'webrtc-direct')
-          : 'webrtc';
+        connection.route = await readWebRtcRoute(pc);
         if (disposed) return;
         settled = true;
         // Session cleanup owns the peer connection as well as the data channel.
