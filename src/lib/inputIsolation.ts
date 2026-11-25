@@ -4,6 +4,15 @@ export interface KeyboardIsolationContext {
   insideChromeInput: boolean;
 }
 
+export function shouldEnableRemotePointerInput(
+  phase: KeyboardIsolationContext['phase'],
+  connectionDialogOpen: boolean,
+  sessionMenuOpen: boolean,
+  mobileLayout: boolean,
+): boolean {
+  return phase === 'live' && !connectionDialogOpen && (!sessionMenuOpen || mobileLayout);
+}
+
 /**
  * Determines whether a keyboard event should be fully captured and prevented
  * from triggering browser-level shortcuts (Ctrl+R/F/P/S/W/+/-, Space scroll,

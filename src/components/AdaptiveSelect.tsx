@@ -56,7 +56,14 @@ export function AdaptiveSelect({ label, value, options, onChange, disabled, test
       if (toolbar && toolbar.top >= anchor.bottom) bounds.bottom = Math.min(bounds.bottom, toolbar.top - 8);
       setPosition(dropdownPosition(anchor, bounds, Math.max(180, anchor.width), list.scrollHeight + 2));
     };
+    const onOutsidePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && !button.contains(target) && !list.contains(target)) {
+        setOpen(false);
+      }
+    };
     update();
+    document.addEventListener('pointerdown', onOutsidePointerDown, true);
     const observer = new ResizeObserver(update);
     observer.observe(button);
     const onScroll = (event: Event) => { if (!list.contains(event.target as Node)) update(); };
@@ -65,6 +72,7 @@ export function AdaptiveSelect({ label, value, options, onChange, disabled, test
     window.visualViewport?.addEventListener('resize', update);
     window.visualViewport?.addEventListener('scroll', update);
     return () => {
+      document.removeEventListener('pointerdown', onOutsidePointerDown, true);
       observer.disconnect();
       window.removeEventListener('resize', update);
       window.removeEventListener('scroll', onScroll, true);
@@ -106,32 +114,30 @@ export function AdaptiveSelect({ label, value, options, onChange, disabled, test
       <span>{selected?.label ?? value}</span><ChevronDown aria-hidden="true" />
     </button>
     {open && !disabled && createPortal(
-      <div className="adaptive-select-layer" data-adaptive-select
-        onPointerDown={event => { event.stopPropagation(); if (event.target === event.currentTarget) { event.preventDefault(); close(); } }}
-        onClick={event => event.stopPropagation()}>
-        <div ref={menu} id={id} className="adaptive-select-menu" data-tone={tone} role="listbox" aria-label={label}
-          aria-activedescendant={`${id}-${active}`} tabIndex={-1} data-side={position?.side}
-          style={position ? { left: position.left, top: position.top, width: position.width, maxHeight: position.maxHeight } : { visibility: 'hidden', width: 180 }}
-          onKeyDown={event => {
-            if (event.key === 'Escape') { event.preventDefault(); close(); return; }
-            if (event.key === 'Tab') { close(); return; }
-            if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(active); return; }
-            const available = options.map((option, index) => option.disabled ? -1 : index).filter(index => index >= 0);
-            const index = available.indexOf(active);
-            let next: number | undefined;
-            if (event.key === 'ArrowDown') next = available[(index + 1) % available.length];
-            if (event.key === 'ArrowUp') next = available[(index - 1 + available.length) % available.length];
-            if (event.key === 'Home') next = available[0];
-            if (event.key === 'End') next = available.at(-1);
-            if (next !== undefined) { event.preventDefault(); setActive(next); }
-          }}>
-          {options.map((option, index) => <div key={option.value} id={`${id}-${index}`} role="option"
-            aria-selected={option.value === value} aria-disabled={option.disabled || undefined}
-            className={index === active ? 'active' : undefined}
-            onPointerMove={event => { if (event.pointerType === 'mouse' && !option.disabled) setActive(index); }} onClick={() => choose(index)}>
-            <span>{option.label}</span>{option.value === value && <Check aria-hidden="true" />}
-          </div>)}
-        </div>
+      <div ref={menu} id={id} className="adaptive-select-menu" data-adaptive-select data-tone={tone} role="listbox" aria-label={label}
+        onPointerDown={event => event.stopPropagation()}
+        onClick={event => event.stopPropagation()}
+        aria-activedescendant={`${id}-${active}`} tabIndex={-1} data-side={position?.side}
+        style={position ? { left: position.left, top: position.top, width: position.width, maxHeight: position.maxHeight } : { visibility: 'hidden', width: 180 }}
+        onKeyDown={event => {
+          if (event.key === 'Escape') { event.preventDefault(); close(); return; }
+          if (event.key === 'Tab') { close(); return; }
+          if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(active); return; }
+          const available = options.map((option, index) => option.disabled ? -1 : index).filter(index => index >= 0);
+          const index = available.indexOf(active);
+          let next: number | undefined;
+          if (event.key === 'ArrowDown') next = available[(index + 1) % available.length];
+          if (event.key === 'ArrowUp') next = available[(index - 1 + available.length) % available.length];
+          if (event.key === 'Home') next = available[0];
+          if (event.key === 'End') next = available.at(-1);
+          if (next !== undefined) { event.preventDefault(); setActive(next); }
+        }}>
+        {options.map((option, index) => <div key={option.value} id={`${id}-${index}`} role="option"
+          aria-selected={option.value === value} aria-disabled={option.disabled || undefined}
+          className={index === active ? 'active' : undefined}
+          onPointerMove={event => { if (event.pointerType === 'mouse' && !option.disabled) setActive(index); }} onClick={() => choose(index)}>
+          <span>{option.label}</span>{option.value === value && <Check aria-hidden="true" />}
+        </div>)}
       </div>, document.body,
     )}
   </>;

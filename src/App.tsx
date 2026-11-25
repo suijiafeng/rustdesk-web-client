@@ -82,6 +82,7 @@ import {
 } from './lib/i18n';
 import {
   isBrowserNavOrAuxButton,
+  shouldEnableRemotePointerInput,
   shouldIsolateKeyboardEvent,
   shouldPreventStageTouch,
   shouldPreventWindowWheel,
@@ -590,7 +591,10 @@ export default function App() {
   );
   viewRef.current = view;
 
-  const remoteInput = phase === 'live' && !menuOpen && !connectDialog;
+  const isMobileViewport =
+    box.w > 0 ? box.w <= 768 : typeof window !== 'undefined' && window.innerWidth <= 768;
+  const isTouchLayout = isCoarseDevice || isMobileViewport;
+  const remoteInput = shouldEnableRemotePointerInput(phase, connectDialog, menuOpen, isTouchLayout);
   const remoteInputRef = useRef(remoteInput);
   remoteInputRef.current = remoteInput;
   const zoomPercent = Math.round(view.scale * 100);
@@ -700,7 +704,7 @@ export default function App() {
     }
     const pos = queuedMoveRef.current;
     queuedMoveRef.current = null;
-    if (pos && !chromeRef.current.menu && !chromeRef.current.dialog) {
+    if (pos && remoteInputRef.current) {
       send({ type: 'mouse', action: 'move', x: pos.x, y: pos.y });
     }
   }, [send]);
@@ -713,7 +717,7 @@ export default function App() {
           moveRafRef.current = null;
           const next = queuedMoveRef.current;
           queuedMoveRef.current = null;
-          if (next && !chromeRef.current.menu && !chromeRef.current.dialog) {
+          if (next && remoteInputRef.current) {
             send({ type: 'mouse', action: 'move', x: next.x, y: next.y });
           }
         });
@@ -2303,6 +2307,7 @@ export default function App() {
       }
 
       if (displayPrefsRef.current.viewOnly) return;
+      if (isTouchLayout && !drag && e.target !== stageRef.current && e.target !== canvasRef.current) return;
 
       const isRemoteDrag = Boolean(drag && drag.pointerId === e.pointerId && drag.mode === 'remote');
       if (isRemoteDrag && drag) {
@@ -2463,17 +2468,18 @@ export default function App() {
         target.closest('[data-testid="connection-panel"]') ||
           target.closest('[data-testid="session-menu"]') ||
           target.closest('[data-testid="softbar"]') ||
-          target.closest('[data-testid="diagnostic-overlay"]'),
+          target.closest('[data-testid="diagnostic-overlay"]') ||
+          target.closest('.remote-tools, .remote-capsule, [data-adaptive-select]'),
       );
     };
 
     const onGesture = (e: Event) => {
-      if (remoteInputRef.current || isStageSurface(e.target)) {
+      if (isStageSurface(e.target)) {
         e.preventDefault();
       }
     };
 
-    const touchPairMetrics = (touches: TouchList) => {
+    const touchPairMetrics = (touches: Touch[]) => {
       const { x: x0, y: y0 } = stageLocalPoint(touches[0].clientX, touches[0].clientY);
       const { x: x1, y: y1 } = stageLocalPoint(touches[1].clientX, touches[1].clientY);
       return {
@@ -2485,9 +2491,8 @@ export default function App() {
 
     // TouchList remains authoritative when a browser omits one of the pointer events.
     // Once three fingers take over, suppress pointer gestures until every finger lifts.
-    const handleNativeScroll = (e: TouchEvent, moving: boolean) => {
-      if (!nativeScrollRef.current && e.touches.length < 3) return false;
-      const points = Array.from(e.touches);
+    const handleNativeScroll = (points: Touch[], moving: boolean) => {
+      if (!nativeScrollRef.current && points.length < 3) return false;
       const x = points.reduce((sum, point) => sum + point.clientX, 0) / points.length;
       const y = points.reduce((sum, point) => sum + point.clientY, 0) / points.length;
       let scroll = nativeScrollRef.current;
@@ -2516,40 +2521,44 @@ export default function App() {
       return true;
     };
 
-    const shouldUseTouchFallback = (touches: TouchList) =>
+    const shouldUseTouchFallback = (touches: Touch[]) =>
       touches.length === 2 && touchGestureRef.current.pointers.size < 2;
 
     const onTouchStart = (e: TouchEvent) => {
+      if (!remoteInputRef.current && e.touches.length > 1) e.preventDefault();
+      if (!Array.from(e.changedTouches).some(touch => isStageSurface(touch.target))) return;
+      const touches = Array.from(e.touches).filter(touch => isStageSurface(touch.target));
       const now = Date.now();
-      nativeTouchInfoRef.current = { count: e.touches.length, updatedAt: now };
+      nativeTouchInfoRef.current = { count: touches.length, updatedAt: now };
       if (zeroTouchTimerRef.current !== null) {
         window.clearTimeout(zeroTouchTimerRef.current);
         zeroTouchTimerRef.current = null;
       }
 
-      if (!remoteInputRef.current && e.touches.length > 1) e.preventDefault();
       if (shouldPreventStageTouch(remoteInputRef.current, isStageSurface(e.target))) {
         e.preventDefault();
-        if (handleNativeScroll(e, false)) return;
-        touchFallbackPinchRef.current = shouldUseTouchFallback(e.touches)
-          ? touchPairMetrics(e.touches)
+        if (handleNativeScroll(touches, false)) return;
+        touchFallbackPinchRef.current = shouldUseTouchFallback(touches)
+          ? touchPairMetrics(touches)
           : null;
       }
     };
 
     const onTouchMove = (e: TouchEvent) => {
-      const now = Date.now();
-      nativeTouchInfoRef.current = { count: e.touches.length, updatedAt: now };
       if (!remoteInputRef.current && e.touches.length > 1) e.preventDefault();
+      if (!Array.from(e.changedTouches).some(touch => isStageSurface(touch.target))) return;
+      const touches = Array.from(e.touches).filter(touch => isStageSurface(touch.target));
+      const now = Date.now();
+      nativeTouchInfoRef.current = { count: touches.length, updatedAt: now };
       if (shouldPreventStageTouch(remoteInputRef.current, isStageSurface(e.target))) {
         e.preventDefault();
-        if (handleNativeScroll(e, true)) return;
-        if (!shouldUseTouchFallback(e.touches)) {
+        if (handleNativeScroll(touches, true)) return;
+        if (!shouldUseTouchFallback(touches)) {
           touchFallbackPinchRef.current = null;
           return;
         }
 
-        const cur = touchPairMetrics(e.touches);
+        const cur = touchPairMetrics(touches);
         const prev = touchFallbackPinchRef.current;
         if (touchGestureRef.current.pointers.size === 1) {
           // A partial pointer sequence must not also become a tap or long press.
@@ -2563,20 +2572,21 @@ export default function App() {
     };
 
     const onTouchEndOrCancel = (e: TouchEvent) => {
+      if (!Array.from(e.changedTouches).some(touch => isStageSurface(touch.target))) return;
+      const touches = Array.from(e.touches).filter(touch => isStageSurface(touch.target));
       const now = Date.now();
-      nativeTouchInfoRef.current = { count: e.touches.length, updatedAt: now };
+      nativeTouchInfoRef.current = { count: touches.length, updatedAt: now };
       if (nativeScrollRef.current) {
-        e.preventDefault();
-        if (e.touches.length === 0) resetAllGesturesRef.current();
-        else handleNativeScroll(e, false);
+        if (touches.length === 0) resetAllGesturesRef.current();
+        else handleNativeScroll(touches, false);
         return;
       }
-      if (e.touches.length < 2) {
+      if (touches.length < 2) {
         touchFallbackPinchRef.current = null;
       }
       // Authoritative zombie-pointer recovery: if OS reports 0 fingers on screen while
       // tracked pointers remain (missed pointerup/pointercancel), sweep back to 'idle' safely.
-      if (e.touches.length === 0 && touchGestureRef.current.pointers.size > 0) {
+      if (touches.length === 0 && touchGestureRef.current.pointers.size > 0) {
         if (zeroTouchTimerRef.current !== null) {
           window.clearTimeout(zeroTouchTimerRef.current);
         }
@@ -2670,9 +2680,6 @@ export default function App() {
     };
   }, []);
 
-  const isMobileViewport =
-    box.w > 0 ? box.w <= 768 : typeof window !== 'undefined' && window.innerWidth <= 768;
-
   const handleToggleTouchMode = () => {
     setRightArmed(false);
     setTouchMode((prev) => {
@@ -2697,7 +2704,6 @@ export default function App() {
     setRightArmed((r) => !r);
   };
 
-  const isTouchLayout = isCoarseDevice || isMobileViewport;
   const showConnectSheet = phase !== 'live' || connectDialog;
   const showSessionMenu = menuOpen && phase === 'live' && !connectDialog;
   const showHandle = phase === 'live' && !connectDialog && !menuOpen && !isTouchLayout;

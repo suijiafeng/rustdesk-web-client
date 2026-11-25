@@ -2,10 +2,20 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   isBrowserNavOrAuxButton,
+  shouldEnableRemotePointerInput,
   shouldIsolateKeyboardEvent,
   shouldPreventStageTouch,
   shouldPreventWindowWheel,
 } from './inputIsolation';
+
+test('keeps remote pointer input active with the mobile toolbar or its panels open', () => {
+  assert.equal(shouldEnableRemotePointerInput('live', false, true, true), true);
+  assert.equal(shouldEnableRemotePointerInput('live', false, false, true), true);
+  assert.equal(shouldEnableRemotePointerInput('live', false, false, false), true);
+  assert.equal(shouldEnableRemotePointerInput('live', false, true, false), false);
+  assert.equal(shouldEnableRemotePointerInput('live', true, true, true), false);
+  assert.equal(shouldEnableRemotePointerInput('connecting', false, true, true), false);
+});
 
 test('isolates all keyboard events only during active live remote control outside chrome', () => {
   assert.equal(
