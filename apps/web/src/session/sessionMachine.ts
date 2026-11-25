@@ -8,6 +8,7 @@ import type {
   QualityLevel,
   ServerMessage,
 } from '@rustdesk-web/shared';
+import { chooseDisplay } from '../lib/displays.ts';
 
 export const CONNECT_TIMEOUT_MS = 45_000;
 
@@ -24,6 +25,9 @@ export interface SessionSnapshot {
   cursorShape: CursorShape | null;
   cursorEmbedded: boolean;
   displayOrigin: { x: number; y: number };
+  currentDisplay: number;
+  focusedDisplay: number | null;
+  resolutions: { display: number; sizes: { width: number; height: number }[] } | null;
 }
 
 export const initialSession: SessionSnapshot = {
@@ -37,6 +41,9 @@ export const initialSession: SessionSnapshot = {
   cursorShape: null,
   cursorEmbedded: false,
   displayOrigin: { x: 0, y: 0 },
+  currentDisplay: 0,
+  focusedDisplay: null,
+  resolutions: null,
 };
 
 export interface ConnectFields {
@@ -184,20 +191,39 @@ function applyServerMessage(state: SessionSnapshot, message: ServerMessage): Ses
       }
       return state;
     case 'peer': {
-      const chosen = message.displays[message.currentDisplay] ?? message.displays[0];
+      const choice = chooseDisplay(message.displays, message.currentDisplay);
       return {
         ...state,
-        peer: message,
-        displayOrigin: { x: chosen?.x ?? 0, y: chosen?.y ?? 0 },
-        cursorEmbedded: Boolean(chosen?.cursorEmbedded),
+        peer: { ...message, currentDisplay: choice.index },
+        currentDisplay: choice.index,
+        displayOrigin: choice.origin,
+        cursorEmbedded: Boolean(choice.display?.cursorEmbedded),
       };
     }
-    case 'display':
+    case 'display': {
+      const displays = (state.peer?.displays ?? []).map((item, index) => index === message.display
+        ? {
+            ...item,
+            x: message.x ?? item.x,
+            y: message.y ?? item.y,
+            width: message.width > 0 ? message.width : item.width,
+            height: message.height > 0 ? message.height : item.height,
+            name: message.name || item.name,
+            cursorEmbedded: Boolean(message.cursorEmbedded),
+          }
+        : item);
       return {
         ...state,
+        currentDisplay: message.display,
         displayOrigin: { x: message.x ?? 0, y: message.y ?? 0 },
         cursorEmbedded: Boolean(message.cursorEmbedded),
+        peer: state.peer ? { ...state.peer, currentDisplay: message.display, displays } : state.peer,
       };
+    }
+    case 'resolutions':
+      return { ...state, resolutions: { display: message.display, sizes: message.sizes } };
+    case 'focusedDisplay':
+      return { ...state, focusedDisplay: message.display };
     case 'cursor': {
       const x = message.x - state.displayOrigin.x;
       const y = message.y - state.displayOrigin.y;

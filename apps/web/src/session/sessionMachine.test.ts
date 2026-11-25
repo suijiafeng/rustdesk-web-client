@@ -164,6 +164,44 @@ test('remote cursor position is relative to the current display and hidden outsi
   assert.equal(shaped.cursorShape?.hotX, 1);
 });
 
+test('hot-plug and display switch keep a valid monitor, including a negative origin', () => {
+  const peerWithTwo = reduceSession(initialSession, {
+    type: 'server',
+    message: {
+      ...peer,
+      currentDisplay: 1,
+      displays: [
+        { index: 0, name: 'left', x: -1920, y: 0, width: 1920, height: 1080, online: true },
+        { index: 1, name: 'right', x: 0, y: 0, width: 1280, height: 720, online: true },
+      ],
+    },
+  });
+  assert.equal(peerWithTwo.currentDisplay, 1);
+  assert.deepEqual(peerWithTwo.displayOrigin, { x: 0, y: 0 });
+  const switched = reduceSession(peerWithTwo, {
+    type: 'server',
+    message: { type: 'display', display: 0, width: 1920, height: 1080, x: -1920, y: -8 },
+  });
+  assert.equal(switched.currentDisplay, 0);
+  assert.deepEqual(switched.displayOrigin, { x: -1920, y: -8 });
+  const unplugged = reduceSession(switched, {
+    type: 'server',
+    message: {
+      ...peer,
+      currentDisplay: 1,
+      displays: [{ index: 0, name: 'only', x: 0, y: 0, width: 800, height: 600, online: true }],
+    },
+  });
+  assert.equal(unplugged.currentDisplay, 0);
+  const focused = reduceSession(unplugged, { type: 'server', message: { type: 'focusedDisplay', display: 0 } });
+  assert.equal(focused.focusedDisplay, 0);
+  const sizes = reduceSession(focused, {
+    type: 'server',
+    message: { type: 'resolutions', display: 0, sizes: [{ width: 800, height: 600 }] },
+  });
+  assert.equal(sizes.resolutions?.sizes.length, 1);
+});
+
 test('disconnect clears the session and a stale generation is ignored', () => {
   const live = reduceSession(
     reduceSession(initialSession, { type: 'connect-started' }),
