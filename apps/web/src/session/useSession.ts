@@ -1,9 +1,11 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { codecName, decodeRdv1Frame } from '@rustdesk-web/protocol';
 import type { ServerMessage } from '@rustdesk-web/shared';
 import type { ConnectRequest } from '../components/RustDeskShell.tsx';
 import { probeCodecs, webCodecsStatus } from '../lib/codecs.ts';
+import { RemoteDecoder } from '../lib/decoder.ts';
 import { filterCodecSupport, resolveQualityLevel, resolveTargetFps, type DisplayPrefs } from '../lib/displayPrefs.ts';
 import {
   CONNECT_TIMEOUT_MS,
@@ -36,8 +38,12 @@ interface UseSessionOptions {
 
 export function useSession({ readInput, onPasswordRejected }: UseSessionOptions) {
   const [session, setSession] = useState<SessionSnapshot>(initialSession);
+  const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
+  const [decoderError, setDecoderError] = useState('');
   const generation = useRef(0);
   const socketRef = useRef<WebSocket | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const decoderRef = useRef<RemoteDecoder | null>(null);
   const phaseRef = useRef(session.phase);
   phaseRef.current = session.phase;
 
@@ -50,6 +56,28 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
       return next;
     });
   }, [onPasswordRejected]);
+
+  const releaseDecoder = useCallback(() => {
+    decoderRef.current?.close();
+    decoderRef.current = null;
+    setFrameSize({ width: 0, height: 0 });
+  }, []);
+
+  const ensureDecoder = useCallback(() => {
+    if (!decoderRef.current) {
+      decoderRef.current = new RemoteDecoder({
+        onOutput: (width, height) => setFrameSize({ width, height }),
+        onError: (message) => setDecoderError(message),
+        onNeedRefresh: () => {
+          const socket = socketRef.current;
+          if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: 'refresh' }));
+          }
+        },
+      });
+    }
+    return decoderRef.current;
+  }, []);
 
   const closeSocket = useCallback((socket: WebSocket | null, notify: boolean) => {
     if (!socket) return;
@@ -67,8 +95,10 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     const eventGeneration = ++generation.current;
     closeSocket(socketRef.current, true);
     socketRef.current = null;
+    releaseDecoder();
+    setDecoderError('');
     apply(eventGeneration, { type: 'disconnect' });
-  }, [apply, closeSocket]);
+  }, [apply, closeSocket, releaseDecoder]);
 
   const connect = useCallback(async (request?: ConnectRequest) => {
     const input = readInput();
@@ -97,6 +127,8 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     }
 
     const eventGeneration = ++generation.current;
+    releaseDecoder();
+    setDecoderError('');
     apply(eventGeneration, { type: 'connect-started' });
     const rawSupport = await probeCodecs();
     if (!isCurrentGeneration(generation.current, eventGeneration)) return;
@@ -135,6 +167,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
       if (!isCurrentGeneration(generation.current, eventGeneration)) return;
       if (phaseRef.current !== 'connecting') return;
       apply(eventGeneration, { type: 'timeout' });
+      releaseDecoder();
       closeSocket(socket, false);
     }, CONNECT_TIMEOUT_MS);
 
@@ -145,6 +178,25 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     };
     socket.onmessage = (ev) => {
       if (!isCurrentGeneration(generation.current, eventGeneration) || socketRef.current !== socket) return;
+      if (ev.data instanceof ArrayBuffer) {
+        const frame = decodeRdv1Frame(new Uint8Array(ev.data));
+        if (!frame) return;
+        ensureDecoder().push(
+          {
+            codec: frame.codec,
+            codecName: codecName(frame.codec),
+            key: frame.key,
+            display: frame.display,
+            width: frame.width,
+            height: frame.height,
+            pts: Number(frame.pts),
+            gatewayUnixMs: Number(frame.gatewayUnixMs),
+            data: frame.data,
+          },
+          canvasRef.current,
+        );
+        return;
+      }
       if (typeof ev.data !== 'string') return;
       let parsed: ServerMessage;
       try {
@@ -164,15 +216,18 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
       if (!isCurrentGeneration(generation.current, eventGeneration) || socketRef.current !== socket) return;
       finishTimer();
       socketRef.current = null;
+      releaseDecoder();
       apply(eventGeneration, { type: 'socket-close' });
     };
-  }, [apply, closeSocket, readInput]);
+  }, [apply, closeSocket, ensureDecoder, readInput, releaseDecoder]);
 
   useEffect(() => () => {
     generation.current += 1;
     closeSocket(socketRef.current, true);
     socketRef.current = null;
+    decoderRef.current?.close();
+    decoderRef.current = null;
   }, [closeSocket]);
 
-  return { session, connect, disconnect };
+  return { session, connect, disconnect, canvasRef, frameSize, decoderError };
 }

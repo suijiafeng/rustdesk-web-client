@@ -1,6 +1,7 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { RemoteScreen } from './components/RemoteScreen.tsx';
 import { RustDeskShell, type ConnectRequest, type ConnectionField, type ConnectionMode } from './components/RustDeskShell.tsx';
 import {
   loadSavedDevices,
@@ -181,7 +182,7 @@ export function App() {
     setSavedPasswords((saved) => removeSavedPassword(saved, key));
     setPassword('');
   }, []);
-  const { session, connect, disconnect } = useSession({
+  const { session, connect, disconnect, canvasRef, frameSize, decoderError } = useSession({
     readInput: () => formRef.current,
     onPasswordRejected: rejectSavedPassword,
   });
@@ -194,6 +195,17 @@ export function App() {
     }
     void connect(request);
   }, [connect]);
+
+  if (session.phase === 'live') {
+    return (
+      <RemoteScreen
+        canvasRef={canvasRef}
+        frameWidth={frameSize.width}
+        frameHeight={frameSize.height}
+        onDisconnect={disconnect}
+      />
+    );
+  }
 
   return (
     <RustDeskShell
@@ -228,7 +240,7 @@ export function App() {
       gatewayToken={gatewayToken}
       authRequired={session.authRequired}
       detail={session.detail}
-      decoderError={session.phase === 'error' ? session.errorMessage : ''}
+      decoderError={session.phase === 'error' ? session.errorMessage : decoderError}
       touchMode={!isDesktop}
       diagnosticsOpen={false}
       devices={devices}
