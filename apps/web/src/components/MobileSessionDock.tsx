@@ -27,11 +27,9 @@ import {
 import { t, translateAudioIssue, type I18nKey, type Locale } from '../lib/i18n.ts';
 import { classifyRemoteOs, remoteFeatures } from '../lib/platform.ts';
 import { ResolutionSelect } from './ResolutionSelect.tsx';
+import { SessionDisplayControls, type SessionDisplayControlsProps } from './SessionDisplayControls.tsx';
 
 type DockPanel = 'toolbar' | 'display' | 'gestures' | 'actions';
-
-const QUALITIES = ['low', 'balanced', 'best'] as const;
-const qualityKey = { low: 'qualityLow', balanced: 'qualityBalanced', best: 'qualityBest' } as const;
 
 const gestureRows = {
   touch: [
@@ -53,7 +51,7 @@ const gestureRows = {
   ],
 } as const satisfies Record<string, readonly (readonly [I18nKey, I18nKey])[]>;
 
-interface MobileSessionDockProps {
+interface MobileSessionDockProps extends Pick<SessionDisplayControlsProps, 'targetFps' | 'codec' | 'codecSupport' | 'onFps' | 'onCodec'> {
   locale: Locale;
   touchMode: boolean;
   displays: readonly DisplayInfo[];
@@ -99,6 +97,11 @@ export function MobileSessionDock({
   displays,
   currentDisplay,
   quality,
+  targetFps,
+  codec,
+  codecSupport,
+  onFps,
+  onCodec,
   audioEnabled,
   audioIssue,
   volume,
@@ -176,8 +179,10 @@ export function MobileSessionDock({
                 {display.name || `${label('displayFallback')} ${index + 1}`}
               </button>
             ))}
+            <SessionDisplayControls locale={locale} quality={quality} targetFps={targetFps} codec={codec}
+              codecSupport={codecSupport} onQuality={onQuality} onFps={onFps} onCodec={onCodec} />
             {features.resolutionChange && resolutions.length > 0 ? (
-              <label className="tool-row">
+              <div className="tool-row">
                 <span>{label('remoteResolution')}</span>
                 <ResolutionSelect
                   label={label('remoteResolution')}
@@ -187,7 +192,7 @@ export function MobileSessionDock({
                   disabled={viewOnly}
                   onSelect={onResolution}
                 />
-              </label>
+              </div>
             ) : null}
           </div>
         ) : null}
@@ -207,14 +212,6 @@ export function MobileSessionDock({
         {active === 'actions' ? (
           <>
             <div className="tool-group">
-              <div className="tool-row tool-heading"><SlidersHorizontal size={18} /><span>{label('sessionQuality')}</span></div>
-              <div className="tool-options mode-options">
-                {QUALITIES.map((level) => (
-                  <button key={level} type="button" aria-pressed={quality === level} onClick={() => onQuality(level)}>
-                    {label(qualityKey[level])}
-                  </button>
-                ))}
-              </div>
               <label className="tool-row">
                 <Volume2 size={18} />
                 <span>{audioEnabled ? label('audioOn') : label('audioOff')}</span>

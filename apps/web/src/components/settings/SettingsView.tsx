@@ -16,6 +16,7 @@ import type { DisplayPrefs, ImageQualityPreset, PreferredCodec } from '../../lib
 import { t, type Locale, type LocalePreference } from '../../lib/i18n';
 import type { ThemePreference } from '../../lib/theme';
 import { IdServerModal, type ServerField } from './IdServerModal';
+import { AdaptiveSelect } from '../AdaptiveSelect.tsx';
 
 export type SettingsSection = 'general' | 'network' | 'display' | 'about';
 
@@ -246,101 +247,35 @@ function DisplaySection({
     <div className="flex flex-col gap-4">
       <section className="rd-settings-card">
         <h2 className="rd-settings-card-title">{t(locale, 'defaultViewStyle')}</h2>
-        <div
-          className="flex flex-col gap-1"
-          role="radiogroup"
-          aria-label={t(locale, 'defaultViewStyle')}
-        >
-          <button
-            type="button"
-            role="radio"
-            aria-checked={displayPrefs.viewStyle === 'original'}
-            className={`rd-radio-row${displayPrefs.viewStyle === 'original' ? ' active' : ''}`}
-            data-testid="settings-view-original"
-            onClick={() => onUpdateDisplayPrefs({ viewStyle: 'original' })}
-          >
-            <span className="rd-radio-dot" aria-hidden="true" />
-            <span>{t(locale, 'viewStyleOriginal')}</span>
-          </button>
-          <button
-            type="button"
-            role="radio"
-            aria-checked={displayPrefs.viewStyle === 'fit'}
-            className={`rd-radio-row${displayPrefs.viewStyle === 'fit' ? ' active' : ''}`}
-            data-testid="settings-view-fit"
-            onClick={() => onUpdateDisplayPrefs({ viewStyle: 'fit' })}
-          >
-            <span className="rd-radio-dot" aria-hidden="true" />
-            <span>{t(locale, 'viewStyleFit')}</span>
-          </button>
-          <button
-            type="button"
-            role="radio"
-            aria-checked={displayPrefs.viewStyle === 'stretch'}
-            className={`rd-radio-row${displayPrefs.viewStyle === 'stretch' ? ' active' : ''}`}
-            data-testid="settings-view-stretch"
-            onClick={() => onUpdateDisplayPrefs({ viewStyle: 'stretch' })}
-          >
-            <span className="rd-radio-dot" aria-hidden="true" />
-            <span>{t(locale, 'viewStyleStretch')}</span>
-          </button>
-        </div>
+        <AdaptiveSelect
+          label={t(locale, 'defaultViewStyle')}
+          testId="settings-view"
+          value={displayPrefs.viewStyle}
+          options={[{ value: 'original', label: t(locale, 'viewStyleOriginal') }, { value: 'fit', label: t(locale, 'viewStyleFit') }, { value: 'stretch', label: t(locale, 'viewStyleStretch') }]}
+          onChange={(value) => onUpdateDisplayPrefs({ viewStyle: value as DisplayPrefs['viewStyle'] })}
+        />
       </section>
 
       <section className="rd-settings-card">
         <h2 className="rd-settings-card-title">{t(locale, 'defaultScrollStyle')}</h2>
-        <div
-          className="flex flex-col gap-1"
-          role="radiogroup"
-          aria-label={t(locale, 'defaultScrollStyle')}
-        >
-          <button
-            type="button"
-            role="radio"
-            aria-checked={displayPrefs.scrollStyle === 'auto'}
-            className={`rd-radio-row${displayPrefs.scrollStyle === 'auto' ? ' active' : ''}`}
-            data-testid="settings-scroll-auto"
-            onClick={() => onUpdateDisplayPrefs({ scrollStyle: 'auto' })}
-          >
-            <span className="rd-radio-dot" aria-hidden="true" />
-            <span>{t(locale, 'scrollStyleAuto')}</span>
-          </button>
-          <button
-            type="button"
-            role="radio"
-            aria-checked={displayPrefs.scrollStyle === 'scrollbar'}
-            className={`rd-radio-row${displayPrefs.scrollStyle === 'scrollbar' ? ' active' : ''}`}
-            data-testid="settings-scroll-scrollbar"
-            onClick={() => onUpdateDisplayPrefs({ scrollStyle: 'scrollbar' })}
-          >
-            <span className="rd-radio-dot" aria-hidden="true" />
-            <span>{t(locale, 'scrollStyleBar')}</span>
-          </button>
-        </div>
+        <AdaptiveSelect
+          label={t(locale, 'defaultScrollStyle')}
+          testId="settings-scroll"
+          value={displayPrefs.scrollStyle}
+          options={[{ value: 'auto', label: t(locale, 'scrollStyleAuto') }, { value: 'scrollbar', label: t(locale, 'scrollStyleBar') }]}
+          onChange={(value) => onUpdateDisplayPrefs({ scrollStyle: value as DisplayPrefs['scrollStyle'] })}
+        />
       </section>
 
       <section className="rd-settings-card">
         <h2 className="rd-settings-card-title">{t(locale, 'defaultImageQuality')}</h2>
-        <div
-          className="flex flex-col gap-1"
-          role="radiogroup"
-          aria-label={t(locale, 'defaultImageQuality')}
-        >
-          {QUALITY_OPTIONS.map((opt) => (
-            <button
-              key={opt.id}
-              type="button"
-              role="radio"
-              aria-checked={displayPrefs.qualityPreset === opt.id}
-              className={`rd-radio-row${displayPrefs.qualityPreset === opt.id ? ' active' : ''}`}
-              data-testid={`settings-quality-${opt.id}`}
-              onClick={() => onUpdateDisplayPrefs({ qualityPreset: opt.id })}
-            >
-              <span className="rd-radio-dot" aria-hidden="true" />
-              <span>{t(locale, opt.key)}</span>
-            </button>
-          ))}
-        </div>
+        <AdaptiveSelect
+          label={t(locale, 'defaultImageQuality')}
+          testId="settings-quality"
+          value={displayPrefs.qualityPreset}
+          options={QUALITY_OPTIONS.map((option) => ({ value: option.id, label: t(locale, option.key) }))}
+          onChange={(value) => onUpdateDisplayPrefs({ qualityPreset: value as DisplayPrefs['qualityPreset'] })}
+        />
 
         {displayPrefs.qualityPreset === 'custom' && (
           <div className="rd-slider-group" data-testid="settings-custom-quality-controls">
@@ -381,26 +316,13 @@ function DisplaySection({
 
       <section className="rd-settings-card">
         <h2 className="rd-settings-card-title">{t(locale, 'defaultCodec')}</h2>
-        <div
-          className="flex flex-col gap-1"
-          role="radiogroup"
-          aria-label={t(locale, 'defaultCodec')}
-        >
-          {CODEC_OPTIONS.map((opt) => (
-            <button
-              key={opt.id}
-              type="button"
-              role="radio"
-              aria-checked={displayPrefs.codec === opt.id}
-              className={`rd-radio-row${displayPrefs.codec === opt.id ? ' active' : ''}`}
-              data-testid={`settings-codec-${opt.id}`}
-              onClick={() => onUpdateDisplayPrefs({ codec: opt.id })}
-            >
-              <span className="rd-radio-dot" aria-hidden="true" />
-              <span>{opt.label ?? t(locale, 'codecAuto')}</span>
-            </button>
-          ))}
-        </div>
+        <AdaptiveSelect
+          label={t(locale, 'defaultCodec')}
+          testId="settings-codec"
+          value={displayPrefs.codec}
+          options={CODEC_OPTIONS.map((option) => ({ value: option.id, label: option.label ?? t(locale, 'codecAuto') }))}
+          onChange={(value) => onUpdateDisplayPrefs({ codec: value as DisplayPrefs['codec'] })}
+        />
       </section>
 
       <section className="rd-settings-card">

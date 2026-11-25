@@ -210,6 +210,7 @@ export function resolvePreferCodecEnum(
   if (codecs.vp8) return PreferCodecValues.VP8;
   if (codecs.vp9) return PreferCodecValues.VP9;
   if (codecs.h265) return PreferCodecValues.H265;
+  if (codecs.av1) return PreferCodecValues.AV1;
   return PreferCodecValues.Auto;
 }
 
@@ -218,13 +219,13 @@ export function buildSupportedDecoding(
   preferCodec?: string,
 ): Record<string, unknown> {
   const pref = (preferCodec ?? 'auto').toLowerCase();
-  const explicitAv1 = pref === 'av1' && codecs.av1;
+  const allowAv1 = codecs.av1 && (pref === 'av1' || !(codecs.vp8 || codecs.vp9 || codecs.h264 || codecs.h265));
 
   return {
     ability_vp8: codecs.vp8 ? 1 : 0,
     ability_vp9: codecs.vp9 ? 1 : 0,
-    // Never advertise AV1 in auto mode so hosts without GPU AV1 do not fall back to 3-7fps software AV1
-    ability_av1: explicitAv1 ? 1 : 0,
+    // Avoid software AV1 in auto mode when another decoder is available.
+    ability_av1: allowAv1 ? 1 : 0,
     ability_h264: codecs.h264 ? 1 : 0,
     ability_h265: codecs.h265 ? 1 : 0,
     prefer: resolvePreferCodecEnum(codecs, pref),

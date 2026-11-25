@@ -14,6 +14,7 @@ export interface DisplayPrefs {
   customBitrate: number;
   customFps: number;
   codec: PreferredCodec;
+  touchMode: boolean;
   viewOnly: boolean;
   showRemoteCursor: boolean;
   followWindow: boolean;
@@ -35,6 +36,7 @@ export const DEFAULT_DISPLAY_PREFS: DisplayPrefs = {
   customBitrate: 50,
   customFps: 30,
   codec: 'auto',
+  touchMode: true,
   viewOnly: false,
   showRemoteCursor: true,
   followWindow: false,
@@ -84,6 +86,7 @@ export function normalizeDisplayPrefs(raw: unknown): DisplayPrefs {
     customBitrate: clampInt(obj.customBitrate, 10, 200, DEFAULT_DISPLAY_PREFS.customBitrate),
     customFps: clampInt(obj.customFps, 10, 60, DEFAULT_DISPLAY_PREFS.customFps),
     codec,
+    touchMode: obj.touchMode !== false,
     viewOnly: Boolean(obj.viewOnly),
     followWindow: obj.followWindow === true,
     enlargeCursor: obj.enlargeCursor === true,

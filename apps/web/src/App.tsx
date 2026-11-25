@@ -97,6 +97,7 @@ export function App() {
   const [localePreference, setLocalePreference] = useState<LocalePreference>(() => readStartupLocale().preference);
   const [locale, setLocale] = useState<Locale>(() => readStartupLocale().locale);
   const [theme, setTheme] = useState<ThemePreference>(() => loadSavedTheme());
+  const [sessionFps, setSessionFps] = useState<number | null>(null);
   const [displayPrefs, setDisplayPrefs] = useState<DisplayPrefs>(() => loadDisplayPrefs());
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width: 768px)').matches);
@@ -210,7 +211,7 @@ export function App() {
     setPassword('');
   }, []);
   const {
-    session, connect, disconnect, sendInput, setHeldRelease, setArmedKeys, canvasRef, frameSize, decoderError,
+    session, connect, disconnect, sendInput, setHeldRelease, setArmedKeys, canvasRef, frameSize, codecSupport, decoderError,
     stats, quality: linkQuality, audio, startAudio, stopAudio, setAudioVolume,
     clipboardFallback, sendClipboard, pasteLocalClipboard, dismissClipboard,     privacy, togglePrivacy, restartNotice, requestRestart,     reconnectAttempt, cancelReconnect,     chatLines, sendChat, twoFactor, submitTwoFactor,
   } = useSession({
@@ -237,6 +238,10 @@ export function App() {
       sendInput([{ type: 'switchDisplay', display: session.focusedDisplay ?? 0 }]);
     }
   }, [displayPrefs.followWindow, sendInput, session.currentDisplay, session.focusedDisplay, session.peer, session.phase]);
+
+  useEffect(() => {
+    if (session.phase !== 'live') setSessionFps(null);
+  }, [session.phase]);
 
   const twoFactorForm = twoFactor ? (
     <form
@@ -273,6 +278,7 @@ export function App() {
 
   if (session.phase === 'live') {
     const toolbarQuality = resolveQualityLevel(displayPrefs.qualityPreset, displayPrefs.customBitrate);
+    const targetFps = sessionFps ?? resolveTargetFps(displayPrefs.qualityPreset, displayPrefs.customFps);
     return (
       <>
       {reconnectBanner}
@@ -298,15 +304,30 @@ export function App() {
         displays={session.peer?.displays ?? []}
         currentDisplay={session.currentDisplay}
         quality={toolbarQuality}
+        targetFps={targetFps}
+        codec={displayPrefs.codec}
+        codecSupport={codecSupport}
+        onFps={(fps) => {
+          if (sendInput([qualityCommand(toolbarQuality, fps, displayPrefs.codec)])) setSessionFps(fps);
+        }}
+        onCodec={(codec) => {
+          if (!sendInput([qualityCommand(toolbarQuality, targetFps, codec)])) return;
+          setDisplayPrefs((current) => {
+            const next = { ...current, codec };
+            persistDisplayPrefs(next);
+            return next;
+          });
+        }}
         privacyAllowed={remotePrivacyAllowed(session.peer)}
         onSwitchDisplay={(display) => sendInput([{ type: 'switchDisplay', display }])}
         onQuality={(quality) => {
+          const fps = sessionFps ?? resolveTargetFps(quality, displayPrefs.customFps);
+          if (!sendInput([qualityCommand(quality, fps, displayPrefs.codec)])) return;
           setDisplayPrefs((current) => {
             const next = { ...current, qualityPreset: quality };
             persistDisplayPrefs(next);
             return next;
           });
-          sendInput([qualityCommand(quality, resolveTargetFps(quality, displayPrefs.customFps))]);
         }}
         onToggleViewOnly={() => {
           setDisplayPrefs((current) => {
@@ -361,6 +382,7 @@ export function App() {
           link.click();
         }}
         viewStyle={displayPrefs.viewStyle}
+        defaultTouchMode={displayPrefs.touchMode}
         scrollStyle={displayPrefs.scrollStyle}
         followRemoteCursor={displayPrefs.followRemoteCursor}
         autoKeyboard={displayPrefs.autoKeyboard}
@@ -412,7 +434,7 @@ export function App() {
       authRequired={session.authRequired}
       detail={session.detail}
       decoderError={session.phase === 'error' ? session.errorMessage : decoderError}
-      touchMode={!isDesktop}
+      touchMode={displayPrefs.touchMode}
       diagnosticsOpen={diagnosticsOpen}
       devices={devices}
       savedPasswords={savedPasswords}
@@ -446,7 +468,11 @@ export function App() {
       onToggleFavorite={(key) => setDevices((current) => toggleFavoriteDevice(current, key))}
       onRemoveDevice={(key) => setDevices((current) => removeDevice(current, key))}
       onRenameDevice={(key, alias) => setDevices((current) => renameDevice(current, key, alias))}
-      onToggleTouchMode={() => undefined}
+      onToggleTouchMode={() => setDisplayPrefs((current) => {
+        const next = { ...current, touchMode: !current.touchMode };
+        persistDisplayPrefs(next);
+        return next;
+      })}
       onToggleDiagnostics={() => setDiagnosticsOpen((current) => !current)}
       onConnect={onConnect}
       onDisconnect={disconnect}

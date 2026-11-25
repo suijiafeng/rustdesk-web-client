@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { codecName, decodeRdv1Frame } from '@rustdesk-web/protocol';
-import type { ClientMessage, ServerMessage } from '@rustdesk-web/shared';
+import type { ClientMessage, CodecSupport, ServerMessage } from '@rustdesk-web/shared';
 import type { ConnectRequest } from '../components/RustDeskShell.tsx';
 import { probeCodecs, webCodecsStatus } from '../lib/codecs.ts';
 import { RemoteDecoder } from '../lib/decoder.ts';
@@ -19,7 +19,7 @@ import { sessionEndLock } from '../lib/displays.ts';
 import { textMessages } from '../lib/keyboard.ts';
 import { classifyBrowser, clipboardDelivery, reconnectDelayMs, TWO_FACTOR_TIMEOUT_MS, twoFactorStatus, validateChatText, validateClipboardText, validateTwoFactorCode, type ClipboardActionResult } from '../lib/platform.ts';
 import { RemoteAudio, clampVolume, webAudioStatus } from '../lib/remoteAudio.ts';
-import { filterCodecSupport, resolveQualityLevel, resolveTargetFps, type DisplayPrefs } from '../lib/displayPrefs.ts';
+import { resolveQualityLevel, resolveTargetFps, type DisplayPrefs } from '../lib/displayPrefs.ts';
 import {
   CONNECT_TIMEOUT_MS,
   buildConnectMessage,
@@ -79,6 +79,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
   const decoderRef = useRef<RemoteDecoder | null>(null);
   const phaseRef = useRef(session.phase);
   const sessionRef = useRef(session);
+  const [codecSupport, setCodecSupport] = useState<CodecSupport | null>(null);
   const [clipboardFallback, setClipboardFallback] = useState<string | null>(null);
   const [privacy, setPrivacy] = useState({ enabled: false, pending: false, failed: false });
   const [restartNotice, setRestartNotice] = useState<null | 'requested' | 'waiting' | 'failed' | 'ended'>(null);
@@ -306,7 +307,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     }
 
     closeSocket(socketRef.current, false);
-    const support = filterCodecSupport(rawSupport, input.displayPrefs.codec);
+    setCodecSupport(rawSupport);
     const message = buildConnectMessage({
       mode,
       peerId,
@@ -318,7 +319,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
       port: Number(portText) || 21118,
       password: request?.password ?? input.password,
       token: input.token,
-      codecs: support,
+      codecs: rawSupport,
       quality: resolveQualityLevel(input.displayPrefs.qualityPreset, input.displayPrefs.customBitrate),
       fps: resolveTargetFps(input.displayPrefs.qualityPreset, input.displayPrefs.customFps),
       codec: input.displayPrefs.codec,
@@ -657,6 +658,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     setArmedKeys,
     canvasRef,
     frameSize,
+    codecSupport,
     decoderError,
     stats,
     quality,

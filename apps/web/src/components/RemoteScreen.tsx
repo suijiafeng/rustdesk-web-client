@@ -27,6 +27,7 @@ import { DiagnosticsPanel } from './DiagnosticsPanel.tsx';
 import { offsetPointerMessages } from '../lib/displays.ts';
 import { isImeEvent } from '../lib/keys.ts';
 import { SessionToolbar } from './SessionToolbar.tsx';
+import type { SessionDisplayControlsProps } from './SessionDisplayControls.tsx';
 import { ClipboardPanel } from './ClipboardPanel.tsx';
 import { ChatPanel } from './ChatPanel.tsx';
 import {
@@ -51,7 +52,7 @@ import {
   type MouseButton,
 } from '../lib/mouseInput.ts';
 
-interface RemoteScreenProps {
+interface RemoteScreenProps extends Pick<SessionDisplayControlsProps, 'targetFps' | 'codec' | 'codecSupport' | 'onFps' | 'onCodec'> {
   canvasRef: RefObject<HTMLCanvasElement | null>;
   frameWidth: number;
   frameHeight: number;
@@ -114,6 +115,7 @@ interface RemoteScreenProps {
   chatLines: readonly { direction: 'in' | 'out'; text: string }[];
   onSendChat: (text: string) => void;
   viewStyle: DefaultViewStyle;
+  defaultTouchMode: boolean;
   scrollStyle: ScrollStyle;
   followRemoteCursor: boolean;
   autoKeyboard: boolean;
@@ -147,6 +149,11 @@ export function RemoteScreen({
   displays,
   currentDisplay,
   quality,
+  targetFps,
+  codec,
+  codecSupport,
+  onFps,
+  onCodec,
   privacyAllowed,
   onSwitchDisplay,
   onQuality,
@@ -182,6 +189,7 @@ export function RemoteScreen({
   chatLines,
   onSendChat,
   viewStyle,
+  defaultTouchMode,
   scrollStyle,
   followRemoteCursor,
   autoKeyboard,
@@ -203,7 +211,7 @@ export function RemoteScreen({
   const [viewMode, setViewMode] = useState<ViewMode>(viewStyle === 'stretch' ? 'stretch' : viewStyle === 'original' ? 'original' : 'fit');
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ panX: 0, panY: 0 });
-  const [touchMode, setTouchMode] = useState(true);
+  const [touchMode, setTouchMode] = useState(defaultTouchMode);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [clipboardOpen, setClipboardOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
@@ -424,7 +432,7 @@ export function RemoteScreen({
       if (!(target instanceof Element)) return false;
       const capture = captureRef.current;
       if (capture && (target === capture || capture.contains(target))) return false;
-      return Boolean(target.closest('input, textarea, select, dialog[open], .rd-clipboard-panel, [contenteditable="true"]'));
+      return Boolean(target.closest('input, textarea, select, dialog[open], .rd-clipboard-panel, [data-adaptive-select], [contenteditable="true"]'));
     };
     const onKeyDown = (event: KeyboardEvent) => {
       const isolate = shouldIsolateKeyboardEvent({
@@ -837,6 +845,11 @@ export function RemoteScreen({
           displays={displays}
           currentDisplay={currentDisplay}
           quality={quality}
+          targetFps={targetFps}
+          codec={codec}
+          codecSupport={codecSupport}
+          onFps={onFps}
+          onCodec={onCodec}
           audioEnabled={audioEnabled}
           audioIssue={audioIssue}
           volume={volume}
@@ -886,6 +899,11 @@ export function RemoteScreen({
           displays={displays}
           currentDisplay={currentDisplay}
           quality={quality}
+          targetFps={targetFps}
+          codec={codec}
+          codecSupport={codecSupport}
+          onFps={onFps}
+          onCodec={onCodec}
           viewOnly={viewOnly}
           privacyAllowed={privacyAllowed}
           onSwitchDisplay={onSwitchDisplay}

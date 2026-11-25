@@ -1,12 +1,13 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
 import type { DisplayInfo, QualityLevel } from '@rustdesk-web/shared';
-import { Camera, Clipboard, Eye, LockKeyhole, LogOut, Maximize2, MessageSquare, Monitor, RotateCcw, Shield, ShieldAlert, SlidersHorizontal, Volume2 } from 'lucide-react';
+import { Camera, Clipboard, Eye, LockKeyhole, LogOut, Maximize2, MessageSquare, Monitor, RotateCcw, Shield, ShieldAlert, Volume2 } from 'lucide-react';
 import { t, translateAudioIssue, type Locale } from '../lib/i18n.ts';
 import { classifyRemoteOs, remoteFeatures } from '../lib/platform.ts';
 import { ResolutionSelect } from './ResolutionSelect.tsx';
+import { SessionDisplayControls, type SessionDisplayControlsProps } from './SessionDisplayControls.tsx';
 
-interface SessionToolbarProps {
+interface SessionToolbarProps extends Pick<SessionDisplayControlsProps, 'targetFps' | 'codec' | 'codecSupport' | 'onFps' | 'onCodec'> {
   locale: Locale;
   displays: readonly DisplayInfo[];
   currentDisplay: number;
@@ -41,13 +42,16 @@ interface SessionToolbarProps {
   onOpenChat: () => void;
 }
 
-const QUALITIES: QualityLevel[] = ['low', 'balanced', 'best'];
-
 export function SessionToolbar({
   locale,
   displays,
   currentDisplay,
   quality,
+  targetFps,
+  codec,
+  codecSupport,
+  onFps,
+  onCodec,
   viewOnly,
   privacyAllowed,
   onSwitchDisplay,
@@ -100,7 +104,7 @@ export function SessionToolbar({
         </button>
       ))}
       {features.resolutionChange && resolutions.length > 0 ? (
-        <label className="rd-session-field">
+        <div className="rd-session-field">
           <span>{t(locale, 'remoteResolution')}</span>
           <ResolutionSelect
             label={t(locale, 'remoteResolution')}
@@ -110,25 +114,11 @@ export function SessionToolbar({
             disabled={viewOnly}
             onSelect={onResolution}
           />
-        </label>
+        </div>
       ) : null}
       <span className="rd-session-sep" aria-hidden="true" />
-      <label className="rd-session-field">
-        <SlidersHorizontal size={15} />
-        <span>{t(locale, 'sessionQuality')}</span>
-        <select
-          aria-label={t(locale, 'sessionQuality')}
-          value={quality}
-          onChange={(event) => {
-            const next = event.target.value;
-            if (next === 'low' || next === 'balanced' || next === 'best') onQuality(next);
-          }}
-        >
-          {QUALITIES.map((level) => (
-            <option key={level} value={level}>{t(locale, level === 'low' ? 'qualityLow' : level === 'best' ? 'qualityBest' : 'qualityBalanced')}</option>
-          ))}
-        </select>
-      </label>
+      <SessionDisplayControls locale={locale} quality={quality} targetFps={targetFps} codec={codec}
+        codecSupport={codecSupport} onQuality={onQuality} onFps={onFps} onCodec={onCodec} />
       <button type="button" className="rd-session-btn" aria-pressed={viewOnly} onClick={onToggleViewOnly}>
         <Eye size={15} />
         {viewOnly ? t(locale, 'viewOnlyLabel') : t(locale, 'sessionControl')}

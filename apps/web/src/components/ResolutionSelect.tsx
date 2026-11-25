@@ -1,5 +1,7 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
+import { AdaptiveSelect } from './AdaptiveSelect.tsx';
+
 interface ResolutionSelectProps {
   label: string;
   resolutions: readonly { width: number; height: number }[];
@@ -13,20 +15,22 @@ export function ResolutionSelect({ label, resolutions, frameWidth, frameHeight, 
   const current = `${frameWidth}x${frameHeight}`;
   const listed = resolutions.some(({ width, height }) => `${width}x${height}` === current);
 
+  const options = resolutions.map(({ width, height }) => ({
+    value: `${width}x${height}`,
+    label: `${width} × ${height}`,
+  }));
   return (
-    <select
-      aria-label={label}
+    <AdaptiveSelect
+      label={label}
+      tone="remote"
+      testId="resolution-select"
       value={current}
       disabled={disabled}
-      onChange={(event) => {
-        const selected = resolutions.find(({ width, height }) => `${width}x${height}` === event.target.value);
+      options={listed ? options : [{ value: current, label: `${frameWidth} × ${frameHeight}`, disabled: true }, ...options]}
+      onChange={(value) => {
+        const selected = resolutions.find(({ width, height }) => `${width}x${height}` === value);
         if (selected && selected.width > 0 && selected.height > 0) onSelect(selected.width, selected.height);
       }}
-    >
-      {listed ? null : <option value={current} disabled>{frameWidth} × {frameHeight}</option>}
-      {resolutions.map(({ width, height }) => (
-        <option key={`${width}x${height}`} value={`${width}x${height}`}>{width} × {height}</option>
-      ))}
-    </select>
+    />
   );
 }

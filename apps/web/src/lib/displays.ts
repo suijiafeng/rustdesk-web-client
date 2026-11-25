@@ -42,8 +42,8 @@ export function sessionEndLock(enabled: boolean, live: boolean): ClientMessage[]
   ];
 }
 
-export function qualityCommand(level: QualityLevel, fps: number): ClientMessage {
-  return { type: 'quality', quality: level, fps };
+export function qualityCommand(level: QualityLevel, fps: number, codec?: string): ClientMessage {
+  return { type: 'quality', quality: level, fps, ...(codec ? { codec } : {}) };
 }
 
 export function shouldFollowFocusedDisplay(
