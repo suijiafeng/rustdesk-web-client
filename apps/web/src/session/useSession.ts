@@ -17,6 +17,7 @@ import {
 } from '../lib/linkHealth.ts';
 import { sessionEndLock } from '../lib/displays.ts';
 import { textMessages } from '../lib/keyboard.ts';
+import type { RecentDevice } from '../lib/devices.ts';
 import { useClipboardSync } from '../hooks/useClipboardSync.ts';
 import { createSessionSocket, gatewayEnablesWebRtc, type SessionSocket } from './sessionTransport.ts';
 import { reconnectDelayMs, TWO_FACTOR_TIMEOUT_MS, twoFactorStatus, validateChatText, validateClipboardText, validateTwoFactorCode, type ClipboardActionResult } from '../lib/platform.ts';
@@ -56,11 +57,13 @@ export interface SessionConnectInput {
 interface UseSessionOptions {
   readInput: () => SessionConnectInput;
   onPasswordRejected: () => void;
+  onConnected: (device: RecentDevice) => void;
 }
 
-export function useSession({ readInput, onPasswordRejected }: UseSessionOptions) {
+export function useSession({ readInput, onPasswordRejected, onConnected }: UseSessionOptions) {
   const [session, setSession] = useState<SessionSnapshot>(initialSession);
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
+  const [frameCodec, setFrameCodec] = useState('');
   const [decoderError, setDecoderError] = useState('');
   const [audio, setAudio] = useState({
     enabled: false,
@@ -130,6 +133,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     decoderRef.current?.close();
     decoderRef.current = null;
     setFrameSize({ width: 0, height: 0 });
+    setFrameCodec('');
   }, []);
 
   const ensureDecoder = useCallback(() => {
@@ -383,6 +387,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     });
 
     const socket = createSessionSocket(wsUrl(window.location), message, webRtcEnabled.current);
+    let savedRecentDevice = false;
     socket.binaryType = 'arraybuffer';
     socketRef.current = socket;
     const onConnectTimeout = () => {
@@ -404,6 +409,8 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
       if (ev.data instanceof ArrayBuffer) {
         const frame = decodeRdv1Frame(new Uint8Array(ev.data));
         if (!frame) return;
+        const receivedCodec = codecName(frame.codec);
+        setFrameCodec(receivedCodec);
         recordRxFrame(frameStatsRef.current, Date.now(), ev.data.byteLength);
         setStats((current) => ({
           startedAt: current.startedAt || Date.now(),
@@ -414,7 +421,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
         ensureDecoder().push(
           {
             codec: frame.codec,
-            codecName: codecName(frame.codec),
+            codecName: receivedCodec,
             key: frame.key,
             display: frame.display,
             width: frame.width,
@@ -435,6 +442,13 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
         return;
       }
       if (!parsed || typeof parsed !== 'object' || typeof parsed.type !== 'string') return;
+      if (parsed.type === 'peer' && !savedRecentDevice) {
+        savedRecentDevice = true;
+        const peerDetails = { hostname: parsed.hostname || '', platform: parsed.platform || '' };
+        onConnected(mode === 'id'
+          ? { ...peerDetails, mode, peerId, idServer, relayServer: message.relayServer, serverKey: message.key, forceRelay: message.forceRelay }
+          : { ...peerDetails, mode, host, port: String(message.port ?? 21118) });
+      }
       if (parsed.type === 'pong') {
         linkRef.current = recordPongReceived(linkRef.current, parsed.seq, Date.now());
         const summary = computeDiagnosticsSummary(linkRef.current, Date.now());
@@ -540,7 +554,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
       }
       apply(eventGeneration, { type: 'socket-close' });
     };
-  }, [apply, closeAudio, closeSocket, ensureDecoder, readInput, receiveClipboard, releaseDecoder]);
+  }, [apply, closeAudio, closeSocket, ensureDecoder, onConnected, readInput, receiveClipboard, releaseDecoder]);
   connectRef.current = connect;
 
   useEffect(() => {
@@ -698,6 +712,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     setArmedKeys,
     canvasRef,
     frameSize,
+    frameCodec,
     codecSupport,
     decoderError,
     stats,

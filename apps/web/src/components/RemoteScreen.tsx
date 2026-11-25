@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import { flushSync } from 'react-dom';
 import type { ClientMessage, CursorShape, DisplayInfo, PeerMessage, QualityLevel } from '@rustdesk-web/shared';
-import { MousePointer2 } from 'lucide-react';
+import { MousePointer2, X } from 'lucide-react';
 import { clampPan, computePinchStep, computeViewTransform, fitScale, mapFromRemote, panToKeepVisible, type ViewMode, type ViewTransform } from '../lib/mapping.ts';
 import type { DefaultViewStyle, ScrollStyle } from '../lib/displayPrefs.ts';
 import {
@@ -27,6 +27,7 @@ import { sessionChromeMode } from '../lib/sessionChrome.ts';
 import { DiagnosticsPanel } from './DiagnosticsPanel.tsx';
 import { offsetPointerMessages } from '../lib/displays.ts';
 import { SessionToolbar } from './SessionToolbar.tsx';
+import { DesktopSessionMenu } from './DesktopSessionMenu.tsx';
 import type { SessionDisplayControlsProps } from './SessionDisplayControls.tsx';
 import { ClipboardPanel } from './ClipboardPanel.tsx';
 import { ChatPanel } from './ChatPanel.tsx';
@@ -47,6 +48,7 @@ interface RemoteScreenProps extends Pick<SessionDisplayControlsProps, 'targetFps
   canvasRef: RefObject<HTMLCanvasElement | null>;
   frameWidth: number;
   frameHeight: number;
+  frameCodec: string;
   viewOnly: boolean;
   swapMouseButtons: boolean;
   reverseMouseWheel: boolean;
@@ -86,6 +88,9 @@ interface RemoteScreenProps extends Pick<SessionDisplayControlsProps, 'targetFps
   onCopyDiagnostics: (text: string) => void;
   onToggleDiagnostics: () => void;
   remotePlatform: string;
+  hostTitle: string;
+  connectionManagerOpen: boolean;
+  onOpenConnectionManager: () => void;
   connectionRoute?: PeerMessage['route'];
   connectionEncrypted: boolean;
   clipboardFallback: string | null;
@@ -131,6 +136,7 @@ export function RemoteScreen({
   canvasRef,
   frameWidth,
   frameHeight,
+  frameCodec,
   viewOnly,
   swapMouseButtons,
   reverseMouseWheel,
@@ -168,6 +174,9 @@ export function RemoteScreen({
   onCopyDiagnostics,
   onToggleDiagnostics,
   remotePlatform,
+  hostTitle,
+  connectionManagerOpen,
+  onOpenConnectionManager,
   connectionRoute,
   connectionEncrypted,
   clipboardFallback,
@@ -215,6 +224,10 @@ export function RemoteScreen({
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ panX: 0, panY: 0 });
   const [touchMode, setTouchMode] = useState(defaultTouchMode);
+  const [desktopToolbarExpanded, setDesktopToolbarExpanded] = useState(false);
+  const [desktopToolbarPinned, setDesktopToolbarPinned] = useState(false);
+  const [desktopToolbarPosition, setDesktopToolbarPosition] = useState(0.5);
+  const [desktopMenuOpen, setDesktopMenuOpen] = useState(false);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [clipboardOpen, setClipboardOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
@@ -258,6 +271,7 @@ export function RemoteScreen({
   }, [viewStyle]);
   const { captureRef, sendKeys, handleCompositionStart, handleCompositionEnd, handleInput } = useRemoteKeyboard({
     viewOnly,
+    enabled: !connectionManagerOpen && !desktopMenuOpen,
     remotePlatform,
     onKeyboard,
     onArmKeys,
@@ -531,6 +545,10 @@ export function RemoteScreen({
   };
 
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (desktopToolbarExpanded && !desktopToolbarPinned
+      && (event.target === stageRef.current || event.target === canvasRef.current)) {
+      setDesktopToolbarExpanded(false);
+    }
     if (event.pointerType === 'touch') {
       if (event.target instanceof Element && event.target.closest('button, input, select, label')) return;
       event.preventDefault();
@@ -662,6 +680,7 @@ export function RemoteScreen({
       return next;
     });
   }, [followRemoteCursor, cursorScreen, viewMode, box.width, box.height]);
+  const features = remoteFeatures(classifyRemoteOs(remotePlatform));
   const chrome = sessionChromeMode({
     width: box.width,
     coarsePointer,
@@ -692,6 +711,7 @@ export function RemoteScreen({
       ref={stageRef}
       className="stage"
       data-testid="stage"
+      inert={connectionManagerOpen}
       data-keyboard-avoiding={keyboardLayout.viewport ? 'true' : undefined}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -773,6 +793,10 @@ export function RemoteScreen({
           linkQuality={linkQuality}
           route={connectionRoute}
           encrypted={connectionEncrypted}
+          frameWidth={frameWidth}
+          frameHeight={frameHeight}
+          codec={frameCodec}
+          onClose={onToggleDiagnostics}
           onCopy={onCopyDiagnostics}
         />
       ) : null}
@@ -818,7 +842,7 @@ export function RemoteScreen({
           onRestart={confirmRestart}
         />
       ) : null}
-      {chrome === 'keyboard' ? (
+      {keyboardOpen ? (
         <SoftKeyboardBar
           locale={locale}
           inputRef={softKeyboardInputRef}
@@ -828,48 +852,100 @@ export function RemoteScreen({
           onSyncPaste={clipboardSync ? onSyncPastedClipboard : undefined}
         />
       ) : null}
-      {chrome === 'desktop' ? (
+      {chrome === 'desktop' && !desktopMenuOpen && !connectionManagerOpen ? (
         <SessionToolbar
           locale={locale}
+          handleX={desktopToolbarPosition}
+          stageWidth={box.width}
+          expanded={desktopToolbarExpanded}
+          pinned={desktopToolbarPinned}
+          hostTitle={hostTitle}
+          displays={displays}
+          activeDisplay={currentDisplay}
+          viewMode={viewMode}
+          hasWarning={Boolean(decodeError)}
+          canSendCtrlAltDel={features.ctrlAltDel && !viewOnly}
+          onMoveHandle={setDesktopToolbarPosition}
+          onSetExpanded={setDesktopToolbarExpanded}
+          onTogglePinned={() => setDesktopToolbarPinned((current) => !current)}
+          onSwitchDisplay={onSwitchDisplay}
+          onToggleViewMode={() => {
+            if (viewMode === 'fit') {
+              setViewMode('original');
+              setPan({ panX: (box.width - frameWidth) / 2, panY: (box.height - frameHeight) / 2 });
+            } else {
+              setViewMode('fit');
+              setZoom(1);
+              setPan({ panX: 0, panY: 0 });
+            }
+          }}
+          onToggleKeyboard={openSoftKeyboard}
+          onCtrlAltDel={() => sendQuickKey('Ctrl+Alt+Del')}
+          onOpenMenu={() => setDesktopMenuOpen(true)}
+          onDisconnect={onDisconnect}
+        />
+      ) : null}
+      {chrome === 'desktop' && desktopMenuOpen ? (
+        <DesktopSessionMenu
+          locale={locale}
+          hostTitle={hostTitle}
+          remotePlatform={remotePlatform}
+          encrypted={connectionEncrypted}
+          rttMs={stats.rttMs}
           displays={displays}
           currentDisplay={currentDisplay}
+          frameWidth={frameWidth}
+          frameHeight={frameHeight}
+          resolutions={features.resolutionChange ? resolutions : []}
+          decoderError={decodeError}
+          touchMode={touchMode}
+          viewOnly={viewOnly}
+          audioEnabled={audioEnabled}
+          volume={volume}
+          clipboardSync={clipboardSync}
+          clipboardAllowed={clipboardPermitted && !clipboardDisabled}
+          privacyAllowed={features.privacyMode && privacyAllowed}
+          privacyEnabled={privacyEnabled}
+          privacyPending={privacyPending}
+          restartAllowed={features.restart && restartAllowed}
+          restartPending={restartPending}
+          lockAllowed={features.lockScreen}
+          followWindow={followWindow}
+          diagnosticsOpen={diagnosticsOpen}
           quality={quality}
           targetFps={targetFps}
           codec={codec}
           codecSupport={codecSupport}
+          onQuality={onQuality}
           onFps={onFps}
           onCodec={onCodec}
-          viewOnly={viewOnly}
-          privacyAllowed={privacyAllowed}
           onSwitchDisplay={onSwitchDisplay}
-          onQuality={onQuality}
-          onToggleViewOnly={onToggleViewOnly}
-          audioEnabled={audioEnabled}
-          volume={volume}
+          onResolution={onResolution}
+          onToggleTouchMode={() => setTouchMode((current) => !current)}
           onToggleAudio={onToggleAudio}
           onVolume={onVolume}
-          onFullscreen={() => toggleFullscreen(stageRef.current)}
-          onDisconnect={onDisconnect}
-          remotePlatform={remotePlatform}
-          onQuickKey={sendQuickKey}
-          onOpenClipboard={() => setClipboardOpen(true)}
-          privacyEnabled={privacyEnabled}
-          privacyPending={privacyPending}
+          onToggleClipboardSync={onToggleClipboardSync}
           onTogglePrivacy={onTogglePrivacy}
-          resolutions={resolutions}
-          frameWidth={frameWidth}
-          frameHeight={frameHeight}
-          onResolution={onResolution}
-          restartAllowed={restartAllowed}
-          restartPending={restartPending}
           onRestart={confirmRestart}
+          onLock={() => sendQuickKey('Lock')}
+          onDisconnect={onDisconnect}
+          onToggleViewOnly={onToggleViewOnly}
+          onFullscreen={() => { toggleFullscreen(stageRef.current); setDesktopMenuOpen(false); }}
           onScreenshot={onScreenshot}
-          onOpenChat={() => setChatOpen(true)}
+          onOpenChat={() => { setDesktopMenuOpen(false); setChatOpen(true); }}
+          onOpenClipboard={() => { setDesktopMenuOpen(false); setClipboardOpen(true); }}
+          onToggleFollowWindow={onToggleFollowWindow}
+          onOpenDiagnostics={() => {
+            if (!diagnosticsOpen) onToggleDiagnostics();
+            setDesktopMenuOpen(false);
+          }}
+          onOpenConnection={() => { setDesktopMenuOpen(false); onOpenConnectionManager(); }}
+          onClose={() => { setDesktopMenuOpen(false); setDesktopToolbarExpanded(false); }}
         />
       ) : null}
       <dialog
         ref={restartDialogRef}
-        className="rd-restart-dialog"
+        className="session-confirm"
         aria-labelledby="restart-title"
         aria-describedby="restart-description"
         onPointerDown={(event) => event.stopPropagation()}
@@ -878,21 +954,26 @@ export function RemoteScreen({
         }}
       >
         <form
-          className="rd-password-dialog"
+          className="session-confirm-content"
           onSubmit={(event) => {
             event.preventDefault();
             restartDialogRef.current?.close();
             if (restartAllowed && !restartPending) onRestart();
           }}
         >
-          <h2 id="restart-title" className="mb-2 text-base font-semibold">{t(locale, 'restartDevice')}</h2>
+          <header>
+            <h2 id="restart-title">{t(locale, 'restartDevice')}</h2>
+            <button type="button" className="dialog-close" aria-label={t(locale, 'close')} onClick={() => restartDialogRef.current?.close()}>
+              <X size={18} />
+            </button>
+          </header>
           <p id="restart-description" className="text-[var(--ink-soft)]">{t(locale, 'confirmRestart')}</p>
-          <div className="mt-4 flex flex-wrap justify-end gap-2">
+          <footer>
             <button type="button" className="rd-btn" autoFocus onClick={() => restartDialogRef.current?.close()}>
               {t(locale, 'cancel')}
             </button>
             <button type="submit" className="rd-btn danger">{t(locale, 'restartDevice')}</button>
-          </div>
+          </footer>
         </form>
       </dialog>
       <ChatPanel locale={locale} open={chatOpen} lines={chatLines} onSend={onSendChat} onClose={() => setChatOpen(false)} />

@@ -1,6 +1,7 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
 import type { PeerMessage } from '@rustdesk-web/shared';
+import { X } from 'lucide-react';
 import { exportDiagnostics, type DiagnosticSnapshot } from '../lib/diagnostics.ts';
 import { t, type Locale } from '../lib/i18n.ts';
 
@@ -20,10 +21,16 @@ interface DiagnosticsPanelProps {
   linkQuality: LinkQuality | null;
   route?: PeerMessage['route'];
   encrypted: boolean;
+  frameWidth: number;
+  frameHeight: number;
+  codec: string;
+  onClose: () => void;
   onCopy: (text: string) => void;
 }
 
-export function DiagnosticsPanel({ locale, open, snapshot, linkQuality, route, encrypted, onCopy }: DiagnosticsPanelProps) {
+export function DiagnosticsPanel({
+  locale, open, snapshot, linkQuality, route, encrypted, frameWidth, frameHeight, codec, onClose, onCopy,
+}: DiagnosticsPanelProps) {
   if (!open) return null;
   const base = exportDiagnostics({ ...snapshot, now: Date.now() });
   const report = {
@@ -47,31 +54,34 @@ export function DiagnosticsPanel({ locale, open, snapshot, linkQuality, route, e
     : route === 'webrtc' ? 'routeWebRtcUnknown'
     : route === 'direct' ? 'routeDirect'
     : route === 'relay' ? 'routeRelay' : 'routeUnknown';
+  const formatMs = (value: number | null) => value === null ? '—' : `${Math.round(value)} ms`;
+  const bitrate = report.bitrateBps ?? 0;
+  const readableBitrate = bitrate >= 1e6 ? `${(bitrate / 1e6).toFixed(1)} Mb/s`
+    : bitrate >= 1e3 ? `${Math.round(bitrate / 1e3)} kb/s`
+    : `${Math.round(bitrate)} b/s`;
+  const rows = [
+    ['statSize', frameWidth && frameHeight ? `${frameWidth} × ${frameHeight}` : '—'],
+    ['statCodec', codec || '—'],
+    ['statFps', `${report.samplingFps ?? report.framesPerSecond} FPS`],
+    ['statBitrate', readableBitrate],
+    [route?.startsWith('webrtc') ? 'browserPeer' : 'browserGateway', formatMs(report.browserRttMs)],
+    ['reportedRtt', formatMs(snapshot.rttMs)],
+  ] as const;
   return (
-    <aside
-      data-testid="diagnostics"
-      style={{
-        position: 'absolute',
-        left: 12,
-        bottom: 12,
-        zIndex: 4,
-        background: 'rgba(16, 20, 24, 0.92)',
-        color: '#fff',
-        padding: 12,
-        borderRadius: 8,
-        fontSize: 12,
-      }}
-    >
-      <div>{t(locale, routeLabel)} · {t(locale, encrypted ? 'linkEncrypted' : 'linkPlain')}</div>
-      <div>{t(locale, 'diagDuration')} {report.durationMs} ms</div>
-      <div>{t(locale, 'diagFrames')} {report.samplingFps ?? report.framesPerSecond}</div>
-      <div>{t(locale, 'diagBitrate')} {report.bitrateBps ?? 0} bit/s</div>
-      <div>{t(locale, 'diagStream')} {report.streamState ?? t(locale, 'diagWaiting')}</div>
-      <div>{t(locale, 'diagReceived')} {report.received}</div>
-      <div>{t(locale, 'diagBrowserRtt')} {report.browserRttMs ?? t(locale, 'diagUnavailable')} ms ({report.linkHealth}, {t(locale, 'diagLoss')} {report.packetLossPct}%)</div>
-      <div>{t(locale, 'diagHostRtt')} {report.rttMs ?? t(locale, 'diagUnavailable')} ms</div>
-      <div>{t(locale, 'diagDecode')} {report.decode || t(locale, 'diagOk')}</div>
-      <button type="button" onClick={() => onCopy(text)} style={{ cursor: 'pointer', marginTop: 8 }}>
+    <aside className="diag-overlay" data-testid="diagnostic-overlay" aria-label={t(locale, 'diagTitle')}
+      onPointerDown={(event) => event.stopPropagation()} onPointerMove={(event) => event.stopPropagation()}
+      onPointerUp={(event) => event.stopPropagation()}>
+      <header className="diag-header">
+        <span>{t(locale, 'diagTitle')}</span>
+        <button type="button" className="diag-icon-btn" data-testid="diag-close" aria-label={t(locale, 'diagClose')} onClick={onClose}>
+          <X size={16} />
+        </button>
+      </header>
+      <p className="diag-route">{t(locale, routeLabel)} · {t(locale, encrypted ? 'linkEncrypted' : 'linkPlain')}</p>
+      <dl className="diag-values">
+        {rows.map(([label, value]) => <div key={label}><dt>{t(locale, label)}</dt><dd className="font-mono-tabular">{value}</dd></div>)}
+      </dl>
+      <button type="button" className="mt-2 text-xs" onClick={() => onCopy(text)}>
         {t(locale, 'diagCopy')}
       </button>
     </aside>

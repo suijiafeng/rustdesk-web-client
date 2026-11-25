@@ -8,10 +8,11 @@ interface ResolutionSelectProps {
   frameWidth: number;
   frameHeight: number;
   disabled: boolean;
+  tone?: 'remote' | 'settings';
   onSelect: (width: number, height: number) => void;
 }
 
-export function ResolutionSelect({ label, resolutions, frameWidth, frameHeight, disabled, onSelect }: ResolutionSelectProps) {
+export function ResolutionSelect({ label, resolutions, frameWidth, frameHeight, disabled, tone = 'remote', onSelect }: ResolutionSelectProps) {
   const current = `${frameWidth}x${frameHeight}`;
   const listed = resolutions.some(({ width, height }) => `${width}x${height}` === current);
 
@@ -22,7 +23,7 @@ export function ResolutionSelect({ label, resolutions, frameWidth, frameHeight, 
   return (
     <AdaptiveSelect
       label={label}
-      tone="remote"
+      tone={tone === 'remote' ? tone : undefined}
       testId="resolution-select"
       value={current}
       disabled={disabled}

@@ -87,7 +87,7 @@ export function MobileDisplayMenu({
             />
           </div>
         ) : null}
-        <SessionDisplayControls {...displayControls} onRequestSent={showRequestSent} rows />
+        <SessionDisplayControls {...displayControls} onRequestSent={showRequestSent} rows="mobile" />
       </div>
       {hasMultipleDisplays ? (
         <div className="tool-group">

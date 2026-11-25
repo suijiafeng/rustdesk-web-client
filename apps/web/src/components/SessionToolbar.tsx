@@ -1,190 +1,294 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
-import type { DisplayInfo, QualityLevel } from '@rustdesk-web/shared';
-import { Camera, Clipboard, Eye, LockKeyhole, LogOut, Maximize2, MessageSquare, Monitor, RotateCcw, Shield, ShieldAlert, Volume2 } from 'lucide-react';
-import { t, type Locale } from '../lib/i18n.ts';
-import { classifyRemoteOs, remoteFeatures } from '../lib/platform.ts';
-import { ResolutionSelect } from './ResolutionSelect.tsx';
-import { SessionDisplayControls, type SessionDisplayControlsProps } from './SessionDisplayControls.tsx';
+import React, { useLayoutEffect, useRef, useState } from 'react';
+import {
+  ChevronDown,
+  ChevronUp,
+  GripVertical,
+  Keyboard,
+  Monitor,
+  Pin,
+  PinOff,
+  Power,
+  Scan,
+  ShieldAlert,
+  SlidersHorizontal,
+} from 'lucide-react';
+import { clampToolbarPixelX, clampToolbarX } from '../lib/floatingMenu';
+import { t, type Locale } from '../lib/i18n';
+import type { ViewMode } from '../lib/mapping';
+import type { DisplayInfo } from '@rustdesk-web/shared';
 
-interface SessionToolbarProps extends Pick<SessionDisplayControlsProps, 'targetFps' | 'codec' | 'codecSupport' | 'onFps' | 'onCodec'> {
+interface SessionToolbarProps {
   locale: Locale;
+  handleX: number;
+  stageWidth: number;
+  expanded: boolean;
+  pinned: boolean;
+  hostTitle: string;
   displays: readonly DisplayInfo[];
-  currentDisplay: number;
-  quality: QualityLevel;
-  viewOnly: boolean;
-  privacyAllowed: boolean;
-  onSwitchDisplay: (display: number) => void;
-  onQuality: SessionDisplayControlsProps['onQuality'];
-  onToggleViewOnly: () => void;
-  audioEnabled: boolean;
-  volume: number;
-  onToggleAudio: () => void;
-  onVolume: (volume: number) => void;
-  onFullscreen: () => void;
+  activeDisplay: number;
+  viewMode: ViewMode;
+  hasWarning: boolean;
+  canSendCtrlAltDel: boolean;
+  onMoveHandle: (nextX: number) => void;
+  onSetExpanded: (expanded: boolean) => void;
+  onTogglePinned: () => void;
+  onSwitchDisplay: (index: number) => void;
+  onToggleViewMode: () => void;
+  onToggleKeyboard: () => void;
+  onCtrlAltDel: () => void;
+  onOpenMenu: () => void;
   onDisconnect: () => void;
-  remotePlatform: string;
-  onQuickKey: (name: 'Ctrl+Alt+Del' | 'Lock') => void;
-  onOpenClipboard: () => void;
-  privacyEnabled: boolean;
-  privacyPending: boolean;
-  onTogglePrivacy: () => void;
-  resolutions: readonly { width: number; height: number }[];
-  frameWidth: number;
-  frameHeight: number;
-  onResolution: (width: number, height: number) => void;
-  restartAllowed: boolean;
-  restartPending: boolean;
-  onRestart: () => void;
-  onScreenshot: () => void;
-  onOpenChat: () => void;
 }
 
 export function SessionToolbar({
   locale,
+  handleX,
+  stageWidth,
+  expanded,
+  pinned,
+  hostTitle,
   displays,
-  currentDisplay,
-  quality,
-  targetFps,
-  codec,
-  codecSupport,
-  onFps,
-  onCodec,
-  viewOnly,
-  privacyAllowed,
+  activeDisplay,
+  viewMode,
+  hasWarning,
+  canSendCtrlAltDel,
+  onMoveHandle,
+  onSetExpanded,
+  onTogglePinned,
   onSwitchDisplay,
-  onQuality,
-  onToggleViewOnly,
-  audioEnabled,
-  volume,
-  onToggleAudio,
-  onVolume,
-  onFullscreen,
+  onToggleViewMode,
+  onToggleKeyboard,
+  onCtrlAltDel,
+  onOpenMenu,
   onDisconnect,
-  remotePlatform,
-  onQuickKey,
-  onOpenClipboard,
-  privacyEnabled,
-  privacyPending,
-  onTogglePrivacy,
-  resolutions,
-  frameWidth,
-  frameHeight,
-  onResolution,
-  restartAllowed,
-  restartPending,
-  onRestart,
-  onScreenshot,
-  onOpenChat,
 }: SessionToolbarProps) {
-  const features = remoteFeatures(classifyRemoteOs(remotePlatform));
+  const dragRef = useRef<{ startX: number; origin: number; moved: boolean } | null>(null);
+  const barRef = useRef<HTMLDivElement>(null);
+  const [barWidth, setBarWidth] = useState(520);
+
+  useLayoutEffect(() => {
+    if (expanded && barRef.current) {
+      setBarWidth(barRef.current.offsetWidth || 520);
+    }
+  }, [expanded, displays.length, hostTitle, locale]);
+
+  const startDrag = (e: React.PointerEvent<HTMLElement>) => {
+    e.stopPropagation();
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // Ignore NotFoundError on synthetic pointers
+    }
+    dragRef.current = {
+      startX: e.clientX,
+      origin: handleX,
+      moved: false,
+    };
+  };
+
+  const moveDrag = (e: React.PointerEvent<HTMLElement>) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    e.stopPropagation();
+    const dx = e.clientX - drag.startX;
+    if (Math.abs(dx) > 4) {
+      drag.moved = true;
+    }
+    const width = Math.max(1, stageWidth);
+    onMoveHandle(clampToolbarX(drag.origin + dx / width));
+  };
+
+  const endDrag = (e: React.PointerEvent<HTMLElement>, onTap?: () => void) => {
+    const drag = dragRef.current;
+    dragRef.current = null;
+    e.stopPropagation();
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    if (drag && !drag.moved && onTap) {
+      onTap();
+    }
+  };
+
+  const cancelDrag = (e: React.PointerEvent<HTMLElement>) => {
+    dragRef.current = null;
+    e.stopPropagation();
+  };
+
+  if (!expanded) {
+    return (
+      <button
+        type="button"
+        className={`pull${hasWarning ? ' warn' : ''}`}
+        data-testid="session-handle"
+        aria-label={t(locale, 'toolbarExpand')}
+        aria-expanded="false"
+        data-tooltip={t(locale, 'toolbarExpand')}
+        data-tooltip-pos="bottom"
+        style={{ left: `${clampToolbarX(handleX) * 100}%` }}
+        onPointerDown={startDrag}
+        onPointerMove={moveDrag}
+        onPointerUp={(e) => endDrag(e, () => onSetExpanded(true))}
+        onPointerCancel={cancelDrag}
+        onClick={(event) => { if (event.detail === 0) onSetExpanded(true); }}
+      >
+        <span className="pull-pill">
+          <ChevronDown size={13} strokeWidth={2.2} />
+          <span>{t(locale, 'menuLabel')}</span>
+        </span>
+      </button>
+    );
+  }
+
+  const leftPx =
+    stageWidth > 0 ? clampToolbarPixelX(handleX, barWidth, stageWidth, 12) : undefined;
+  const hasMultipleDisplays = displays.length > 1;
+
   return (
     <div
-      className="rd-session-toolbar"
-      data-testid="session-toolbar"
+      ref={barRef}
+      className="rd-desktop-toolbar"
+      data-testid="desktop-toolbar"
       role="toolbar"
       aria-label={t(locale, 'session')}
-      onPointerDown={(event) => event.stopPropagation()}
+      style={leftPx !== undefined ? { left: `${leftPx}px` } : { left: '50%' }}
+      onPointerDown={(e) => e.stopPropagation()}
     >
-      {displays.map((display, index) => (
-        <button
-          key={`${display.name}-${index}`}
-          type="button"
-          className="rd-session-btn"
-          disabled={!display.online}
-          aria-pressed={index === currentDisplay}
-          onClick={() => onSwitchDisplay(index)}
-        >
-          <Monitor size={15} />
-          {display.name || `${t(locale, 'displayFallback')} ${index + 1}`}
-        </button>
-      ))}
-      {features.resolutionChange && resolutions.length > 0 ? (
-        <div className="rd-session-field">
-          <span>{t(locale, 'remoteResolution')}</span>
-          <ResolutionSelect
-            label={t(locale, 'remoteResolution')}
-            resolutions={resolutions}
-            frameWidth={frameWidth}
-            frameHeight={frameHeight}
-            disabled={viewOnly}
-            onSelect={onResolution}
-          />
-        </div>
-      ) : null}
-      <span className="rd-session-sep" aria-hidden="true" />
-      <SessionDisplayControls locale={locale} quality={quality} targetFps={targetFps} codec={codec}
-        codecSupport={codecSupport} onQuality={onQuality} onFps={onFps} onCodec={onCodec} />
-      <button type="button" className="rd-session-btn" aria-pressed={viewOnly} onClick={onToggleViewOnly}>
-        <Eye size={15} />
-        {viewOnly ? t(locale, 'viewOnlyLabel') : t(locale, 'sessionControl')}
+      {/* Drag grip + remote host title */}
+      <div
+        className="rd-toolbar-drag"
+        data-tooltip={t(locale, 'toolbarDragHint')}
+        data-tooltip-pos="bottom-start"
+        onPointerDown={startDrag}
+        onPointerMove={moveDrag}
+        onPointerUp={(e) => endDrag(e)}
+        onPointerCancel={cancelDrag}
+      >
+        <GripVertical size={14} className="shrink-0 opacity-60" />
+        <span className="rd-toolbar-host">{hostTitle}</span>
+      </div>
+
+      <span className="rd-toolbar-sep" aria-hidden="true" />
+
+      {/* Multi-monitor quick switch */}
+      {hasMultipleDisplays && (
+        <>
+          <div className="flex items-center gap-0.5" role="group" aria-label={t(locale, 'displays')}>
+            {displays.map((display) => (
+              <button
+                key={display.index}
+                type="button"
+                disabled={display.online === false}
+                className={`rd-toolbar-btn rd-toolbar-monitor${activeDisplay === display.index ? ' active' : ''}`}
+                data-testid={`toolbar-display-${display.index}`}
+                aria-pressed={activeDisplay === display.index}
+                data-tooltip={`${display.name || `${t(locale, 'displayFallback')} ${display.index + 1}`} (${display.width}×${display.height})`}
+                data-tooltip-pos="bottom"
+                onClick={() => onSwitchDisplay(display.index)}
+              >
+                <Monitor size={14} />
+                <span className="font-mono-tabular text-[11px]">{display.index + 1}</span>
+              </button>
+            ))}
+          </div>
+          <span className="rd-toolbar-sep" aria-hidden="true" />
+        </>
+      )}
+
+      {/* Frequent 1-click actions */}
+      <button
+        type="button"
+        className={`rd-toolbar-btn${viewMode === 'original' ? ' active' : ''}`}
+        data-testid="toolbar-view-toggle"
+        aria-label={viewMode === 'fit' ? '100%' : t(locale, 'fit')}
+        data-tooltip={viewMode === 'fit' ? '100%' : t(locale, 'fit')}
+        data-tooltip-pos="bottom"
+        onClick={onToggleViewMode}
+      >
+        <Scan size={15} />
       </button>
-      <button type="button" className="rd-session-btn" aria-pressed={audioEnabled} onClick={onToggleAudio}>
-        <Volume2 size={15} />
-        {audioEnabled ? t(locale, 'audioOn') : t(locale, 'audioOff')}
+
+      <button
+        type="button"
+        className="rd-toolbar-btn"
+        data-testid="toolbar-cad"
+        disabled={!canSendCtrlAltDel}
+        aria-label="Ctrl+Alt+Del"
+        data-tooltip="Ctrl+Alt+Del"
+        data-tooltip-pos="bottom"
+        onClick={onCtrlAltDel}
+      >
+        <ShieldAlert size={15} />
       </button>
-      <label className="rd-session-field">
-        <span>{t(locale, 'sessionVolume')}</span>
-        <input
-          aria-label={t(locale, 'sessionVolume')}
-          type="range"
-          min={0}
-          max={1}
-          step={0.05}
-          value={volume}
-          onChange={(event) => onVolume(Number(event.target.value))}
-        />
-      </label>
-      {features.ctrlAltDel ? (
-        <button type="button" className="rd-session-btn" disabled={viewOnly} onClick={() => onQuickKey('Ctrl+Alt+Del')}>
-          <ShieldAlert size={15} />
-          {t(locale, 'ctrlAltDel')}
-        </button>
-      ) : null}
-      {features.privacyMode && privacyAllowed ? (
-        <button
-          type="button"
-          className="rd-session-btn"
-          aria-pressed={privacyEnabled}
-          disabled={viewOnly || privacyPending}
-          onClick={onTogglePrivacy}
-        >
-          <Shield size={15} />
-          {t(locale, privacyPending ? 'privacyWaiting' : 'privacyMode')}
-        </button>
-      ) : null}
-      {features.lockScreen ? (
-        <button type="button" className="rd-session-btn" disabled={viewOnly} onClick={() => onQuickKey('Lock')}>
-          <LockKeyhole size={15} />
-          {t(locale, 'lockScreen')}
-        </button>
-      ) : null}
-      <span className="rd-session-sep" aria-hidden="true" />
-      <button type="button" className="rd-session-btn" onClick={onOpenChat}>
-        <MessageSquare size={15} />
-        {t(locale, 'chat')}
+
+      <button
+        type="button"
+        className="rd-toolbar-btn"
+        data-testid="toolbar-keyboard"
+        aria-label={t(locale, 'keyboard')}
+        data-tooltip={t(locale, 'keyboard')}
+        data-tooltip-pos="bottom"
+        onClick={onToggleKeyboard}
+      >
+        <Keyboard size={15} />
       </button>
-      <button type="button" className="rd-session-btn" onClick={onOpenClipboard}>
-        <Clipboard size={15} />
-        {t(locale, 'clipboard')}
+
+      <span className="rd-toolbar-sep" aria-hidden="true" />
+
+      {/* Open full categorized menu */}
+      <button
+        type="button"
+        className={`rd-toolbar-btn rd-toolbar-menu-btn${hasWarning ? ' warn' : ''}`}
+        data-testid="toolbar-open-menu"
+        aria-label={t(locale, 'toolbarMore')}
+        data-tooltip={t(locale, 'toolbarMore')}
+        data-tooltip-pos="bottom"
+        onClick={onOpenMenu}
+      >
+        <SlidersHorizontal size={15} />
+        <span className="text-xs font-medium">{t(locale, 'menuLabel')}</span>
       </button>
-      <button type="button" className="rd-session-btn" onClick={onScreenshot}>
-        <Camera size={15} />
-        {t(locale, 'screenshot')}
+
+      {/* Pin / Auto-hide */}
+      <button
+        type="button"
+        className={`rd-toolbar-btn${pinned ? ' active' : ''}`}
+        data-testid="toolbar-pin"
+        aria-pressed={pinned}
+        aria-label={pinned ? t(locale, 'toolbarUnpin') : t(locale, 'toolbarPin')}
+        data-tooltip={pinned ? t(locale, 'toolbarUnpin') : t(locale, 'toolbarPin')}
+        data-tooltip-pos="bottom"
+        onClick={onTogglePinned}
+      >
+        {pinned ? <Pin size={14} /> : <PinOff size={14} />}
       </button>
-      <button type="button" className="rd-session-btn" onClick={onFullscreen}>
-        <Maximize2 size={15} />
-        {t(locale, 'sessionFullscreen')}
+
+      {/* Disconnect */}
+      <button
+        type="button"
+        className="rd-toolbar-btn danger"
+        data-testid="toolbar-disconnect"
+        aria-label={t(locale, 'disconnect')}
+        data-tooltip={t(locale, 'disconnect')}
+        data-tooltip-pos="bottom-end"
+        onClick={onDisconnect}
+      >
+        <Power size={15} />
       </button>
-      {features.restart && restartAllowed ? (
-        <button type="button" className="rd-session-btn" disabled={restartPending} onClick={onRestart}>
-          <RotateCcw size={15} />
-          {t(locale, 'restartDevice')}
-        </button>
-      ) : null}
-      <button type="button" className="rd-session-btn danger" onClick={onDisconnect}>
-        <LogOut size={15} />
-        {t(locale, 'disconnect')}
+
+      {/* Collapse back to top pull tab */}
+      <button
+        type="button"
+        className="rd-toolbar-btn"
+        data-testid="toolbar-collapse"
+        aria-label={t(locale, 'toolbarCollapse')}
+        data-tooltip={t(locale, 'toolbarCollapse')}
+        data-tooltip-pos="bottom-end"
+        onClick={() => onSetExpanded(false)}
+      >
+        <ChevronUp size={15} />
       </button>
     </div>
   );

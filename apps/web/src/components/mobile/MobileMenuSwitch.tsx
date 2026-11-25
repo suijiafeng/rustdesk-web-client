@@ -15,7 +15,7 @@ export function MobileMenuSwitch({ icon: Icon, label, checked, disabled, onChang
     <label className="tool-row">
       <Icon size={18} aria-hidden="true" />
       <span>{label}</span>
-      <input type="checkbox" role="switch" checked={checked} disabled={disabled} onChange={onChange} />
+      <input className="ui-switch" type="checkbox" role="switch" checked={checked} disabled={disabled} onChange={onChange} />
     </label>
   );
 }

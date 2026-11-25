@@ -8,9 +8,14 @@ import { isImeEvent } from '../lib/keys.ts';
 import { adaptKeyMessages, classifyLocalOs, classifyRemoteOs } from '../lib/platform.ts';
 
 const IME_KEY_UP_GRACE_MS = 80;
-const CHROME_INPUT_SELECTOR = 'input, textarea, select, dialog[open], .remote-menu-panel, .rd-clipboard-panel, [data-adaptive-select], [contenteditable="true"]';
+const CHROME_INPUT_SELECTOR = [
+  'input', 'textarea', 'select', 'dialog[open]', '[contenteditable="true"]',
+  '[data-adaptive-select]', '[data-testid="session-handle"]', '[data-testid="mobile-dock"]',
+  '[data-testid="mobile-capsule"]', '.rd-desktop-toolbar', '.remote-menu-panel', '.rd-clipboard-panel',
+].join(', ');
 
 interface RemoteKeyboardOptions {
+  enabled?: boolean;
   viewOnly: boolean;
   remotePlatform: string;
   onKeyboard: (messages: ClientMessage[]) => void;
@@ -33,13 +38,22 @@ export function useRemoteKeyboard(options: RemoteKeyboardOptions) {
     if (adapted.length > 0) onKeyboard(adapted);
   }, []);
 
-  useEffect(() => {
-    function publishKeyState({ tracked, messages }: ReturnType<typeof noteKeyDown>) {
-      trackedKeysRef.current = tracked;
-      optionsRef.current.onArmKeys(tracked.map((key) => key.release));
-      sendKeys(messages);
-    }
+  const publishKeyState = useCallback(({ tracked, messages }: ReturnType<typeof noteKeyDown>) => {
+    trackedKeysRef.current = tracked;
+    optionsRef.current.onArmKeys(tracked.map((key) => key.release));
+    sendKeys(messages);
+  }, [sendKeys]);
 
+  const releaseKeys = useCallback(() => {
+    composingRef.current = false;
+    publishKeyState(releaseTrackedKeys(trackedKeysRef.current));
+  }, [publishKeyState]);
+
+  useEffect(() => {
+    if (options.enabled === false) releaseKeys();
+  }, [options.enabled, releaseKeys]);
+
+  useEffect(() => {
     function isLocalInput(target: EventTarget | null): boolean {
       if (!(target instanceof Element)) return false;
       if (captureRef.current?.contains(target)) return false;
@@ -47,6 +61,7 @@ export function useRemoteKeyboard(options: RemoteKeyboardOptions) {
     }
 
     function handleKeyEvent(event: KeyboardEvent, trackKey: typeof noteKeyDown) {
+      if (optionsRef.current.enabled === false) return;
       const shouldCapture = shouldIsolateKeyboardEvent({
         phase: 'live',
         chromeOpen: false,
@@ -62,24 +77,19 @@ export function useRemoteKeyboard(options: RemoteKeyboardOptions) {
 
     const handleKeyDown = (event: KeyboardEvent) => handleKeyEvent(event, noteKeyDown);
     const handleKeyUp = (event: KeyboardEvent) => handleKeyEvent(event, noteKeyUp);
-    const releaseKeys = () => publishKeyState(releaseTrackedKeys(trackedKeysRef.current));
-    const handleBlur = () => {
-      composingRef.current = false;
-      releaseKeys();
-    };
-
     window.addEventListener('keydown', handleKeyDown, true);
     window.addEventListener('keyup', handleKeyUp, true);
-    window.addEventListener('blur', handleBlur);
+    window.addEventListener('blur', releaseKeys);
     return () => {
       window.removeEventListener('keydown', handleKeyDown, true);
       window.removeEventListener('keyup', handleKeyUp, true);
-      window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('blur', releaseKeys);
       releaseKeys();
     };
-  }, [sendKeys]);
+  }, [publishKeyState, releaseKeys]);
 
   function sendText(value: string) {
+    if (optionsRef.current.enabled === false) return;
     const { onKeyboard, viewOnly } = optionsRef.current;
     const messages = textMessages(value, viewOnly);
     if (messages.length > 0) onKeyboard(messages);

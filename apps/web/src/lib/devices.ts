@@ -21,6 +21,8 @@ export interface SavedDevice {
   lastConnectedAt: number;
 }
 
+export type RecentDevice = Omit<SavedDevice, 'key' | 'favorite' | 'lastConnectedAt'>;
+
 /**
  * Formats 9-digit RustDesk IDs into spaced groups ("187685134" -> "187 685 134"),
  * matching the official RustDesk mobile & desktop apps.
@@ -47,7 +49,7 @@ export function deviceKeyFor(
 
 export function upsertRecentDevice(
   list: SavedDevice[],
-  entry: Omit<SavedDevice, 'key' | 'favorite' | 'lastConnectedAt'>,
+  entry: RecentDevice,
   nowMs: number,
   maxItems = MAX_SAVED_DEVICES,
 ): SavedDevice[] {

@@ -76,7 +76,10 @@ export function MobileSessionDock(props: MobileSessionDockProps) {
             privacyPending={props.privacyPending}
             onTogglePrivacy={props.onTogglePrivacy}
             diagnosticsOpen={props.diagnosticsOpen}
-            onToggleDiagnostics={props.onToggleDiagnostics}
+            onToggleDiagnostics={() => {
+              if (!props.diagnosticsOpen) props.onToggleDiagnostics();
+              collapseDock();
+            }}
             restartAllowed={features.restart && props.restartAllowed}
             restartPending={props.restartPending}
             onRestart={props.onRestart}
@@ -132,22 +135,25 @@ export function MobileSessionDock(props: MobileSessionDockProps) {
           type="button"
           data-testid="dock-input-mode"
           aria-label={label('toggleInputMode')}
-          aria-pressed={!touchMode}
+          aria-pressed={touchMode}
           className={!touchMode ? 'selected' : undefined}
-          onClick={onToggleTouchMode}
+          onClick={() => {
+            onToggleTouchMode();
+            setDockView('toolbar');
+          }}
         >
           <ModeIcon size={20} />
           <span>{label(touchMode ? 'touch' : 'mouse')}</span>
         </button>
-        <button type="button" data-testid="dock-display" className={dockView === 'display' ? 'selected' : ''} onClick={() => setDockView('display')}>
+        <button type="button" data-testid="dock-display" className={dockView === 'display' ? 'selected' : ''} onClick={() => setDockView(dockView === 'display' ? 'toolbar' : 'display')}>
           <Monitor size={20} />
           <span>{label('screens')}</span>
         </button>
-        <button type="button" data-testid="dock-gestures" className={dockView === 'gestures' ? 'selected' : ''} onClick={() => setDockView('gestures')}>
+        <button type="button" data-testid="dock-gestures" className={dockView === 'gestures' ? 'selected' : ''} onClick={() => setDockView(dockView === 'gestures' ? 'toolbar' : 'gestures')}>
           <CircleHelp size={20} />
           <span>{label('dockGuide')}</span>
         </button>
-        <button type="button" data-testid="dock-menu" className={dockView === 'actions' ? 'selected' : ''} onClick={() => setDockView('actions')}>
+        <button type="button" data-testid="dock-menu" className={dockView === 'actions' ? 'selected' : ''} onClick={() => setDockView(dockView === 'actions' ? 'toolbar' : 'actions')}>
           <Layers2 size={20} />
           <span>{label('moreActions')}</span>
         </button>

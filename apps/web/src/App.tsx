@@ -11,6 +11,8 @@ import {
   removeDevice,
   renameDevice,
   toggleFavoriteDevice,
+  upsertRecentDevice,
+  type RecentDevice,
   type SavedDevice,
 } from './lib/devices.ts';
 import { loadDisplayPrefs, persistDisplayPrefs, resolveQualityLevel, resolveTargetFps, type DisplayPrefs } from './lib/displayPrefs.ts';
@@ -103,6 +105,7 @@ export function App() {
   const [sessionFps, setSessionFps] = useState<number | null>(null);
   const [displayPrefs, setDisplayPrefs] = useState<DisplayPrefs>(() => loadDisplayPrefs());
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [connectionManagerOpen, setConnectionManagerOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width: 768px)').matches);
 
   useEffect(() => {
@@ -213,8 +216,12 @@ export function App() {
     setSavedPasswords((saved) => removeSavedPassword(saved, key));
     setPassword('');
   }, []);
+  const rememberRecentDevice = useCallback((device: RecentDevice) => {
+    const connectedAt = Date.now();
+    setDevices((current) => upsertRecentDevice(current, device, connectedAt));
+  }, []);
   const {
-    session, connect, disconnect, sendInput, setHeldRelease, setArmedKeys, canvasRef, frameSize, codecSupport, decoderError,
+    session, connect, disconnect, sendInput, setHeldRelease, setArmedKeys, canvasRef, frameSize, frameCodec, codecSupport, decoderError,
     stats, quality: linkQuality, audio, startAudio, stopAudio, setAudioVolume,
     clipboardFallback, sendClipboard, pasteLocalClipboard, dismissClipboard,
     clipboardSync, toggleClipboardSync, syncClipboardNow, syncPastedClipboard, noteClipboardCopied, clipboardSyncNeedsRead,
@@ -224,6 +231,7 @@ export function App() {
   } = useSession({
     readInput: () => formRef.current,
     onPasswordRejected: rejectSavedPassword,
+    onConnected: rememberRecentDevice,
   });
   const privacyAllowed = remotePrivacyAllowed(session.peer);
   const restartPending = restartNotice === 'requested' || restartNotice === 'waiting';
@@ -245,6 +253,7 @@ export function App() {
   }
 
   const onConnect = useCallback((request?: ConnectRequest) => {
+    setConnectionManagerOpen(false);
     if (request?.remember && request.password) {
       const key = request.mode === 'direct'
         ? `direct:${request.host}:${request.port}`
@@ -266,7 +275,10 @@ export function App() {
   }, [displayPrefs.followWindow, sendInput, session.currentDisplay, session.focusedDisplay, session.peer, session.phase]);
 
   useEffect(() => {
-    if (session.phase !== 'live') setSessionFps(null);
+    if (session.phase !== 'live') {
+      setSessionFps(null);
+      setConnectionManagerOpen(false);
+    }
   }, [session.phase]);
 
   const twoFactorForm = twoFactor ? (
@@ -302,17 +314,14 @@ export function App() {
     </div>
   ) : null;
 
-  if (session.phase === 'live') {
-    const toolbarQuality = resolveQualityLevel(displayPrefs.qualityPreset, displayPrefs.customBitrate);
-    const targetFps = sessionFps ?? resolveTargetFps(displayPrefs.qualityPreset, displayPrefs.customFps);
-    return (
-      <>
-      {reconnectBanner}
-      {twoFactorForm}
+  const toolbarQuality = resolveQualityLevel(displayPrefs.qualityPreset, displayPrefs.customBitrate);
+  const targetFps = sessionFps ?? resolveTargetFps(displayPrefs.qualityPreset, displayPrefs.customFps);
+  const remoteScreen = session.phase === 'live' ? (
       <RemoteScreen
         canvasRef={canvasRef}
         frameWidth={frameSize.width}
         frameHeight={frameSize.height}
+        frameCodec={frameCodec}
         viewOnly={displayPrefs.viewOnly}
         swapMouseButtons={displayPrefs.swapMouseButtons}
         reverseMouseWheel={displayPrefs.reverseMouseWheel}
@@ -380,6 +389,9 @@ export function App() {
         onCopyDiagnostics={copyDiagnostics}
         onToggleDiagnostics={() => setDiagnosticsOpen((current) => !current)}
         remotePlatform={session.peer?.platform ?? ''}
+        hostTitle={session.peer?.hostname || session.peer?.username || 'Host'}
+        connectionManagerOpen={connectionManagerOpen}
+        onOpenConnectionManager={() => setConnectionManagerOpen(true)}
         connectionRoute={session.peer?.route}
         connectionEncrypted={session.peer?.encrypted === true}
         clipboardFallback={clipboardFallback}
@@ -428,14 +440,15 @@ export function App() {
         autoKeyboard={displayPrefs.autoKeyboard}
         locale={locale}
       />
-      </>
-    );
-  }
+  ) : null;
 
   return (
     <>
     {reconnectBanner}
     {twoFactorForm}
+    {remoteScreen}
+    {(!remoteScreen || connectionManagerOpen) && (
+    <div className={remoteScreen ? 'rd-connection-manager' : undefined}>
     <RustDeskShell
       locale={locale}
       localePreference={localePreference}
@@ -472,7 +485,9 @@ export function App() {
       forceRelay={forceRelay}
       gatewayToken={gatewayToken}
       authRequired={session.authRequired}
-      detail={session.detail}
+      detail={session.phase === 'live'
+        ? t(locale, session.peer?.encrypted ? 'detailEncryptedSession' : 'detailDirectSession')
+        : session.detail}
       decoderError={session.phase === 'error' ? session.errorMessage : decoderError}
       touchMode={displayPrefs.touchMode}
       diagnosticsOpen={diagnosticsOpen}
@@ -517,8 +532,10 @@ export function App() {
       onConnect={onConnect}
       onDisconnect={disconnect}
       onDismissError={disconnect}
-      onClose={disconnect}
+      onClose={() => setConnectionManagerOpen(false)}
     />
+    </div>
+    )}
     </>
   );
 }
