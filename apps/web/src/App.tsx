@@ -182,7 +182,7 @@ export function App() {
     setSavedPasswords((saved) => removeSavedPassword(saved, key));
     setPassword('');
   }, []);
-  const { session, connect, disconnect, sendMouse, setHeldRelease, canvasRef, frameSize, decoderError } = useSession({
+  const { session, connect, disconnect, sendInput, setHeldRelease, setArmedKeys, canvasRef, frameSize, decoderError } = useSession({
     readInput: () => formRef.current,
     onPasswordRejected: rejectSavedPassword,
   });
@@ -210,8 +210,10 @@ export function App() {
         cursorEmbedded={session.cursorEmbedded}
         cursor={session.cursor}
         cursorShape={session.cursorShape}
-        onMouse={sendMouse}
+        onMouse={sendInput}
+        onKeyboard={sendInput}
         onHeldRelease={setHeldRelease}
+        onArmKeys={setArmedKeys}
         onDisconnect={disconnect}
       />
     );

@@ -46,6 +46,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
   const decoderRef = useRef<RemoteDecoder | null>(null);
   const phaseRef = useRef(session.phase);
   const heldReleaseRef = useRef<ClientMessage | null>(null);
+  const armedKeysRef = useRef<ClientMessage[]>([]);
   phaseRef.current = session.phase;
 
   const apply = useCallback((eventGeneration: number, event: Parameters<typeof reduceSession>[1]) => {
@@ -92,11 +93,11 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     socket.close();
   }, []);
 
-  const sendMouse = useCallback((messages: ClientMessage[]) => {
+  const sendInput = useCallback((messages: ClientMessage[]) => {
     const socket = socketRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN || phaseRef.current !== 'live') return;
     for (const message of messages) {
-      if (message.type !== 'mouse') continue;
+      if (message.type !== 'mouse' && message.type !== 'key' && message.type !== 'text') continue;
       socket.send(JSON.stringify(message));
     }
   }, []);
@@ -105,24 +106,30 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     heldReleaseRef.current = message;
   }, []);
 
-  const releaseHeldButton = useCallback(() => {
-    const message = heldReleaseRef.current;
+  const setArmedKeys = useCallback((messages: ClientMessage[]) => {
+    armedKeysRef.current = messages;
+  }, []);
+
+  const releaseHeldInput = useCallback(() => {
+    const mouse = heldReleaseRef.current;
+    const keys = armedKeysRef.current;
     heldReleaseRef.current = null;
-    if (!message) return;
+    armedKeysRef.current = [];
     const socket = socketRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
-    socket.send(JSON.stringify(message));
+    if (mouse) socket.send(JSON.stringify(mouse));
+    for (const message of keys) socket.send(JSON.stringify(message));
   }, []);
 
   const disconnect = useCallback(() => {
     const eventGeneration = ++generation.current;
-    releaseHeldButton();
+    releaseHeldInput();
     closeSocket(socketRef.current, true);
     socketRef.current = null;
     releaseDecoder();
     setDecoderError('');
     apply(eventGeneration, { type: 'disconnect' });
-  }, [apply, closeSocket, releaseDecoder, releaseHeldButton]);
+  }, [apply, closeSocket, releaseDecoder, releaseHeldInput]);
 
   const connect = useCallback(async (request?: ConnectRequest) => {
     const input = readInput();
@@ -247,11 +254,14 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
 
   useEffect(() => () => {
     generation.current += 1;
-    const message = heldReleaseRef.current;
+    const mouse = heldReleaseRef.current;
+    const keys = armedKeysRef.current;
     heldReleaseRef.current = null;
+    armedKeysRef.current = [];
     const socket = socketRef.current;
-    if (message && socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify(message));
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      if (mouse) socket.send(JSON.stringify(mouse));
+      for (const message of keys) socket.send(JSON.stringify(message));
     }
     closeSocket(socketRef.current, true);
     socketRef.current = null;
@@ -259,5 +269,5 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     decoderRef.current = null;
   }, [closeSocket]);
 
-  return { session, connect, disconnect, sendMouse, setHeldRelease, canvasRef, frameSize, decoderError };
+  return { session, connect, disconnect, sendInput, setHeldRelease, setArmedKeys, canvasRef, frameSize, decoderError };
 }

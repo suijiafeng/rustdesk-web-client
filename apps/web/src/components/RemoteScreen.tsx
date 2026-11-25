@@ -4,6 +4,15 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, ty
 import type { ClientMessage, CursorShape } from '@rustdesk-web/shared';
 import { MousePointer2 } from 'lucide-react';
 import { computeViewTransform, mapFromRemote, type ViewTransform } from '../lib/mapping.ts';
+import { isImeEvent } from '../lib/keys.ts';
+import {
+  noteKeyDown,
+  noteKeyUp,
+  releaseTrackedKeys,
+  textMessages,
+  type TrackedKey,
+} from '../lib/keyboard.ts';
+import { shouldIsolateKeyboardEvent } from '../lib/inputIsolation.ts';
 import {
   desktopPointerButton,
   pointerDownMessages,
@@ -28,7 +37,9 @@ interface RemoteScreenProps {
   cursor: { x: number; y: number } | null;
   cursorShape: CursorShape | null;
   onMouse: (messages: ClientMessage[]) => void;
+  onKeyboard: (messages: ClientMessage[]) => void;
   onHeldRelease: (message: ClientMessage | null) => void;
+  onArmKeys: (messages: ClientMessage[]) => void;
   onDisconnect: () => void;
 }
 
@@ -51,11 +62,17 @@ export function RemoteScreen({
   cursor,
   cursorShape,
   onMouse,
+  onKeyboard,
   onHeldRelease,
+  onArmKeys,
   onDisconnect,
 }: RemoteScreenProps) {
   const stageRef = useRef<HTMLDivElement>(null);
+  const captureRef = useRef<HTMLInputElement>(null);
   const cursorCanvasRef = useRef<HTMLCanvasElement>(null);
+  const trackedKeysRef = useRef<TrackedKey[]>([]);
+  const composingRef = useRef(false);
+  const compositionEndedAtRef = useRef(0);
   const dragRef = useRef<Drag | null>(null);
   const queuedMoveRef = useRef<{ x: number; y: number } | null>(null);
   const moveFrameRef = useRef<number | null>(null);
@@ -68,13 +85,17 @@ export function RemoteScreen({
   const frameRef = useRef({ width: frameWidth, height: frameHeight });
   const transformRef = useRef<ViewTransform>({ scale: 1, panX: 0, panY: 0 });
   const onMouseRef = useRef(onMouse);
+  const onKeyboardRef = useRef(onKeyboard);
   const onHeldRef = useRef(onHeldRelease);
+  const onArmKeysRef = useRef(onArmKeys);
   viewOnlyRef.current = viewOnly;
   swapRef.current = swapMouseButtons;
   reverseRef.current = reverseMouseWheel;
   frameRef.current = { width: frameWidth, height: frameHeight };
   onMouseRef.current = onMouse;
+  onKeyboardRef.current = onKeyboard;
   onHeldRef.current = onHeldRelease;
+  onArmKeysRef.current = onArmKeys;
 
   const transform = computeViewTransform(box.width, box.height, frameWidth, frameHeight, 'fit', 1, {
     panX: 0,
@@ -184,6 +205,64 @@ export function RemoteScreen({
     return () => stage.removeEventListener('wheel', onWheel);
   }, []);
 
+  useEffect(() => {
+    const publish = (tracked: TrackedKey[]) => {
+      trackedKeysRef.current = tracked;
+      onArmKeysRef.current(tracked.map((item) => item.release));
+    };
+    const foreignField = (target: EventTarget | null) => {
+      if (!(target instanceof Element)) return false;
+      const capture = captureRef.current;
+      if (capture && (target === capture || capture.contains(target))) return false;
+      return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      const isolate = shouldIsolateKeyboardEvent({
+        phase: 'live',
+        chromeOpen: false,
+        insideChromeInput: foreignField(event.target),
+      });
+      if (!isolate) return;
+      if (composingRef.current || isImeEvent(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const next = noteKeyDown(trackedKeysRef.current, event, viewOnlyRef.current);
+      publish(next.tracked);
+      if (next.messages.length > 0) onKeyboardRef.current(next.messages);
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      const isolate = shouldIsolateKeyboardEvent({
+        phase: 'live',
+        chromeOpen: false,
+        insideChromeInput: foreignField(event.target),
+      });
+      if (!isolate) return;
+      if (composingRef.current || isImeEvent(event) || performance.now() - compositionEndedAtRef.current < 80) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const next = noteKeyUp(trackedKeysRef.current, event, viewOnlyRef.current);
+      publish(next.tracked);
+      if (next.messages.length > 0) onKeyboardRef.current(next.messages);
+    };
+    const onBlur = () => {
+      composingRef.current = false;
+      const released = releaseTrackedKeys(trackedKeysRef.current);
+      publish(released.tracked);
+      if (released.messages.length > 0) onKeyboardRef.current(released.messages);
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('keyup', onKeyUp, true);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true);
+      window.removeEventListener('keyup', onKeyUp, true);
+      window.removeEventListener('blur', onBlur);
+      const released = releaseTrackedKeys(trackedKeysRef.current);
+      publish(released.tracked);
+      if (released.messages.length > 0) onKeyboardRef.current(released.messages);
+    };
+  }, []);
+
   const localPoint = (clientX: number, clientY: number) => {
     const stage = stageRef.current;
     if (!stage) return null;
@@ -211,6 +290,7 @@ export function RemoteScreen({
     dragRef.current = { pointerId: event.pointerId, button, point: pos };
     onHeldRef.current({ type: 'mouse', action: 'up', button, x: pos.x, y: pos.y });
     onMouseRef.current(pointerDownMessages(button, pos, false));
+    captureRef.current?.focus({ preventScroll: true });
   };
 
   const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -307,6 +387,37 @@ export function RemoteScreen({
           )}
         </div>
       ) : null}
+      <input
+        ref={captureRef}
+        type="text"
+        data-testid="capture"
+        aria-hidden="true"
+        tabIndex={-1}
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck={false}
+        onCompositionStart={() => {
+          composingRef.current = true;
+        }}
+        onCompositionEnd={(event) => {
+          composingRef.current = false;
+          compositionEndedAtRef.current = performance.now();
+          const committed = event.data || event.currentTarget.value;
+          event.currentTarget.value = '';
+          const messages = textMessages(committed, viewOnlyRef.current);
+          if (messages.length > 0) onKeyboardRef.current(messages);
+        }}
+        onInput={(event) => {
+          if (composingRef.current) return;
+          const value = event.currentTarget.value;
+          if (!value) return;
+          event.currentTarget.value = '';
+          const messages = textMessages(value, viewOnlyRef.current);
+          if (messages.length > 0) onKeyboardRef.current(messages);
+        }}
+        style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 1, height: 1 }}
+      />
       <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 8, zIndex: 3 }}>
         <button type="button" onClick={() => toggleFullscreen(stageRef.current)} style={{ cursor: 'pointer' }}>
           Full screen
