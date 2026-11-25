@@ -19,7 +19,7 @@ test('GET /api/health reports the gateway is up', async () => {
     const response = await fetch(`http://127.0.0.1:${address.port}${HEALTH_PATH}`);
     assert.equal(response.status, 200);
     const body = (await response.json()) as HealthResponse;
-    assert.deepEqual(body, { ok: true, service: GATEWAY_SERVICE });
+    assert.deepEqual(body, { ok: true, service: GATEWAY_SERVICE, authRequired: false });
   } finally {
     if (!server.listening) return;
     await new Promise<void>((resolve, reject) => {
