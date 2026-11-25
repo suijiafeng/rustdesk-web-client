@@ -73,6 +73,8 @@ window.WebSocket = class extends EventTarget {
     window.sent.push(message);
     if (message.type === 'connect') setTimeout(() => {
       for (const reply of [
+        { type: 'peer', platform: new URLSearchParams(location.search).get('platform') ?? 'Windows',
+          hostname: 'Test host', currentDisplay: 0, displays: [] },
         { type: 'status', state: 'live' },
         { type: 'resolutions', display: 0, sizes: Array.from({length: 12}, (_, i) => ({width: 800+i*80, height: 600+i*50})) },
       ]) this.onmessage?.({ data: JSON.stringify(reply) });
@@ -80,8 +82,10 @@ window.WebSocket = class extends EventTarget {
   }
   close() { this.readyState = 3; }
 };`;
-async function connect() {
-  await cdp('Page.navigate', { url: appUrl });
+async function connect(platform = 'Windows') {
+  const url = new URL(appUrl);
+  url.searchParams.set('platform', platform);
+  await cdp('Page.navigate', { url: url.href });
   await until('window.sent && ' + select('peer-id'));
   await evaluate(select('connect') + '.click()');
   await until(select('password-confirm-connect'));
@@ -91,6 +95,16 @@ async function connect() {
 async function click(x, y) {
   await cdp('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
   await cdp('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 });
+}
+
+async function openDesktopToolbar() {
+  await until(select('session-handle'));
+  const handle = await evaluate(`(() => {
+    const rect = ${select('session-handle')}.getBoundingClientRect();
+    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+  })()`);
+  await click(handle.x, handle.y);
+  await until(select('toolbar-open-menu'));
 }
 
 try {
@@ -159,19 +173,37 @@ try {
   await cdp('Emulation.setTouchEmulationEnabled', { enabled: false });
   await cdp('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
   await connect();
-  await until(select('session-handle'));
-  const handle = await evaluate(`(() => {
-    const rect = ${select('session-handle')}.getBoundingClientRect();
-    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
-  })()`);
-  await click(handle.x, handle.y);
-  await until(select('toolbar-open-menu'));
+  await openDesktopToolbar();
+  assert.equal(await evaluate('Boolean(' + select('toolbar-cad') + ')'), true);
+  await evaluate(select('toolbar-keyboard') + '.click()');
+  await until(select('soft-mod-win'));
+  assert.equal(await evaluate(select('soft-mod-win') + '.textContent'), 'Win');
+  assert.equal(await evaluate(select('soft-mod-alt') + '.textContent'), 'Alt');
+  await evaluate(select('soft-hide') + '.click()');
   await evaluate(select('toolbar-open-menu') + '.click()');
   await until(select('session-backdrop'));
   assert.equal(await evaluate(select('stage') + '.dataset.remoteActive'), 'false');
   await evaluate(select('session-close') + '.click()');
   await until(select('stage') + '.dataset.remoteActive === "true"');
-  console.log('Desktop session menu: opening pauses remote input and closing restores it.');
+  console.log('Windows: Win and Alt labels, Ctrl+Alt+Del, and desktop menu input isolation verified.');
+
+  await connect('Mac OS');
+  await openDesktopToolbar();
+  assert.equal(await evaluate(select('toolbar-cad') + ' === null'), true);
+  await evaluate(select('toolbar-keyboard') + '.click()');
+  await until(select('soft-mod-win'));
+  assert.equal(await evaluate(select('soft-mod-win') + '.textContent'), 'Command');
+  assert.equal(await evaluate(select('soft-mod-alt') + '.textContent'), 'Option');
+  assert.equal(await evaluate(`${select('soft-key-strip')}.querySelectorAll('button[aria-label^="F"]').length`), 12);
+  await evaluate(`${select('soft-key-strip')}.querySelector('button[aria-label="F12"]').click()`);
+  await evaluate(select('soft-mod-win') + '.click()');
+  await cdp('Input.insertText', { text: 'c' });
+  const keys = await evaluate("window.sent.filter(event => event.type === 'key')");
+  assert.deepEqual(keys.map(key => [key.action, key.control ?? key.chr]), [
+    ['down', 'F12'], ['up', 'F12'],
+    ['down', 'Meta'], ['down', 'c'], ['up', 'c'], ['up', 'Meta'],
+  ]);
+  console.log('macOS: Command and Option labels, F12 and Command+C events verified.');
 } finally {
   socket.close();
   const closed = await fetch(`${debuggerUrl}/json/close/${tab.id}`);

@@ -74,6 +74,17 @@ const KEY_TO_CONTROL: Record<string, string> = {
 
 const MODIFIERS = new Set(['Control', 'Alt', 'Shift', 'Meta']);
 
+export function remoteKeyboardProfile(platform?: string) {
+  const os = platform?.trim().toLowerCase();
+  const mac = os === 'mac os' || os === 'macos' || os === 'mac os x' || os === 'darwin';
+  return {
+    altLabel: mac ? 'Option' : 'Alt',
+    metaLabel: mac ? 'Command' : os === 'linux' ? 'Super' : 'Win',
+    shortcutModifier: mac ? 'Meta' : 'Control',
+    showCtrlAltDel: os === 'windows',
+  } as const;
+}
+
 export function controlFromCode(code: string): string | null {
   return CODE_TO_CONTROL[code] ?? null;
 }

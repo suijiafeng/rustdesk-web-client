@@ -7,11 +7,13 @@ import {
   controlFromKeyOrCode,
   diffTextInput,
   isImeEvent,
+  remoteKeyboardProfile,
   type SoftChordPart,
 } from '../lib/keys';
 
 interface SoftKeyboardBarProps {
   locale: Locale;
+  remotePlatform?: string;
   inputRef: React.RefObject<HTMLInputElement | null>;
   onSendText: (text: string) => void;
   onPasteText?: (text: string) => void;
@@ -27,7 +29,7 @@ const STICKY_MODIFIERS = [
   { label: 'Win', control: 'Meta' },
 ] as const;
 
-const EXTRA_KEYS = [
+const EXTRA_KEYS: ReadonlyArray<{ label: string; control: string; aria?: string }> = [
   { label: 'Esc', control: 'Escape' },
   { label: 'Tab', control: 'Tab' },
   { label: '←', control: 'ArrowLeft', aria: 'Left arrow' },
@@ -39,10 +41,15 @@ const EXTRA_KEYS = [
   { label: 'Page Up', control: 'PageUp' },
   { label: 'Page Down', control: 'PageDown' },
   { label: 'Del', control: 'Delete' },
+  ...Array.from({ length: 12 }, (_, index) => {
+    const key = `F${index + 1}`;
+    return { label: key, control: key };
+  }),
 ] as const;
 
 export function SoftKeyboardBar({
   locale,
+  remotePlatform,
   inputRef,
   onSendText,
   onPasteText,
@@ -50,6 +57,7 @@ export function SoftKeyboardBar({
   onSendChord,
   onHide,
 }: SoftKeyboardBarProps) {
+  const { altLabel, metaLabel } = remoteKeyboardProfile(remotePlatform);
   const composingRef = useRef(false);
   const lastSentRef = useRef('');
   const [latched, setLatched] = useState<string[]>([]);
@@ -243,7 +251,7 @@ export function SoftKeyboardBar({
               className={`soft-key-btn${isActive ? ' active' : ''}`}
               onClick={() => toggleModifier(mod.control)}
             >
-              {mod.label}
+              {mod.control === 'Meta' ? metaLabel : mod.control === 'Alt' ? altLabel : mod.label}
             </button>
           );
         })}
@@ -252,7 +260,7 @@ export function SoftKeyboardBar({
           <button
             key={item.control}
             type="button"
-            aria-label={'aria' in item ? item.aria : item.label}
+            aria-label={item.aria ?? item.label}
             className="soft-key-btn"
             onClick={() => tapExtraKey(item.control)}
           >

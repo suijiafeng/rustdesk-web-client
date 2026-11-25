@@ -93,6 +93,7 @@ import {
   isPrintableAscii,
   mapPhysicalKeyDown,
   mapPhysicalKeyUp,
+  remoteKeyboardProfile,
 } from './lib/keys';
 import {
   DEFAULT_EDGE_PADDING,
@@ -379,6 +380,7 @@ export default function App() {
   const [resolutionOptions, setResolutionOptions] = useState<Extract<ServerMessage, { type: 'resolutions' }> | null>(null);
   const followCursorRef = useRef<(x: number, y: number) => void>(() => {});
   const [peer, setPeer] = useState<PeerMessage | null>(null);
+  const { shortcutModifier, showCtrlAltDel } = remoteKeyboardProfile(peer?.platform);
   const [display, setDisplay] = useState(0);
   const [stats, setStats] = useState<SessionStats>(EMPTY_STATS);
   const [decoderError, setDecoderError] = useState(initialWebCodecs.ok ? '' : initialWebCodecs.reason);
@@ -1832,15 +1834,16 @@ export default function App() {
 
   const handleQuickKey = useCallback(
     (name: 'Esc' | 'Tab' | 'Ctrl+C' | 'Ctrl+V' | 'Ctrl+Alt+Del' | 'Lock') => {
+      if (name === 'Ctrl+Alt+Del' && !showCtrlAltDel) return;
       closeChrome();
       if (name === 'Esc') tapControl('Escape');
       else if (name === 'Tab') tapControl('Tab');
-      else if (name === 'Ctrl+C') sendChord([{ control: 'Control' }, { chr: 'c' }]);
-      else if (name === 'Ctrl+V') sendChord([{ control: 'Control' }, { chr: 'v' }]);
+      else if (name === 'Ctrl+C') sendChord([{ control: shortcutModifier }, { chr: 'c' }]);
+      else if (name === 'Ctrl+V') sendChord([{ control: shortcutModifier }, { chr: 'v' }]);
       else if (name === 'Ctrl+Alt+Del') tapControl('CtrlAltDel');
       else if (name === 'Lock') tapControl('LockScreen');
     },
-    [closeChrome, sendChord, tapControl],
+    [closeChrome, sendChord, shortcutModifier, showCtrlAltDel, tapControl],
   );
 
   // Global physical keyboard listener (capture phase + full host-browser shortcut isolation)
@@ -2866,7 +2869,7 @@ export default function App() {
             }
           }}
           onToggleKeyboard={toggleSoftKeyboard}
-          onCtrlAltDel={() => handleQuickKey('Ctrl+Alt+Del')}
+          onCtrlAltDel={showCtrlAltDel && !displayPrefs.viewOnly ? () => handleQuickKey('Ctrl+Alt+Del') : undefined}
           onOpenMenu={() => setMenuOpen(true)}
           onDisconnect={disconnect}
         />
@@ -3052,6 +3055,7 @@ export default function App() {
         <SoftKeyboardBar
           onPasteText={clipboardSync && clipboardAllowed ? text => { clipboard.sendLocal(text); } : undefined}
           locale={locale}
+          remotePlatform={peer?.platform}
           inputRef={softKeyboardInputRef}
           onSendText={sendText}
           onSendControl={(action, control) => send({ type: 'key', action, control })}

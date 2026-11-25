@@ -34,7 +34,7 @@ interface SessionHandleProps {
   onSwitchDisplay: (index: number) => void;
   onToggleViewMode: () => void;
   onToggleKeyboard: () => void;
-  onCtrlAltDel: () => void;
+  onCtrlAltDel?: () => void;
   onOpenMenu: () => void;
   onDisconnect: () => void;
 }
@@ -60,6 +60,7 @@ export function SessionHandle({
   onOpenMenu,
   onDisconnect,
 }: SessionHandleProps) {
+  const showCtrlAltDel = Boolean(onCtrlAltDel);
   const dragRef = useRef<{ startX: number; origin: number; moved: boolean } | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const [barWidth, setBarWidth] = useState(520);
@@ -68,7 +69,7 @@ export function SessionHandle({
     if (expanded && barRef.current) {
       setBarWidth(barRef.current.offsetWidth || 520);
     }
-  }, [expanded, displays.length, hostTitle, locale]);
+  }, [expanded, displays.length, hostTitle, locale, showCtrlAltDel]);
 
   const startDrag = (e: React.PointerEvent<HTMLElement>) => {
     e.stopPropagation();
@@ -205,17 +206,19 @@ export function SessionHandle({
         <Scan size={15} />
       </button>
 
-      <button
-        type="button"
-        className="rd-toolbar-btn"
-        data-testid="toolbar-cad"
-        aria-label="Ctrl+Alt+Del"
-        data-tooltip="Ctrl+Alt+Del"
-        data-tooltip-pos="bottom"
-        onClick={onCtrlAltDel}
-      >
-        <ShieldAlert size={15} />
-      </button>
+      {showCtrlAltDel && (
+        <button
+          type="button"
+          className="rd-toolbar-btn"
+          data-testid="toolbar-cad"
+          aria-label="Ctrl+Alt+Del"
+          data-tooltip="Ctrl+Alt+Del"
+          data-tooltip-pos="bottom"
+          onClick={onCtrlAltDel}
+        >
+          <ShieldAlert size={15} />
+        </button>
+      )}
 
       <button
         type="button"
