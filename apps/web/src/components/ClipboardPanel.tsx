@@ -1,8 +1,8 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
 import { useEffect, useState } from 'react';
-import { t, type Locale } from '../lib/i18n.ts';
-import { validateClipboardText } from '../lib/platform.ts';
+import { t, type I18nKey, type Locale } from '../lib/i18n.ts';
+import { validateClipboardText, type ClipboardActionResult } from '../lib/platform.ts';
 
 interface ClipboardPanelProps {
   locale: Locale;
@@ -10,17 +10,43 @@ interface ClipboardPanelProps {
   incoming: string | null;
   permitted: boolean;
   disabled: boolean;
-  onSend: (text: string) => 'ok' | 'disabled' | 'denied' | 'empty' | 'too-large';
+  viewOnly: boolean;
+  onSend: (text: string) => ClipboardActionResult;
+  onPasteLocalClipboard: () => Promise<ClipboardActionResult>;
   onClose: () => void;
 }
 
-export function ClipboardPanel({ locale, open, incoming, permitted, disabled, onSend, onClose }: ClipboardPanelProps) {
+const clipboardNotice: Record<Exclude<ClipboardActionResult, 'ok'>, I18nKey> = {
+  disabled: 'clipHostDenied',
+  denied: 'clipHostDenied',
+  empty: 'clipEmpty',
+  'too-large': 'clipInvalid',
+  disconnected: 'clipDisconnected',
+  'read-failed': 'clipReadFailed',
+  'view-only': 'viewOnlyLabel',
+};
+
+export function ClipboardPanel({ locale, open, incoming, permitted, disabled, viewOnly, onSend, onPasteLocalClipboard, onClose }: ClipboardPanelProps) {
   const [draft, setDraft] = useState('');
-  const [note, setNote] = useState('');
+  const [note, setNote] = useState<I18nKey | null>(null);
+  const [pasting, setPasting] = useState(false);
   useEffect(() => {
-    if (incoming) setNote(t(locale, 'copyRemoteText'));
-  }, [incoming, locale]);
+    if (incoming) setNote('copyRemoteText');
+  }, [incoming]);
   if (!open || disabled) return null;
+  const pasteLocal = async () => {
+    setPasting(true);
+    setNote(null);
+    try {
+      const result = await onPasteLocalClipboard();
+      setNote(result === 'ok' ? 'clipInputSent' : clipboardNotice[result]);
+    } catch {
+      setNote('clipDisconnected');
+    } finally {
+      setPasting(false);
+    }
+  };
+
   return (
     <form
       className="rd-clipboard-panel"
@@ -29,7 +55,7 @@ export function ClipboardPanel({ locale, open, incoming, permitted, disabled, on
       onSubmit={(event) => {
         event.preventDefault();
         const decision = onSend(draft);
-        setNote(t(locale, decision === 'ok' ? 'clipSent' : decision === 'denied' ? 'clipDenied' : 'clipInvalid'));
+        setNote(decision === 'ok' ? 'clipSent' : clipboardNotice[decision]);
         if (decision === 'ok') setDraft('');
       }}
     >
@@ -41,9 +67,13 @@ export function ClipboardPanel({ locale, open, incoming, permitted, disabled, on
             type="button"
             onClick={() => {
               if (validateClipboardText(incoming, false, permitted) !== 'ok') return;
-              void navigator.clipboard?.writeText(incoming).then(
-                () => setNote(t(locale, 'clipCopied')),
-                () => setNote(t(locale, 'clipDenied')),
+              if (!navigator.clipboard?.writeText) {
+                setNote('clipDenied');
+                return;
+              }
+              void navigator.clipboard.writeText(incoming).then(
+                () => setNote('clipCopied'),
+                () => setNote('clipDenied'),
               );
             }}
           >
@@ -59,9 +89,12 @@ export function ClipboardPanel({ locale, open, incoming, permitted, disabled, on
       />
       <div className="rd-clipboard-actions">
         <button type="submit" disabled={!permitted}>{t(locale, 'send')}</button>
+        <button type="button" disabled={!permitted || viewOnly || pasting} onClick={() => void pasteLocal()}>
+          {t(locale, 'clipTypeLocal')}
+        </button>
         <button type="button" onClick={onClose}>{t(locale, 'close')}</button>
       </div>
-      {note ? <p>{note}</p> : null}
+      <p role="status">{note ? t(locale, note) : null}</p>
     </form>
   );
 }

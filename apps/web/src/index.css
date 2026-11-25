@@ -536,6 +536,7 @@ button:focus-visible {
 
 .rd-clipboard-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 

@@ -93,7 +93,10 @@ export function clipboardByteLength(text: string): number {
   return new TextEncoder().encode(text).byteLength;
 }
 
-export function validateClipboardText(text: string, disabled: boolean, permitted: boolean): 'ok' | 'disabled' | 'denied' | 'empty' | 'too-large' {
+type ClipboardValidation = 'ok' | 'disabled' | 'denied' | 'empty' | 'too-large';
+export type ClipboardActionResult = ClipboardValidation | 'disconnected' | 'read-failed' | 'view-only';
+
+export function validateClipboardText(text: string, disabled: boolean, permitted: boolean): ClipboardValidation {
   if (disabled) return 'disabled';
   if (!permitted) return 'denied';
   if (!text) return 'empty';

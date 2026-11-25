@@ -16,7 +16,8 @@ import {
   sweepTimeouts,
 } from '../lib/linkHealth.ts';
 import { sessionEndLock } from '../lib/displays.ts';
-import { classifyBrowser, clipboardDelivery, reconnectDelayMs, twoFactorStatus, validateChatText, validateClipboardText, validateTwoFactorCode } from '../lib/platform.ts';
+import { textMessages } from '../lib/keyboard.ts';
+import { classifyBrowser, clipboardDelivery, reconnectDelayMs, twoFactorStatus, validateChatText, validateClipboardText, validateTwoFactorCode, type ClipboardActionResult } from '../lib/platform.ts';
 import { RemoteAudio, clampVolume, webAudioStatus } from '../lib/remoteAudio.ts';
 import { filterCodecSupport, resolveQualityLevel, resolveTargetFps, type DisplayPrefs } from '../lib/displayPrefs.ts';
 import {
@@ -514,13 +515,40 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     audioRef.current = null;
   }, [closeSocket]);
 
-  const sendClipboard = useCallback((text: string) => {
+  const sendClipboard = useCallback((text: string, asInput = false): ClipboardActionResult => {
+    const socket = socketRef.current;
+    const { disableClipboard, viewOnly } = readInput().displayPrefs;
     const allowed = sessionRef.current.peer?.clipboardAllowed === true;
-    const decision = validateClipboardText(text, readInput().displayPrefs.disableClipboard, allowed);
-    if (decision !== 'ok' || phaseRef.current !== 'live') return decision;
-    sendInput([{ type: 'clipboard', text }]);
-    return 'ok' as const;
-  }, [readInput, sendInput]);
+    const decision = validateClipboardText(text, disableClipboard, allowed);
+    if (decision !== 'ok') return decision;
+    if (asInput && viewOnly) return 'view-only';
+    if (!socket || socket.readyState !== WebSocket.OPEN || phaseRef.current !== 'live') return 'disconnected';
+    const messages: ClientMessage[] = asInput ? textMessages(text, false) : [{ type: 'clipboard', text }];
+    try {
+      for (const message of messages) socket.send(JSON.stringify(message));
+      return 'ok';
+    } catch {
+      return 'disconnected';
+    }
+  }, [readInput]);
+
+  const pasteLocalClipboard = useCallback(async (): Promise<ClipboardActionResult> => {
+    const socket = socketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN || phaseRef.current !== 'live') return 'disconnected';
+    const { viewOnly, disableClipboard } = readInput().displayPrefs;
+    if (viewOnly) return 'view-only';
+    if (disableClipboard) return 'disabled';
+    if (sessionRef.current.peer?.clipboardAllowed !== true) return 'denied';
+    let text: string;
+    try {
+      if (!navigator.clipboard?.readText) return 'read-failed';
+      text = await navigator.clipboard.readText();
+    } catch {
+      return 'read-failed';
+    }
+    if (socket !== socketRef.current) return 'disconnected';
+    return sendClipboard(text, true);
+  }, [readInput, sendClipboard]);
 
   const dismissClipboard = useCallback(() => setClipboardFallback(null), []);
 
@@ -610,6 +638,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     setAudioVolume,
     clipboardFallback,
     sendClipboard,
+    pasteLocalClipboard,
     dismissClipboard,
     privacy,
     togglePrivacy,

@@ -212,7 +212,7 @@ export function App() {
   const {
     session, connect, disconnect, sendInput, setHeldRelease, setArmedKeys, canvasRef, frameSize, decoderError,
     stats, quality: linkQuality, audio, startAudio, stopAudio, setAudioVolume,
-    clipboardFallback, sendClipboard, dismissClipboard,     privacy, togglePrivacy, restartNotice, requestRestart,     reconnectAttempt, cancelReconnect,     chatLines, sendChat, twoFactor, submitTwoFactor,
+    clipboardFallback, sendClipboard, pasteLocalClipboard, dismissClipboard,     privacy, togglePrivacy, restartNotice, requestRestart,     reconnectAttempt, cancelReconnect,     chatLines, sendChat, twoFactor, submitTwoFactor,
   } = useSession({
     readInput: () => formRef.current,
     onPasswordRejected: rejectSavedPassword,
@@ -336,6 +336,7 @@ export function App() {
         clipboardPermitted={session.peer?.clipboardAllowed === true}
         clipboardDisabled={displayPrefs.disableClipboard}
         onSendClipboard={sendClipboard}
+        onPasteLocalClipboard={pasteLocalClipboard}
         onDismissClipboard={dismissClipboard}
         privacyEnabled={privacy.enabled}
         privacyPending={privacy.pending}

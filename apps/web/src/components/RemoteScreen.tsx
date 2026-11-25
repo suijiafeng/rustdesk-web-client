@@ -38,7 +38,7 @@ import {
   type QuickKeyName,
   type TrackedKey,
 } from '../lib/keyboard.ts';
-import { adaptKeyMessages, classifyBrowser, classifyLocalOs, classifyRemoteOs, keyboardLockAction, readKeyboardLock, remoteFeatures } from '../lib/platform.ts';
+import { adaptKeyMessages, classifyBrowser, classifyLocalOs, classifyRemoteOs, keyboardLockAction, readKeyboardLock, remoteFeatures, type ClipboardActionResult } from '../lib/platform.ts';
 import { shouldIsolateKeyboardEvent } from '../lib/inputIsolation.ts';
 import {
   desktopPointerButton,
@@ -98,7 +98,8 @@ interface RemoteScreenProps {
   clipboardFallback: string | null;
   clipboardPermitted: boolean;
   clipboardDisabled: boolean;
-  onSendClipboard: (text: string) => 'ok' | 'disabled' | 'denied' | 'empty' | 'too-large';
+  onSendClipboard: (text: string) => ClipboardActionResult;
+  onPasteLocalClipboard: () => Promise<ClipboardActionResult>;
   onDismissClipboard: () => void;
   privacyEnabled: boolean;
   privacyPending: boolean;
@@ -166,6 +167,7 @@ export function RemoteScreen({
   clipboardPermitted,
   clipboardDisabled,
   onSendClipboard,
+  onPasteLocalClipboard,
   onDismissClipboard,
   privacyEnabled,
   privacyPending,
@@ -422,7 +424,7 @@ export function RemoteScreen({
       if (!(target instanceof Element)) return false;
       const capture = captureRef.current;
       if (capture && (target === capture || capture.contains(target))) return false;
-      return Boolean(target.closest('input, textarea, select, dialog[open], [contenteditable="true"]'));
+      return Boolean(target.closest('input, textarea, select, dialog[open], .rd-clipboard-panel, [contenteditable="true"]'));
     };
     const onKeyDown = (event: KeyboardEvent) => {
       const isolate = shouldIsolateKeyboardEvent({
@@ -950,6 +952,8 @@ export function RemoteScreen({
         permitted={clipboardPermitted}
         disabled={clipboardDisabled}
         onSend={onSendClipboard}
+        viewOnly={viewOnly}
+        onPasteLocalClipboard={onPasteLocalClipboard}
         onClose={() => {
           setClipboardOpen(false);
           onDismissClipboard();
