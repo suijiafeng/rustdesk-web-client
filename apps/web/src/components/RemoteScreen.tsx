@@ -21,26 +21,17 @@ import { decodeCursorPixels, isTextCursorTap } from '../lib/cursor.ts';
 import { MobileSessionDock } from './MobileSessionDock.tsx';
 import { SoftKeyboardBar } from './SoftKeyboardBar.tsx';
 import { useKeyboardViewport } from '../hooks/useKeyboardViewport.ts';
+import { useRemoteKeyboard } from '../hooks/useRemoteKeyboard.ts';
 import { t, type Locale } from '../lib/i18n.ts';
 import { sessionChromeMode } from '../lib/sessionChrome.ts';
 import { DiagnosticsPanel } from './DiagnosticsPanel.tsx';
 import { offsetPointerMessages } from '../lib/displays.ts';
-import { isImeEvent } from '../lib/keys.ts';
 import { SessionToolbar } from './SessionToolbar.tsx';
 import type { SessionDisplayControlsProps } from './SessionDisplayControls.tsx';
 import { ClipboardPanel } from './ClipboardPanel.tsx';
 import { ChatPanel } from './ChatPanel.tsx';
-import {
-  noteKeyDown,
-  noteKeyUp,
-  quickKeyMessages,
-  releaseTrackedKeys,
-  textMessages,
-  type QuickKeyName,
-  type TrackedKey,
-} from '../lib/keyboard.ts';
-import { adaptKeyMessages, classifyBrowser, classifyLocalOs, classifyRemoteOs, keyboardLockAction, readKeyboardLock, remoteFeatures, type ClipboardActionResult } from '../lib/platform.ts';
-import { shouldIsolateKeyboardEvent } from '../lib/inputIsolation.ts';
+import { quickKeyMessages, type QuickKeyName } from '../lib/keyboard.ts';
+import { classifyBrowser, classifyRemoteOs, keyboardLockAction, readKeyboardLock, remoteFeatures, type ClipboardActionResult } from '../lib/platform.ts';
 import {
   desktopPointerButton,
   pointerDownMessages,
@@ -216,13 +207,9 @@ export function RemoteScreen({
   locale = 'en',
 }: RemoteScreenProps) {
   const stageRef = useRef<HTMLDivElement>(null);
-  const captureRef = useRef<HTMLInputElement>(null);
   const softKeyboardInputRef = useRef<HTMLInputElement>(null);
   const restartDialogRef = useRef<HTMLDialogElement>(null);
   const cursorCanvasRef = useRef<HTMLCanvasElement>(null);
-  const trackedKeysRef = useRef<TrackedKey[]>([]);
-  const composingRef = useRef(false);
-  const compositionEndedAtRef = useRef(0);
   const dragRef = useRef<Drag | null>(null);
   const queuedMoveRef = useRef<{ x: number; y: number } | null>(null);
   const moveFrameRef = useRef<number | null>(null);
@@ -244,9 +231,7 @@ export function RemoteScreen({
   const frameRef = useRef({ width: frameWidth, height: frameHeight });
   const transformRef = useRef<ViewTransform>({ scale: 1, panX: 0, panY: 0 });
   const onMouseRef = useRef(onMouse);
-  const onKeyboardRef = useRef(onKeyboard);
   const onHeldRef = useRef(onHeldRelease);
-  const onArmKeysRef = useRef(onArmKeys);
   const originRef = useRef(displayOrigin);
   const boxRef = useRef(box);
   const gestureRef = useRef(createTouchGestureState());
@@ -261,10 +246,6 @@ export function RemoteScreen({
   reverseRef.current = reverseMouseWheel;
   frameRef.current = { width: frameWidth, height: frameHeight };
   onMouseRef.current = onMouse;
-  onKeyboardRef.current = onKeyboard;
-  const localOsRef = useRef(classifyLocalOs(navigator.userAgent, navigator.platform));
-  const remotePlatformRef = useRef(remotePlatform);
-  remotePlatformRef.current = remotePlatform;
   const scrollStyleRef = useRef(scrollStyle);
   scrollStyleRef.current = scrollStyle;
   useEffect(() => {
@@ -279,10 +260,12 @@ export function RemoteScreen({
   useEffect(() => {
     setViewMode(viewStyle === 'stretch' ? 'stretch' : viewStyle === 'original' ? 'original' : 'fit');
   }, [viewStyle]);
-  const sendKeys = useCallback((messages: ClientMessage[]) => {
-    const adapted = adaptKeyMessages(messages, localOsRef.current, classifyRemoteOs(remotePlatform));
-    if (adapted.length > 0) onKeyboard(adapted);
-  }, [onKeyboard, remotePlatform]);
+  const { captureRef, sendKeys, handleCompositionStart, handleCompositionEnd, handleInput } = useRemoteKeyboard({
+    viewOnly,
+    remotePlatform,
+    onKeyboard,
+    onArmKeys,
+  });
   const sendQuickKey = useCallback((name: QuickKeyName) => {
     const remote = classifyRemoteOs(remotePlatform);
     const features = remoteFeatures(remote);
@@ -291,7 +274,6 @@ export function RemoteScreen({
     sendKeys(quickKeyMessages(name, viewOnly));
   }, [remotePlatform, sendKeys, viewOnly]);
   onHeldRef.current = onHeldRelease;
-  onArmKeysRef.current = onArmKeys;
   originRef.current = displayOrigin;
 
   const sendPointer = useCallback((messages: ClientMessage[]) => {
@@ -444,64 +426,6 @@ export function RemoteScreen({
     };
     stage.addEventListener('wheel', onWheel, { passive: false });
     return () => stage.removeEventListener('wheel', onWheel);
-  }, []);
-
-  useEffect(() => {
-    const publish = (tracked: TrackedKey[]) => {
-      trackedKeysRef.current = tracked;
-      onArmKeysRef.current(tracked.map((item) => item.release));
-    };
-    const foreignField = (target: EventTarget | null) => {
-      if (!(target instanceof Element)) return false;
-      const capture = captureRef.current;
-      if (capture && (target === capture || capture.contains(target))) return false;
-      return Boolean(target.closest('input, textarea, select, dialog[open], .remote-menu-panel, .rd-clipboard-panel, [data-adaptive-select], [contenteditable="true"]'));
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      const isolate = shouldIsolateKeyboardEvent({
-        phase: 'live',
-        chromeOpen: false,
-        insideChromeInput: foreignField(event.target),
-      });
-      if (!isolate) return;
-      if (composingRef.current || isImeEvent(event)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      const next = noteKeyDown(trackedKeysRef.current, event, viewOnlyRef.current);
-      publish(next.tracked);
-      if (next.messages.length > 0) onKeyboardRef.current(adaptKeyMessages(next.messages, localOsRef.current, classifyRemoteOs(remotePlatformRef.current)));
-    };
-    const onKeyUp = (event: KeyboardEvent) => {
-      const isolate = shouldIsolateKeyboardEvent({
-        phase: 'live',
-        chromeOpen: false,
-        insideChromeInput: foreignField(event.target),
-      });
-      if (!isolate) return;
-      if (composingRef.current || isImeEvent(event) || performance.now() - compositionEndedAtRef.current < 80) return;
-      event.preventDefault();
-      event.stopPropagation();
-      const next = noteKeyUp(trackedKeysRef.current, event, viewOnlyRef.current);
-      publish(next.tracked);
-      if (next.messages.length > 0) onKeyboardRef.current(adaptKeyMessages(next.messages, localOsRef.current, classifyRemoteOs(remotePlatformRef.current)));
-    };
-    const onBlur = () => {
-      composingRef.current = false;
-      const released = releaseTrackedKeys(trackedKeysRef.current);
-      publish(released.tracked);
-      if (released.messages.length > 0) onKeyboardRef.current(adaptKeyMessages(released.messages, localOsRef.current, classifyRemoteOs(remotePlatformRef.current)));
-    };
-    window.addEventListener('keydown', onKeyDown, true);
-    window.addEventListener('keyup', onKeyUp, true);
-    window.addEventListener('blur', onBlur);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown, true);
-      window.removeEventListener('keyup', onKeyUp, true);
-      window.removeEventListener('blur', onBlur);
-      const released = releaseTrackedKeys(trackedKeysRef.current);
-      publish(released.tracked);
-      if (released.messages.length > 0) onKeyboardRef.current(adaptKeyMessages(released.messages, localOsRef.current, classifyRemoteOs(remotePlatformRef.current)));
-    };
   }, []);
 
   const clearLongPress = useCallback(() => {
@@ -840,25 +764,9 @@ export function RemoteScreen({
         autoCorrect="off"
         autoCapitalize="off"
         spellCheck={false}
-        onCompositionStart={() => {
-          composingRef.current = true;
-        }}
-        onCompositionEnd={(event) => {
-          composingRef.current = false;
-          compositionEndedAtRef.current = performance.now();
-          const committed = event.data || event.currentTarget.value;
-          event.currentTarget.value = '';
-          const messages = textMessages(committed, viewOnlyRef.current);
-          if (messages.length > 0) onKeyboardRef.current(messages);
-        }}
-        onInput={(event) => {
-          if (composingRef.current) return;
-          const value = event.currentTarget.value;
-          if (!value) return;
-          event.currentTarget.value = '';
-          const messages = textMessages(value, viewOnlyRef.current);
-          if (messages.length > 0) onKeyboardRef.current(messages);
-        }}
+        onCompositionStart={handleCompositionStart}
+        onCompositionEnd={handleCompositionEnd}
+        onInput={handleInput}
         style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 1, height: 1 }}
       />
       {chrome !== 'keyboard' ? (
