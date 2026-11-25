@@ -182,7 +182,7 @@ export function App() {
     setSavedPasswords((saved) => removeSavedPassword(saved, key));
     setPassword('');
   }, []);
-  const { session, connect, disconnect, canvasRef, frameSize, decoderError } = useSession({
+  const { session, connect, disconnect, sendMouse, setHeldRelease, canvasRef, frameSize, decoderError } = useSession({
     readInput: () => formRef.current,
     onPasswordRejected: rejectSavedPassword,
   });
@@ -202,6 +202,16 @@ export function App() {
         canvasRef={canvasRef}
         frameWidth={frameSize.width}
         frameHeight={frameSize.height}
+        viewOnly={displayPrefs.viewOnly}
+        swapMouseButtons={displayPrefs.swapMouseButtons}
+        reverseMouseWheel={displayPrefs.reverseMouseWheel}
+        showRemoteCursor={displayPrefs.showRemoteCursor}
+        enlargeCursor={displayPrefs.enlargeCursor}
+        cursorEmbedded={session.cursorEmbedded}
+        cursor={session.cursor}
+        cursorShape={session.cursorShape}
+        onMouse={sendMouse}
+        onHeldRelease={setHeldRelease}
         onDisconnect={disconnect}
       />
     );

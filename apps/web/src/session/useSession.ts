@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { codecName, decodeRdv1Frame } from '@rustdesk-web/protocol';
-import type { ServerMessage } from '@rustdesk-web/shared';
+import type { ClientMessage, ServerMessage } from '@rustdesk-web/shared';
 import type { ConnectRequest } from '../components/RustDeskShell.tsx';
 import { probeCodecs, webCodecsStatus } from '../lib/codecs.ts';
 import { RemoteDecoder } from '../lib/decoder.ts';
@@ -45,6 +45,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const decoderRef = useRef<RemoteDecoder | null>(null);
   const phaseRef = useRef(session.phase);
+  const heldReleaseRef = useRef<ClientMessage | null>(null);
   phaseRef.current = session.phase;
 
   const apply = useCallback((eventGeneration: number, event: Parameters<typeof reduceSession>[1]) => {
@@ -91,14 +92,37 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     socket.close();
   }, []);
 
+  const sendMouse = useCallback((messages: ClientMessage[]) => {
+    const socket = socketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN || phaseRef.current !== 'live') return;
+    for (const message of messages) {
+      if (message.type !== 'mouse') continue;
+      socket.send(JSON.stringify(message));
+    }
+  }, []);
+
+  const setHeldRelease = useCallback((message: ClientMessage | null) => {
+    heldReleaseRef.current = message;
+  }, []);
+
+  const releaseHeldButton = useCallback(() => {
+    const message = heldReleaseRef.current;
+    heldReleaseRef.current = null;
+    if (!message) return;
+    const socket = socketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    socket.send(JSON.stringify(message));
+  }, []);
+
   const disconnect = useCallback(() => {
     const eventGeneration = ++generation.current;
+    releaseHeldButton();
     closeSocket(socketRef.current, true);
     socketRef.current = null;
     releaseDecoder();
     setDecoderError('');
     apply(eventGeneration, { type: 'disconnect' });
-  }, [apply, closeSocket, releaseDecoder]);
+  }, [apply, closeSocket, releaseDecoder, releaseHeldButton]);
 
   const connect = useCallback(async (request?: ConnectRequest) => {
     const input = readInput();
@@ -223,11 +247,17 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
 
   useEffect(() => () => {
     generation.current += 1;
+    const message = heldReleaseRef.current;
+    heldReleaseRef.current = null;
+    const socket = socketRef.current;
+    if (message && socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify(message));
+    }
     closeSocket(socketRef.current, true);
     socketRef.current = null;
     decoderRef.current?.close();
     decoderRef.current = null;
   }, [closeSocket]);
 
-  return { session, connect, disconnect, canvasRef, frameSize, decoderError };
+  return { session, connect, disconnect, sendMouse, setHeldRelease, canvasRef, frameSize, decoderError };
 }

@@ -144,6 +144,26 @@ test('timeout and socket loss do not leave a connecting session hanging', () => 
   assert.equal(dropped.peer, null);
 });
 
+test('remote cursor position is relative to the current display and hidden outside it', () => {
+  const withDisplay = reduceSession(initialSession, {
+    type: 'server',
+    message: {
+      ...peer,
+      displays: [{ index: 0, name: 'right', x: 1920, y: 0, width: 1280, height: 720, online: true }],
+    },
+  });
+  assert.deepEqual(withDisplay.displayOrigin, { x: 1920, y: 0 });
+  const moved = reduceSession(withDisplay, { type: 'server', message: { type: 'cursor', x: 1930, y: 15 } });
+  assert.deepEqual(moved.cursor, { x: 10, y: 15 });
+  const outside = reduceSession(withDisplay, { type: 'server', message: { type: 'cursor', x: 10, y: 15 } });
+  assert.equal(outside.cursor, null);
+  const shaped = reduceSession(moved, {
+    type: 'server',
+    message: { type: 'cursorShape', shape: { width: 2, height: 1, hotX: 1, hotY: 0, rgba: 'AQID' } },
+  });
+  assert.equal(shaped.cursorShape?.hotX, 1);
+});
+
 test('disconnect clears the session and a stale generation is ignored', () => {
   const live = reduceSession(
     reduceSession(initialSession, { type: 'connect-started' }),

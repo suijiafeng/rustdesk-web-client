@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "node --import tsx --test src/lib/devices.test.ts src/lib/displayPrefs.test.ts src/lib/errors.test.ts src/lib/i18n.test.ts src/lib/passwords.test.ts src/lib/theme.test.ts src/lib/inputIsolation.test.ts src/lib/decoder.test.ts src/lib/frameFit.test.ts src/lib/mapping.test.ts src/session/sessionMachine.test.ts"
+    "test": "node --import tsx --test src/lib/devices.test.ts src/lib/displayPrefs.test.ts src/lib/errors.test.ts src/lib/i18n.test.ts src/lib/passwords.test.ts src/lib/theme.test.ts src/lib/inputIsolation.test.ts src/lib/decoder.test.ts src/lib/frameFit.test.ts src/lib/mapping.test.ts src/lib/mouseInput.test.ts src/session/sessionMachine.test.ts"
   },
   "dependencies": {
     "@rustdesk-web/protocol": "0.0.0",

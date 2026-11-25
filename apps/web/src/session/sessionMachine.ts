@@ -1,6 +1,13 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
-import type { ClientMessage, CodecSupport, PeerMessage, QualityLevel, ServerMessage } from '@rustdesk-web/shared';
+import type {
+  ClientMessage,
+  CodecSupport,
+  CursorShape,
+  PeerMessage,
+  QualityLevel,
+  ServerMessage,
+} from '@rustdesk-web/shared';
 
 export const CONNECT_TIMEOUT_MS = 45_000;
 
@@ -13,6 +20,10 @@ export interface SessionSnapshot {
   authRequired: boolean;
   peer: PeerMessage | null;
   clearPassword: boolean;
+  cursor: { x: number; y: number } | null;
+  cursorShape: CursorShape | null;
+  cursorEmbedded: boolean;
+  displayOrigin: { x: number; y: number };
 }
 
 export const initialSession: SessionSnapshot = {
@@ -22,6 +33,10 @@ export const initialSession: SessionSnapshot = {
   authRequired: false,
   peer: null,
   clearPassword: false,
+  cursor: null,
+  cursorShape: null,
+  cursorEmbedded: false,
+  displayOrigin: { x: 0, y: 0 },
 };
 
 export interface ConnectFields {
@@ -168,8 +183,31 @@ function applyServerMessage(state: SessionSnapshot, message: ServerMessage): Ses
         return { ...initialSession, authRequired: state.authRequired };
       }
       return state;
-    case 'peer':
-      return { ...state, peer: message };
+    case 'peer': {
+      const chosen = message.displays[message.currentDisplay] ?? message.displays[0];
+      return {
+        ...state,
+        peer: message,
+        displayOrigin: { x: chosen?.x ?? 0, y: chosen?.y ?? 0 },
+        cursorEmbedded: Boolean(chosen?.cursorEmbedded),
+      };
+    }
+    case 'display':
+      return {
+        ...state,
+        displayOrigin: { x: message.x ?? 0, y: message.y ?? 0 },
+        cursorEmbedded: Boolean(message.cursorEmbedded),
+      };
+    case 'cursor': {
+      const x = message.x - state.displayOrigin.x;
+      const y = message.y - state.displayOrigin.y;
+      const display = state.peer?.displays[state.peer.currentDisplay] ?? state.peer?.displays[0];
+      const outside = Boolean(
+        display && display.width > 0 && display.height > 0 &&
+        (x < 0 || y < 0 || x >= display.width || y >= display.height),
+      );
+      return { ...state, cursor: outside ? null : { x, y } };
+    }
     case 'permissions':
       if (!state.peer) return state;
       return {
@@ -180,6 +218,8 @@ function applyServerMessage(state: SessionSnapshot, message: ServerMessage): Ses
           clipboardAllowed: message.clipboardAllowed,
         },
       };
+    case 'cursorShape':
+      return { ...state, cursorShape: message.shape };
     case 'error':
       if (state.phase !== 'connecting') return { ...state, errorMessage: message.message };
       return {
