@@ -1,7 +1,7 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
 import type { DisplayInfo, QualityLevel } from '@rustdesk-web/shared';
-import { Clipboard, Eye, LockKeyhole, LogOut, Maximize2, Monitor, RotateCcw, Shield, ShieldAlert, SlidersHorizontal, Volume2 } from 'lucide-react';
+import { Camera, Clipboard, Eye, LockKeyhole, LogOut, Maximize2, Monitor, RotateCcw, Shield, ShieldAlert, SlidersHorizontal, Volume2 } from 'lucide-react';
 import { t, translateAudioIssue, type Locale } from '../lib/i18n.ts';
 import { classifyRemoteOs, remoteFeatures } from '../lib/platform.ts';
 
@@ -36,6 +36,7 @@ interface SessionToolbarProps {
   restartAllowed: boolean;
   restartNotice: null | 'requested' | 'waiting' | 'failed' | 'ended';
   onRestart: () => void;
+  onScreenshot: () => void;
 }
 
 const QUALITIES: QualityLevel[] = ['low', 'balanced', 'best'];
@@ -71,6 +72,7 @@ export function SessionToolbar({
   restartAllowed,
   restartNotice,
   onRestart,
+  onScreenshot,
 }: SessionToolbarProps) {
   const features = remoteFeatures(classifyRemoteOs(remotePlatform));
   return (
@@ -182,6 +184,10 @@ export function SessionToolbar({
       <button type="button" className="rd-session-btn" onClick={onOpenClipboard}>
         <Clipboard size={15} />
         {t(locale, 'clipboard')}
+      </button>
+      <button type="button" className="rd-session-btn" onClick={onScreenshot}>
+        <Camera size={15} />
+        {t(locale, 'screenshot')}
       </button>
       <button type="button" className="rd-session-btn" onClick={onFullscreen}>
         <Maximize2 size={15} />

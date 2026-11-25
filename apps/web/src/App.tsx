@@ -323,6 +323,14 @@ export function App() {
         onRestart={() => {
           if (window.confirm(t(locale, 'confirmRestart'))) requestRestart();
         }}
+        onScreenshot={() => {
+          const canvas = canvasRef.current;
+          if (!canvas || canvas.width === 0 || canvas.height === 0) return;
+          const link = document.createElement('a');
+          link.href = canvas.toDataURL('image/png');
+          link.download = `rustdesk-${Date.now()}.png`;
+          link.click();
+        }}
         viewStyle={displayPrefs.viewStyle}
         scrollStyle={displayPrefs.scrollStyle}
         followRemoteCursor={displayPrefs.followRemoteCursor}

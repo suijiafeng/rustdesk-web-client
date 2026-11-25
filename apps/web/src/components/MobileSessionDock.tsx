@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { DisplayInfo, QualityLevel } from '@rustdesk-web/shared';
 import {
+  Camera,
   ChevronLeft,
   ChevronRight,
   CircleHelp,
@@ -86,6 +87,7 @@ interface MobileSessionDockProps {
   restartAllowed: boolean;
   restartNotice: null | 'requested' | 'waiting' | 'failed' | 'ended';
   onRestart: () => void;
+  onScreenshot: () => void;
 }
 
 export function MobileSessionDock({
@@ -124,6 +126,7 @@ export function MobileSessionDock({
   restartAllowed,
   restartNotice,
   onRestart,
+  onScreenshot,
 }: MobileSessionDockProps) {
   const features = remoteFeatures(classifyRemoteOs(remotePlatform));
   const [menuOpen, setMenuOpen] = useState(false);
@@ -265,6 +268,10 @@ export function MobileSessionDock({
               <button type="button" className="tool-row" onClick={onOpenClipboard}>
                 <Clipboard size={18} />
                 {label('clipboard')}
+              </button>
+              <button type="button" className="tool-row" onClick={onScreenshot}>
+                <Camera size={18} />
+                {label('screenshot')}
               </button>
               <button type="button" className="tool-row" onClick={onFullscreen}>
                 <Maximize2 size={18} />

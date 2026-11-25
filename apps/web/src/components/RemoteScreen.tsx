@@ -105,6 +105,7 @@ interface RemoteScreenProps {
   restartAllowed: boolean;
   restartNotice: null | 'requested' | 'waiting' | 'failed' | 'ended';
   onRestart: () => void;
+  onScreenshot: () => void;
   viewStyle: DefaultViewStyle;
   scrollStyle: ScrollStyle;
   followRemoteCursor: boolean;
@@ -169,6 +170,7 @@ export function RemoteScreen({
   restartAllowed,
   restartNotice,
   onRestart,
+  onScreenshot,
   viewStyle,
   scrollStyle,
   followRemoteCursor,
@@ -823,6 +825,7 @@ export function RemoteScreen({
           restartAllowed={restartAllowed}
           restartNotice={restartNotice}
           onRestart={onRestart}
+          onScreenshot={onScreenshot}
         />
       ) : null}
       {chrome === 'keyboard' ? (
@@ -865,6 +868,7 @@ export function RemoteScreen({
           restartAllowed={restartAllowed}
           restartNotice={restartNotice}
           onRestart={onRestart}
+          onScreenshot={onScreenshot}
         />
       ) : null}
       <ClipboardPanel
