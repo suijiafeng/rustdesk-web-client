@@ -1,6 +1,6 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { DisplayInfo, QualityLevel } from '@rustdesk-web/shared';
 import {
   Activity,
@@ -65,8 +65,8 @@ interface MobileSessionDockProps extends Pick<SessionDisplayControlsProps, 'targ
   diagnosticsOpen: boolean;
   onToggleKeyboard: () => void;
   onToggleTouchMode: () => void;
-  onSwitchDisplay: (display: number) => void;
-  onQuality: (quality: QualityLevel) => void;
+  onSwitchDisplay: (display: number) => boolean;
+  onQuality: SessionDisplayControlsProps['onQuality'];
   onToggleAudio: () => void;
   onDisconnect: () => void;
   onToggleDiagnostics: () => void;
@@ -79,7 +79,7 @@ interface MobileSessionDockProps extends Pick<SessionDisplayControlsProps, 'targ
   resolutions: readonly { width: number; height: number }[];
   frameWidth: number;
   frameHeight: number;
-  onResolution: (width: number, height: number) => void;
+  onResolution: (width: number, height: number) => boolean;
   restartAllowed: boolean;
   restartNotice: null | 'requested' | 'waiting' | 'failed' | 'ended';
   onRestart: () => void;
@@ -130,8 +130,17 @@ export function MobileSessionDock({
   const features = remoteFeatures(classifyRemoteOs(remotePlatform));
   const [menuOpen, setMenuOpen] = useState(false);
   const [panel, setPanel] = useState<DockPanel>('toolbar');
+  const [notice, setNotice] = useState('');
+  const noticeTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(noticeTimer.current), []);
   const active = menuOpen ? panel : null;
   const label = (key: I18nKey) => t(locale, key);
+  const notify = (text: string) => {
+    setNotice(text);
+    window.clearTimeout(noticeTimer.current);
+    noticeTimer.current = window.setTimeout(() => setNotice(''), 2200);
+  };
+  const notifySent = (selection: string) => notify(`${label('displayRequestSent')} · ${selection}`);
   const openPanel = (next: Exclude<DockPanel, 'toolbar'>) => {
     setPanel(next);
     setMenuOpen(true);
@@ -162,7 +171,9 @@ export function MobileSessionDock({
                 <div className="tool-group tool-options">
                   {displays.map((display, index) => (
                     <button key={`${display.name}-${index}`} type="button" aria-pressed={index === currentDisplay}
-                      disabled={display.online === false} onClick={() => onSwitchDisplay(index)}>
+                      disabled={display.online === false} onClick={() => {
+                        if (onSwitchDisplay(index)) notifySent(display.name || `${label('screens')} ${index + 1}`);
+                      }}>
                       <Monitor size={18} aria-hidden="true" />
                       {display.name || `${label('screens')} ${index + 1}`}
                     </button>
@@ -175,14 +186,20 @@ export function MobileSessionDock({
                     <Monitor size={18} aria-hidden="true" />
                     <span>{label('remoteResolution')}</span>
                     <ResolutionSelect label={label('remoteResolution')} resolutions={resolutions}
-                      frameWidth={frameWidth} frameHeight={frameHeight} disabled={viewOnly} onSelect={onResolution} />
+                      frameWidth={frameWidth} frameHeight={frameHeight} disabled={viewOnly}
+                      onSelect={(width, height) => {
+                        if (onResolution(width, height)) notifySent(`${width} × ${height}`);
+                      }} />
                   </div>
                 ) : null}
                 <SessionDisplayControls locale={locale} quality={quality} targetFps={targetFps} codec={codec}
-                  codecSupport={codecSupport} onQuality={onQuality} onFps={onFps} onCodec={onCodec} rows />
+                  codecSupport={codecSupport} onQuality={onQuality} onFps={onFps} onCodec={onCodec} onRequestSent={notifySent} rows />
               </div>
               {displays.length > 1 ? (
-                <div className="tool-group">{toggle(Focus, 'followWindow', followWindow, onToggleFollowWindow)}</div>
+                <div className="tool-group">{toggle(Focus, 'followWindow', followWindow, () => {
+                  onToggleFollowWindow();
+                  notify(`${label('followWindow')} · ${label(followWindow ? 'optionOff' : 'optionOn')}`);
+                })}</div>
               ) : null}
             </>
           ) : null}
@@ -262,6 +279,7 @@ export function MobileSessionDock({
   return (
     <>
       {sheet}
+      <div className="remote-control-notice" role="status">{notice}</div>
       <nav className="remote-tools" data-testid="mobile-dock" aria-label={label('session')} onPointerDown={(event) => event.stopPropagation()}>
         <button type="button" data-testid="dock-keyboard" onClick={onToggleKeyboard}>
           <Keyboard size={20} />

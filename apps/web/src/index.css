@@ -2387,6 +2387,22 @@ button:focus-visible {
 .remote-capsule button + button { border-left:1px solid #ffffff16; }
 .remote-capsule svg { width:21px; }
 .remote-menu-backdrop { position:absolute; inset:0; z-index:5; }
+.remote-control-notice:not(:empty) {
+  position: absolute;
+  inset-block-start: max(12px, var(--view-top));
+  inset-inline: 12px;
+  z-index: 8;
+  width: fit-content;
+  max-width: calc(100% - 24px);
+  margin-inline: auto;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: var(--remote-toolbar-surface);
+  color: #f3f5f8;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
 .remote-menu-panel {
   position:absolute; inset-inline:max(12px,var(--view-left)) max(12px,var(--view-right));
   bottom:calc(var(--dock-bottom) + var(--remote-toolbar-height) + 7px); border-radius:10px;

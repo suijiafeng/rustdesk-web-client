@@ -309,26 +309,30 @@ export function App() {
         codec={displayPrefs.codec}
         codecSupport={codecSupport}
         onFps={(fps) => {
-          if (sendInput([qualityCommand(toolbarQuality, fps, displayPrefs.codec)])) setSessionFps(fps);
+          if (!sendInput([qualityCommand(toolbarQuality, fps, displayPrefs.codec)])) return false;
+          setSessionFps(fps);
+          return true;
         }}
         onCodec={(codec) => {
-          if (!sendInput([qualityCommand(toolbarQuality, targetFps, codec)])) return;
+          if (!sendInput([qualityCommand(toolbarQuality, targetFps, codec)])) return false;
           setDisplayPrefs((current) => {
             const next = { ...current, codec };
             persistDisplayPrefs(next);
             return next;
           });
+          return true;
         }}
         privacyAllowed={remotePrivacyAllowed(session.peer)}
         onSwitchDisplay={(display) => sendInput([{ type: 'switchDisplay', display }])}
         onQuality={(quality) => {
           const fps = sessionFps ?? resolveTargetFps(quality, displayPrefs.customFps);
-          if (!sendInput([qualityCommand(quality, fps, displayPrefs.codec)])) return;
+          if (!sendInput([qualityCommand(quality, fps, displayPrefs.codec)])) return false;
           setDisplayPrefs((current) => {
             const next = { ...current, qualityPreset: quality };
             persistDisplayPrefs(next);
             return next;
           });
+          return true;
         }}
         onToggleViewOnly={() => {
           setDisplayPrefs((current) => {

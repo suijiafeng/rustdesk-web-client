@@ -15,7 +15,7 @@ interface SessionToolbarProps extends Pick<SessionDisplayControlsProps, 'targetF
   viewOnly: boolean;
   privacyAllowed: boolean;
   onSwitchDisplay: (display: number) => void;
-  onQuality: (quality: QualityLevel) => void;
+  onQuality: SessionDisplayControlsProps['onQuality'];
   onToggleViewOnly: () => void;
   audioEnabled: boolean;
   audioIssue: string;

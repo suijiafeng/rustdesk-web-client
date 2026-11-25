@@ -74,8 +74,8 @@ interface RemoteScreenProps extends Pick<SessionDisplayControlsProps, 'targetFps
   currentDisplay: number;
   quality: QualityLevel;
   privacyAllowed: boolean;
-  onSwitchDisplay: (display: number) => void;
-  onQuality: (quality: QualityLevel) => void;
+  onSwitchDisplay: (display: number) => boolean;
+  onQuality: SessionDisplayControlsProps['onQuality'];
   onToggleViewOnly: () => void;
   audioEnabled: boolean;
   audioIssue: string;
@@ -115,7 +115,7 @@ interface RemoteScreenProps extends Pick<SessionDisplayControlsProps, 'targetFps
   privacyFailed: boolean;
   onTogglePrivacy: () => void;
   resolutions: readonly { width: number; height: number }[];
-  onResolution: (width: number, height: number) => void;
+  onResolution: (width: number, height: number) => boolean;
   restartAllowed: boolean;
   restartNotice: null | 'requested' | 'waiting' | 'failed' | 'ended';
   onRestart: () => void;

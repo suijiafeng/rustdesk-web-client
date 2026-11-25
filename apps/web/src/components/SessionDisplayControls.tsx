@@ -12,9 +12,10 @@ export interface SessionDisplayControlsProps {
   targetFps: number;
   codec: PreferredCodec;
   codecSupport: CodecSupport | null;
-  onQuality: (quality: QualityLevel) => void;
-  onFps: (fps: number) => void;
-  onCodec: (codec: PreferredCodec) => void;
+  onQuality: (quality: QualityLevel) => boolean;
+  onFps: (fps: number) => boolean;
+  onCodec: (codec: PreferredCodec) => boolean;
+  onRequestSent?: (selection: string) => void;
   rows?: boolean;
 }
 
@@ -22,7 +23,7 @@ const qualities = { low: 'qualityLow', balanced: 'qualityBalanced', best: 'quali
 const videoCodecs = { h264: 'H.264', vp8: 'VP8', vp9: 'VP9', av1: 'AV1', h265: 'H.265' } as const;
 const codecs = Object.keys(videoCodecs) as Array<keyof typeof videoCodecs>;
 
-export function SessionDisplayControls({ locale, quality, targetFps, codec, codecSupport, onQuality, onFps, onCodec, rows = false }: SessionDisplayControlsProps) {
+export function SessionDisplayControls({ locale, quality, targetFps, codec, codecSupport, onQuality, onFps, onCodec, onRequestSent, rows = false }: SessionDisplayControlsProps) {
   const qualityLabel = t(locale, rows ? 'qualityAndFps' : 'sessionQuality');
   const fpsLabel = t(locale, 'targetFps');
   const codecLabel = t(locale, 'sessionCodecLabel');
@@ -30,19 +31,27 @@ export function SessionDisplayControls({ locale, quality, targetFps, codec, code
   const qualitySelect = (
     <AdaptiveSelect tone="remote" testId="quality-select" label={qualityLabel} value={quality}
       options={(Object.keys(qualities) as QualityLevel[]).map((value) => ({ value, label: t(locale, qualities[value]) }))}
-      onChange={(value) => onQuality(value as QualityLevel)} />
+      onChange={(value) => {
+        const selected = value as QualityLevel;
+        if (onQuality(selected)) onRequestSent?.(t(locale, qualities[selected]));
+      }} />
   );
   const fpsSelect = (
     <AdaptiveSelect tone="remote" testId="fps-select" label={fpsLabel} value={String(targetFps)}
       options={fpsOptions.map((fps) => ({ value: String(fps), label: `${fps} FPS` }))}
-      onChange={(value) => onFps(Number(value))} />
+      onChange={(value) => {
+        if (onFps(Number(value))) onRequestSent?.(`${value} FPS`);
+      }} />
   );
   const codecSelect = (
     <AdaptiveSelect tone="remote" testId="codec-select" label={codecLabel} value={codec}
       options={[{ value: 'auto', label: t(locale, 'codecAuto') }, ...codecs
         .filter((value) => !rows || value !== 'h265' || codec === value)
         .map((value) => ({ value, label: videoCodecs[value], disabled: !codecSupport?.[value] }))]}
-      onChange={(value) => onCodec(value as PreferredCodec)} />
+      onChange={(value) => {
+        const selected = value as PreferredCodec;
+        if (onCodec(selected)) onRequestSent?.(selected === 'auto' ? t(locale, 'codecAuto') : videoCodecs[selected]);
+      }} />
   );
   if (rows) {
     return (
