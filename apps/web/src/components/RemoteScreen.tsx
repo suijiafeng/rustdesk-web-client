@@ -1,6 +1,6 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import type { ClientMessage, CursorShape, DisplayInfo, QualityLevel } from '@rustdesk-web/shared';
 import { MousePointer2 } from 'lucide-react';
 import { clampPan, computePinchStep, computeViewTransform, mapFromRemote, type ViewMode, type ViewTransform } from '../lib/mapping.ts';
@@ -26,10 +26,13 @@ import { SessionToolbar } from './SessionToolbar.tsx';
 import {
   noteKeyDown,
   noteKeyUp,
+  quickKeyMessages,
   releaseTrackedKeys,
   textMessages,
+  type QuickKeyName,
   type TrackedKey,
 } from '../lib/keyboard.ts';
+import { adaptKeyMessages, classifyLocalOs, classifyRemoteOs, remoteFeatures } from '../lib/platform.ts';
 import { shouldIsolateKeyboardEvent } from '../lib/inputIsolation.ts';
 import {
   desktopPointerButton,
@@ -85,6 +88,7 @@ interface RemoteScreenProps {
   };
   onCopyDiagnostics: (text: string) => void;
   onToggleDiagnostics: () => void;
+  remotePlatform: string;
   locale?: Locale;
 }
 
@@ -130,6 +134,7 @@ export function RemoteScreen({
   linkQuality,
   onCopyDiagnostics,
   onToggleDiagnostics,
+  remotePlatform,
   locale = 'en',
 }: RemoteScreenProps) {
   const stageRef = useRef<HTMLDivElement>(null);
@@ -175,6 +180,20 @@ export function RemoteScreen({
   frameRef.current = { width: frameWidth, height: frameHeight };
   onMouseRef.current = onMouse;
   onKeyboardRef.current = onKeyboard;
+  const localOsRef = useRef(classifyLocalOs(navigator.userAgent, navigator.platform));
+  const remotePlatformRef = useRef(remotePlatform);
+  remotePlatformRef.current = remotePlatform;
+  const sendKeys = useCallback((messages: ClientMessage[]) => {
+    const adapted = adaptKeyMessages(messages, localOsRef.current, classifyRemoteOs(remotePlatform));
+    if (adapted.length > 0) onKeyboard(adapted);
+  }, [onKeyboard, remotePlatform]);
+  const sendQuickKey = useCallback((name: QuickKeyName) => {
+    const remote = classifyRemoteOs(remotePlatform);
+    const features = remoteFeatures(remote);
+    if (name === 'Ctrl+Alt+Del' && !features.ctrlAltDel) return;
+    if (name === 'Lock' && !features.lockScreen) return;
+    sendKeys(quickKeyMessages(name, viewOnly));
+  }, [remotePlatform, sendKeys, viewOnly]);
   onHeldRef.current = onHeldRelease;
   onArmKeysRef.current = onArmKeys;
   originRef.current = displayOrigin;
@@ -361,7 +380,7 @@ export function RemoteScreen({
       event.stopPropagation();
       const next = noteKeyDown(trackedKeysRef.current, event, viewOnlyRef.current);
       publish(next.tracked);
-      if (next.messages.length > 0) onKeyboardRef.current(next.messages);
+      if (next.messages.length > 0) onKeyboardRef.current(adaptKeyMessages(next.messages, localOsRef.current, classifyRemoteOs(remotePlatformRef.current)));
     };
     const onKeyUp = (event: KeyboardEvent) => {
       const isolate = shouldIsolateKeyboardEvent({
@@ -375,13 +394,13 @@ export function RemoteScreen({
       event.stopPropagation();
       const next = noteKeyUp(trackedKeysRef.current, event, viewOnlyRef.current);
       publish(next.tracked);
-      if (next.messages.length > 0) onKeyboardRef.current(next.messages);
+      if (next.messages.length > 0) onKeyboardRef.current(adaptKeyMessages(next.messages, localOsRef.current, classifyRemoteOs(remotePlatformRef.current)));
     };
     const onBlur = () => {
       composingRef.current = false;
       const released = releaseTrackedKeys(trackedKeysRef.current);
       publish(released.tracked);
-      if (released.messages.length > 0) onKeyboardRef.current(released.messages);
+      if (released.messages.length > 0) onKeyboardRef.current(adaptKeyMessages(released.messages, localOsRef.current, classifyRemoteOs(remotePlatformRef.current)));
     };
     window.addEventListener('keydown', onKeyDown, true);
     window.addEventListener('keyup', onKeyUp, true);
@@ -392,7 +411,7 @@ export function RemoteScreen({
       window.removeEventListener('blur', onBlur);
       const released = releaseTrackedKeys(trackedKeysRef.current);
       publish(released.tracked);
-      if (released.messages.length > 0) onKeyboardRef.current(released.messages);
+      if (released.messages.length > 0) onKeyboardRef.current(adaptKeyMessages(released.messages, localOsRef.current, classifyRemoteOs(remotePlatformRef.current)));
     };
   }, []);
 
@@ -712,13 +731,15 @@ export function RemoteScreen({
           onFullscreen={() => toggleFullscreen(stageRef.current)}
           onDisconnect={onDisconnect}
           onToggleDiagnostics={onToggleDiagnostics}
+          remotePlatform={remotePlatform}
+          onQuickKey={sendQuickKey}
         />
       ) : null}
       {chrome === 'keyboard' ? (
         <SoftKeyboardBar
           locale={locale}
           viewOnly={viewOnly}
-          onSend={onKeyboard}
+          onSend={sendKeys}
           onHide={() => setKeyboardOpen(false)}
         />
       ) : null}
@@ -740,6 +761,8 @@ export function RemoteScreen({
           onVolume={onVolume}
           onFullscreen={() => toggleFullscreen(stageRef.current)}
           onDisconnect={onDisconnect}
+          remotePlatform={remotePlatform}
+          onQuickKey={sendQuickKey}
         />
       ) : null}
     </div>

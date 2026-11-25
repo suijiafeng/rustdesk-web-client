@@ -291,6 +291,7 @@ export function App() {
           void navigator.clipboard?.writeText(text);
         }}
         onToggleDiagnostics={() => setDiagnosticsOpen((current) => !current)}
+        remotePlatform={session.peer?.platform ?? ''}
         locale={locale}
       />
     );

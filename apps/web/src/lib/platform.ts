@@ -1,5 +1,7 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
+import type { ClientMessage } from '@rustdesk-web/shared';
+
 export type RemoteOs = 'windows' | 'macos' | 'linux' | 'android' | 'ios' | 'other';
 export type LocalOs = 'macos' | 'windows' | 'linux' | 'android' | 'ios' | 'other';
 export type BrowserKind = 'chromium' | 'safari' | 'firefox' | 'other';
@@ -74,6 +76,17 @@ export function mapOutgoingControl(control: string, local: LocalOs, remote: Remo
 
 export function primaryShortcutModifier(remote: RemoteOs): 'Meta' | 'Control' {
   return remote === 'macos' ? 'Meta' : 'Control';
+}
+
+export function adaptKeyMessages(messages: readonly ClientMessage[], local: LocalOs, remote: RemoteOs): ClientMessage[] {
+  return messages.map((message) => {
+    if (message.type !== 'key') return message;
+    return {
+      ...message,
+      control: message.control ? mapOutgoingControl(message.control, local, remote) : message.control,
+      modifiers: message.modifiers?.map((modifier) => mapOutgoingControl(modifier, local, remote)),
+    };
+  });
 }
 
 export function clipboardByteLength(text: string): number {

@@ -1,8 +1,9 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
 import type { DisplayInfo, QualityLevel } from '@rustdesk-web/shared';
-import { Eye, LogOut, Maximize2, Monitor, SlidersHorizontal, Volume2 } from 'lucide-react';
+import { Eye, LockKeyhole, LogOut, Maximize2, Monitor, ShieldAlert, SlidersHorizontal, Volume2 } from 'lucide-react';
 import { t, translateAudioIssue, type Locale } from '../lib/i18n.ts';
+import { classifyRemoteOs, remoteFeatures } from '../lib/platform.ts';
 
 interface SessionToolbarProps {
   locale: Locale;
@@ -21,6 +22,8 @@ interface SessionToolbarProps {
   onVolume: (volume: number) => void;
   onFullscreen: () => void;
   onDisconnect: () => void;
+  remotePlatform: string;
+  onQuickKey: (name: 'Ctrl+Alt+Del' | 'Lock') => void;
 }
 
 const QUALITIES: QualityLevel[] = ['low', 'balanced', 'best'];
@@ -42,7 +45,10 @@ export function SessionToolbar({
   onVolume,
   onFullscreen,
   onDisconnect,
+  remotePlatform,
+  onQuickKey,
 }: SessionToolbarProps) {
+  const features = remoteFeatures(classifyRemoteOs(remotePlatform));
   return (
     <div
       className="rd-session-toolbar"
@@ -101,6 +107,18 @@ export function SessionToolbar({
           onChange={(event) => onVolume(Number(event.target.value))}
         />
       </label>
+      {features.ctrlAltDel ? (
+        <button type="button" className="rd-session-btn" disabled={viewOnly} onClick={() => onQuickKey('Ctrl+Alt+Del')}>
+          <ShieldAlert size={15} />
+          {t(locale, 'ctrlAltDel')}
+        </button>
+      ) : null}
+      {features.lockScreen ? (
+        <button type="button" className="rd-session-btn" disabled={viewOnly} onClick={() => onQuickKey('Lock')}>
+          <LockKeyhole size={15} />
+          {t(locale, 'lockScreen')}
+        </button>
+      ) : null}
       <span className="rd-session-sep" aria-hidden="true" />
       <button type="button" className="rd-session-btn" onClick={onFullscreen}>
         <Maximize2 size={15} />

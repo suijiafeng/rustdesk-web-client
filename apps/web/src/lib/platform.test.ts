@@ -3,6 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  adaptKeyMessages,
   classifyBrowser,
   classifyLocalOs,
   classifyRemoteOs,
@@ -67,6 +68,10 @@ test('Cmd on a Mac becomes Ctrl for Windows and Linux remotes, and Ctrl becomes 
   assert.equal(mapOutgoingControl('Shift', 'macos', 'windows'), 'Shift');
   assert.equal(primaryShortcutModifier('macos'), 'Meta');
   assert.equal(primaryShortcutModifier('windows'), 'Control');
+  assert.deepEqual(
+    adaptKeyMessages([{ type: 'key', action: 'down', control: 'Meta', modifiers: ['Meta'] }], 'macos', 'windows'),
+    [{ type: 'key', action: 'down', control: 'Control', modifiers: ['Control'] }],
+  );
 });
 
 test('clipboard, keyboard lock, reconnect, chat, and 2FA follow browser and size limits', () => {

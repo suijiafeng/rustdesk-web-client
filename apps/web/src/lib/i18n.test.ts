@@ -67,6 +67,8 @@ test('session controls have both English and Chinese labels', () => {
     'audioGesture',
     'privacyUnavailable',
     'keyboard',
+    'lockScreen',
+    'ctrlAltDel',
     'touch',
     'mouse',
     'screens',

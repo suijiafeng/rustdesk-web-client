@@ -8,9 +8,11 @@ import {
   CircleHelp,
   Eye,
   Keyboard,
+  LockKeyhole,
   Layers2,
   LogOut,
   Maximize2,
+  ShieldAlert,
   Monitor,
   MousePointer2,
   Pointer,
@@ -18,6 +20,7 @@ import {
   Volume2,
 } from 'lucide-react';
 import { t, translateAudioIssue, type I18nKey, type Locale } from '../lib/i18n.ts';
+import { classifyRemoteOs, remoteFeatures } from '../lib/platform.ts';
 
 type DockPanel = 'toolbar' | 'display' | 'gestures' | 'actions';
 
@@ -66,6 +69,8 @@ interface MobileSessionDockProps {
   onFullscreen: () => void;
   onDisconnect: () => void;
   onToggleDiagnostics: () => void;
+  remotePlatform: string;
+  onQuickKey: (name: 'Ctrl+Alt+Del' | 'Lock') => void;
 }
 
 export function MobileSessionDock({
@@ -90,7 +95,10 @@ export function MobileSessionDock({
   onFullscreen,
   onDisconnect,
   onToggleDiagnostics,
+  remotePlatform,
+  onQuickKey,
 }: MobileSessionDockProps) {
+  const features = remoteFeatures(classifyRemoteOs(remotePlatform));
   const [menuOpen, setMenuOpen] = useState(false);
   const [panel, setPanel] = useState<DockPanel>('toolbar');
   const active = menuOpen ? panel : null;
@@ -185,6 +193,18 @@ export function MobileSessionDock({
                 <SlidersHorizontal size={18} />
                 {label('diagTitle')}
               </button>
+              {features.ctrlAltDel ? (
+                <button type="button" className="tool-row" disabled={viewOnly} onClick={() => onQuickKey('Ctrl+Alt+Del')}>
+                  <ShieldAlert size={18} />
+                  {label('ctrlAltDel')}
+                </button>
+              ) : null}
+              {features.lockScreen ? (
+                <button type="button" className="tool-row" disabled={viewOnly} onClick={() => onQuickKey('Lock')}>
+                  <LockKeyhole size={18} />
+                  {label('lockScreen')}
+                </button>
+              ) : null}
               <button type="button" className="tool-row" onClick={onFullscreen}>
                 <Maximize2 size={18} />
                 {label('sessionFullscreen')}
