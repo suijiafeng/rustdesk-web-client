@@ -10,6 +10,18 @@ export const CODEC_H265 = CodecId.H265;
 export const CODEC_AV1 = CodecId.AV1;
 export { decodeRdv1Frame, encodeRdv1Frame };
 
+/** Drop delta frames once the browser socket is this far behind, so video cannot grow without a bound. */
+export const MAX_VIDEO_BUFFERED_BYTES = 1024 * 1024;
+
+export function shouldSendVideoFrame(
+  bufferedAmount: number,
+  isKey: boolean,
+  limit = MAX_VIDEO_BUFFERED_BYTES,
+): boolean {
+  if (isKey) return true;
+  return bufferedAmount < limit;
+}
+
 export function vp8KeyframeSize(data: Uint8Array): { width: number; height: number } | null {
   if (data.byteLength < 10) return null;
   // Bit 0 of byte 0 is 0 for keyframes, 1 for interframes

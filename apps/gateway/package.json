@@ -7,7 +7,7 @@
     "dev": "tsx --env-file-if-exists=../../.env src/index.ts",
     "build": "esbuild src/index.ts --bundle --platform=node --format=esm --external:express --external:ws --external:tweetnacl --external:@noble/hashes --outfile=dist/index.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "node --import tsx --test src/health.test.ts src/auth/auth.test.ts src/connection/stream.test.ts"
+    "test": "node --import tsx --test src/health.test.ts src/auth/auth.test.ts src/connection/stream.test.ts src/media/video.test.ts"
   },
   "dependencies": {
     "@noble/hashes": "2.4.0",

@@ -22,6 +22,7 @@ import {
   CODEC_VP8,
   CODEC_VP9,
   encodeRdv1Frame,
+  shouldSendVideoFrame,
   vp8KeyframeSize,
 } from '../media/video.ts';
 
@@ -392,17 +393,19 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
                 }
               }
               const pts = BigInt(f.pts ?? 0);
-              const packet = encodeRdv1Frame({
-                codec: extracted.codec,
-                key: isKey,
-                display,
-                width: currentSize.width,
-                height: currentSize.height,
-                pts,
-                gatewayUnixMs: nowMs,
-                data: payload,
-              });
-              sendBinary(packet);
+              if (shouldSendVideoFrame(ws.bufferedAmount, isKey)) {
+                const packet = encodeRdv1Frame({
+                  codec: extracted.codec,
+                  key: isKey,
+                  display,
+                  width: currentSize.width,
+                  height: currentSize.height,
+                  pts,
+                  gatewayUnixMs: nowMs,
+                  data: payload,
+                });
+                sendBinary(packet);
+              }
             }
             // RustDesk 1.5 QoS ACK once per message containing video frames (non-blocking)
             void conn.stream
