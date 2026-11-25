@@ -17,7 +17,7 @@ import { applyTouchEffects, isNarrowViewport } from '../lib/touchInput.ts';
 import { MobileChrome } from './MobileChrome.tsx';
 import { SoftKeyboardBar } from './SoftKeyboardBar.tsx';
 import { useKeyboardViewport } from '../hooks/useKeyboardViewport.ts';
-import type { Locale } from '../lib/i18n.ts';
+import { t, type Locale } from '../lib/i18n.ts';
 import { DiagnosticsPanel } from './DiagnosticsPanel.tsx';
 import { offsetPointerMessages } from '../lib/displays.ts';
 import { isImeEvent } from '../lib/keys.ts';
@@ -661,6 +661,7 @@ export function RemoteScreen({
         style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 1, height: 1 }}
       />
       <DiagnosticsPanel
+        locale={locale}
         open={diagnosticsOpen}
         snapshot={{ ...stats, now: 0, decodeError }}
         linkQuality={linkQuality}
@@ -668,6 +669,7 @@ export function RemoteScreen({
       />
       {isNarrowViewport(box.width) ? (
         <MobileChrome
+          locale={locale}
           viewportWidth={box.width}
           viewportHeight={box.height}
           portrait={portrait}
@@ -695,6 +697,7 @@ export function RemoteScreen({
         />
       ) : null}
       <SessionToolbar
+        locale={locale}
         displays={displays}
         currentDisplay={currentDisplay}
         quality={quality}
@@ -711,10 +714,10 @@ export function RemoteScreen({
       />
       <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 8, zIndex: 3 }}>
         <button type="button" onClick={() => toggleFullscreen(stageRef.current)} style={{ cursor: 'pointer' }}>
-          Full screen
+          {t(locale, 'sessionFullscreen')}
         </button>
         <button type="button" onClick={onDisconnect} style={{ cursor: 'pointer' }}>
-          Disconnect
+          {t(locale, 'disconnect')}
         </button>
       </div>
     </div>

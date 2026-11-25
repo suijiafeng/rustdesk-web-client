@@ -8,9 +8,11 @@ import {
   resolveEffectiveLocale,
   resolveInitialLocale,
   resolveLocalePreference,
+  missingLocaleKeys,
   resolveStartupLocale,
   statusLabel,
   t,
+  translateAudioIssue,
 } from './i18n';
 
 test('resolveInitialLocale defaults to en and restores saved zh/en values', () => {
@@ -45,6 +47,44 @@ test('startup locale uses the saved setting, otherwise the browser language list
   assert.deepEqual(resolveStartupLocale(null, ['zh-CN', 'en-US']), { preference: 'default', locale: 'zh' });
   assert.deepEqual(resolveStartupLocale('default', ['en-US', 'zh-CN']), { preference: 'default', locale: 'en' });
   assert.deepEqual(resolveStartupLocale(null, null), { preference: 'default', locale: 'en' });
+});
+
+test('session controls have both English and Chinese labels', () => {
+  const keys = [
+    'displayFallback',
+    'sessionQuality',
+    'qualityLow',
+    'qualityBalanced',
+    'qualityBest',
+    'sessionVolume',
+    'sessionFullscreen',
+    'disconnect',
+    'menuLabel',
+    'viewOnlyLabel',
+    'sessionControl',
+    'audioOn',
+    'audioOff',
+    'audioGesture',
+    'privacyUnavailable',
+    'keyboard',
+    'touch',
+    'mouse',
+    'renameDevice',
+    'removeDevice',
+    'arrowLeft',
+    'pageUp',
+    'keyHome',
+    'diagCopy',
+    'diagDuration',
+  ] as const;
+  assert.deepEqual(missingLocaleKeys(), []);
+  for (const key of keys) {
+    assert.ok(t('en', key).trim().length > 0, key);
+    assert.ok(t('zh', key).trim().length > 0, key);
+    assert.notEqual(t('en', key), t('zh', key), key);
+  }
+  assert.equal(translateAudioIssue('zh', 'The host refused audio.'), t('zh', 'audioDenied'));
+  assert.equal(translateAudioIssue('en', 'custom'), 'custom');
 });
 
 test('nextLocale toggles cleanly between en and zh and translates core labels', () => {

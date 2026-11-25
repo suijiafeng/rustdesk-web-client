@@ -1,8 +1,10 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
 import type { DisplayInfo, QualityLevel } from '@rustdesk-web/shared';
+import { t, translateAudioIssue, type Locale } from '../lib/i18n.ts';
 
 interface SessionToolbarProps {
+  locale: Locale;
   displays: readonly DisplayInfo[];
   currentDisplay: number;
   quality: QualityLevel;
@@ -21,6 +23,7 @@ interface SessionToolbarProps {
 const QUALITIES: QualityLevel[] = ['low', 'balanced', 'best'];
 
 export function SessionToolbar({
+  locale,
   displays,
   currentDisplay,
   quality,
@@ -58,13 +61,13 @@ export function SessionToolbar({
           onClick={() => onSwitchDisplay(index)}
           style={{ cursor: 'pointer' }}
         >
-          {display.name || `Display ${index + 1}`}
+          {display.name || `${t(locale, 'displayFallback')} ${index + 1}`}
         </button>
       ))}
       <label>
-        Quality{' '}
+        {t(locale, 'sessionQuality')}{' '}
         <select
-          aria-label="Quality"
+          aria-label={t(locale, 'sessionQuality')}
           value={quality}
           onChange={(event) => {
             const next = event.target.value;
@@ -72,20 +75,20 @@ export function SessionToolbar({
           }}
         >
           {QUALITIES.map((level) => (
-            <option key={level} value={level}>{level}</option>
+            <option key={level} value={level}>{t(locale, level === 'low' ? 'qualityLow' : level === 'best' ? 'qualityBest' : 'qualityBalanced')}</option>
           ))}
         </select>
       </label>
       <button type="button" aria-pressed={viewOnly} onClick={onToggleViewOnly} style={{ cursor: 'pointer' }}>
-        {viewOnly ? 'View only' : 'Control'}
+        {viewOnly ? t(locale, 'viewOnlyLabel') : t(locale, 'sessionControl')}
       </button>
       <button type="button" aria-pressed={audioEnabled} onClick={onToggleAudio} style={{ cursor: 'pointer' }}>
-        {audioEnabled ? 'Audio on' : 'Audio off'}
+        {audioEnabled ? t(locale, 'audioOn') : t(locale, 'audioOff')}
       </button>
       <label>
-        Volume{' '}
+        {t(locale, 'sessionVolume')}{' '}
         <input
-          aria-label="Volume"
+          aria-label={t(locale, 'sessionVolume')}
           type="range"
           min={0}
           max={1}
@@ -94,8 +97,8 @@ export function SessionToolbar({
           onChange={(event) => onVolume(Number(event.target.value))}
         />
       </label>
-      {audioIssue ? <span data-testid="audio-issue">{audioIssue}</span> : null}
-      {!privacyAllowed ? <span data-testid="privacy-revoked">Privacy control unavailable</span> : null}
+      {audioIssue ? <span data-testid="audio-issue">{translateAudioIssue(locale, audioIssue)}</span> : null}
+      {!privacyAllowed ? <span data-testid="privacy-revoked">{t(locale, 'privacyUnavailable')}</span> : null}
     </div>
   );
 }

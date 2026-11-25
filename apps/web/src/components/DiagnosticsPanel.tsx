@@ -1,6 +1,7 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
 import { exportDiagnostics, type DiagnosticSnapshot } from '../lib/diagnostics.ts';
+import { t, type Locale } from '../lib/i18n.ts';
 
 interface LinkQuality {
   fps: number;
@@ -12,13 +13,14 @@ interface LinkQuality {
 }
 
 interface DiagnosticsPanelProps {
+  locale: Locale;
   open: boolean;
   snapshot: DiagnosticSnapshot;
   linkQuality: LinkQuality | null;
   onCopy: (text: string) => void;
 }
 
-export function DiagnosticsPanel({ open, snapshot, linkQuality, onCopy }: DiagnosticsPanelProps) {
+export function DiagnosticsPanel({ locale, open, snapshot, linkQuality, onCopy }: DiagnosticsPanelProps) {
   if (!open) return null;
   const base = exportDiagnostics({ ...snapshot, now: Date.now() });
   const report = {
@@ -50,16 +52,16 @@ export function DiagnosticsPanel({ open, snapshot, linkQuality, onCopy }: Diagno
         fontSize: 12,
       }}
     >
-      <div>Duration {report.durationMs} ms</div>
-      <div>Frames/s {report.samplingFps ?? report.framesPerSecond}</div>
-      <div>Bitrate {report.bitrateBps ?? 0} bit/s</div>
-      <div>Stream {report.streamState ?? 'waiting'}</div>
-      <div>Received {report.received}</div>
-      <div>Browser RTT {report.browserRttMs ?? 'n/a'} ms ({report.linkHealth}, loss {report.packetLossPct}%)</div>
-      <div>Host RTT {report.rttMs ?? 'n/a'} ms</div>
-      <div>Decode {report.decode || 'ok'}</div>
+      <div>{t(locale, 'diagDuration')} {report.durationMs} ms</div>
+      <div>{t(locale, 'diagFrames')} {report.samplingFps ?? report.framesPerSecond}</div>
+      <div>{t(locale, 'diagBitrate')} {report.bitrateBps ?? 0} bit/s</div>
+      <div>{t(locale, 'diagStream')} {report.streamState ?? t(locale, 'diagWaiting')}</div>
+      <div>{t(locale, 'diagReceived')} {report.received}</div>
+      <div>{t(locale, 'diagBrowserRtt')} {report.browserRttMs ?? t(locale, 'diagUnavailable')} ms ({report.linkHealth}, {t(locale, 'diagLoss')} {report.packetLossPct}%)</div>
+      <div>{t(locale, 'diagHostRtt')} {report.rttMs ?? t(locale, 'diagUnavailable')} ms</div>
+      <div>{t(locale, 'diagDecode')} {report.decode || t(locale, 'diagOk')}</div>
       <button type="button" onClick={() => onCopy(text)} style={{ cursor: 'pointer', marginTop: 8 }}>
-        Copy redacted report
+        {t(locale, 'diagCopy')}
       </button>
     </aside>
   );

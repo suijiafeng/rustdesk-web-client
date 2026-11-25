@@ -2,10 +2,12 @@
 
 import { useState } from 'react';
 import { clampOrbPosition, orbCoordsFromState, snapOrbToEdge, type OrbState } from '../lib/floatingMenu.ts';
+import { t, type Locale } from '../lib/i18n.ts';
 
 interface MobileChromeProps {
   viewportWidth: number;
   viewportHeight: number;
+  locale: Locale;
   portrait: boolean;
   open: boolean;
   keyboardOpen: boolean;
@@ -18,6 +20,7 @@ interface MobileChromeProps {
 export function MobileChrome({
   viewportWidth,
   viewportHeight,
+  locale,
   portrait,
   open,
   keyboardOpen,
@@ -34,7 +37,7 @@ export function MobileChrome({
       <button
         type="button"
         data-testid="mobile-orb"
-        aria-label="Session menu"
+        aria-label={t(locale, 'menuLabel')}
         style={{
           position: 'absolute',
           left: position.x,
@@ -70,7 +73,7 @@ export function MobileChrome({
           window.addEventListener('pointerup', up);
         }}
       >
-        Menu
+        {t(locale, 'menuLabel')}
       </button>
       {open ? (
         <div
@@ -92,10 +95,10 @@ export function MobileChrome({
           }}
         >
           <button type="button" onClick={onToggleTouchMode} style={{ cursor: 'pointer' }}>
-            {touchMode ? 'Touch mode' : 'Mouse mode'}
+            {touchMode ? t(locale, 'touch') : t(locale, 'mouse')}
           </button>
           <button type="button" aria-pressed={keyboardOpen} onClick={onToggleKeyboard} style={{ cursor: 'pointer' }}>
-            Keyboard
+            {t(locale, 'keyboard')}
           </button>
         </div>
       ) : null}

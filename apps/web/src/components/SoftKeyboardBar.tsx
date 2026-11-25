@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ClientMessage } from '@rustdesk-web/shared';
 import { ChevronDown } from 'lucide-react';
 import { keyboardInset } from '../lib/gestures.ts';
-import { t, type Locale } from '../lib/i18n.ts';
+import { t, type I18nKey, type Locale } from '../lib/i18n.ts';
 import { controlFromKeyOrCode, isImeEvent } from '../lib/keys.ts';
 import { softControlMessages, softTextEdit, toggleLatched } from '../lib/softKeyboard.ts';
 
@@ -22,23 +22,23 @@ const STICKY_MODIFIERS = [
   { label: 'Win', control: 'Meta' },
 ] as const;
 
-const EXTRA_KEYS = [
+const EXTRA_KEYS: Array<{ label: string; control: string; labelKey?: I18nKey; ariaKey?: I18nKey }> = [
   { label: 'Esc', control: 'Escape' },
   { label: 'Tab', control: 'Tab' },
-  { label: '←', control: 'ArrowLeft', aria: 'Left arrow' },
-  { label: '↑', control: 'ArrowUp', aria: 'Up arrow' },
-  { label: '↓', control: 'ArrowDown', aria: 'Down arrow' },
-  { label: '→', control: 'ArrowRight', aria: 'Right arrow' },
-  { label: 'Home', control: 'Home' },
-  { label: 'End', control: 'End' },
-  { label: 'Page Up', control: 'PageUp' },
-  { label: 'Page Down', control: 'PageDown' },
-  { label: 'Del', control: 'Delete' },
+  { label: '←', control: 'ArrowLeft', ariaKey: 'arrowLeft' },
+  { label: '↑', control: 'ArrowUp', ariaKey: 'arrowUp' },
+  { label: '↓', control: 'ArrowDown', ariaKey: 'arrowDown' },
+  { label: '→', control: 'ArrowRight', ariaKey: 'arrowRight' },
+  { label: 'Home', control: 'Home', labelKey: 'keyHome' },
+  { label: 'End', control: 'End', labelKey: 'keyEnd' },
+  { label: 'Page Up', control: 'PageUp', labelKey: 'pageUp' },
+  { label: 'Page Down', control: 'PageDown', labelKey: 'pageDown' },
+  { label: 'Del', control: 'Delete', labelKey: 'keyDelete' },
   ...Array.from({ length: 12 }, (_, index) => {
     const name = `F${index + 1}`;
-    return { label: name, control: name, aria: name };
+    return { label: name, control: name };
   }),
-] as const;
+];
 
 export function SoftKeyboardBar({ locale, viewOnly, onSend, onHide }: SoftKeyboardBarProps) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -119,17 +119,20 @@ export function SoftKeyboardBar({ locale, viewOnly, onSend, onHide }: SoftKeyboa
           );
         })}
         <span className="soft-key-divider" aria-hidden="true" />
-        {EXTRA_KEYS.map((item) => (
-          <button
-            key={item.control}
-            type="button"
-            aria-label={'aria' in item ? item.aria : item.label}
-            className="soft-key-btn"
-            onClick={() => tapExtraKey(item.control)}
-          >
-            {item.label}
-          </button>
-        ))}
+        {EXTRA_KEYS.map((item) => {
+          const label = item.labelKey ? t(locale, item.labelKey) : item.label;
+          return (
+            <button
+              key={item.control}
+              type="button"
+              aria-label={item.ariaKey ? t(locale, item.ariaKey) : label}
+              className="soft-key-btn"
+              onClick={() => tapExtraKey(item.control)}
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
       <button type="button" className="soft-key-btn" data-testid="soft-hide" aria-label={t(locale, 'softHide')} onClick={onHide}>
         <ChevronDown size={18} aria-hidden="true" />

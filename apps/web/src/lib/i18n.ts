@@ -371,6 +371,37 @@ const DICT = {
     shortcutKeys: 'Shortcuts',
     disconnectRemote: 'Disconnect device',
     menuLabel: 'Menu',
+    sessionQuality: 'Quality',
+    sessionVolume: 'Volume',
+    sessionFullscreen: 'Full screen',
+    viewOnlyLabel: 'View only',
+    sessionControl: 'Control',
+    audioOn: 'Audio on',
+    audioOff: 'Audio off',
+    audioGesture: 'The browser blocked audio until a user gesture.',
+    privacyUnavailable: 'Privacy control unavailable',
+    renameDevice: 'Rename',
+    arrowLeft: 'Left arrow',
+    arrowUp: 'Up arrow',
+    arrowDown: 'Down arrow',
+    arrowRight: 'Right arrow',
+    pageUp: 'Page Up',
+    pageDown: 'Page Down',
+    keyHome: 'Home',
+    keyEnd: 'End',
+    keyDelete: 'Del',
+    diagDuration: 'Duration',
+    diagFrames: 'Frames/s',
+    diagBitrate: 'Bitrate',
+    diagStream: 'Stream',
+    diagWaiting: 'waiting',
+    diagReceived: 'Received',
+    diagBrowserRtt: 'Browser RTT',
+    diagDecode: 'Decode',
+    diagOk: 'ok',
+    diagUnavailable: 'n/a',
+    diagLoss: 'loss',
+    diagCopy: 'Copy redacted report',
   },
   zh: {
     langToggle: 'EN',
@@ -689,6 +720,37 @@ const DICT = {
     shortcutKeys: '快捷键',
     disconnectRemote: '断开设备',
     menuLabel: '菜单',
+    sessionQuality: '画质',
+    sessionVolume: '音量',
+    sessionFullscreen: '全屏',
+    viewOnlyLabel: '仅查看',
+    sessionControl: '控制',
+    audioOn: '声音开',
+    audioOff: '声音关',
+    audioGesture: '浏览器需要一次操作后才能播放声音。',
+    privacyUnavailable: '无法控制隐私模式',
+    renameDevice: '重命名',
+    arrowLeft: '左方向键',
+    arrowUp: '上方向键',
+    arrowDown: '下方向键',
+    arrowRight: '右方向键',
+    pageUp: '上页',
+    pageDown: '下页',
+    keyHome: '行首',
+    keyEnd: '行尾',
+    keyDelete: '删除',
+    diagDuration: '时长',
+    diagFrames: '帧率',
+    diagBitrate: '码率',
+    diagStream: '码流',
+    diagWaiting: '等待',
+    diagReceived: '已接收',
+    diagBrowserRtt: '浏览器往返',
+    diagDecode: '解码',
+    diagOk: '正常',
+    diagUnavailable: '无',
+    diagLoss: '丢包',
+    diagCopy: '复制已脱敏报告',
   },
 } as const;
 
@@ -696,6 +758,18 @@ export type I18nKey = keyof typeof DICT.en;
 
 export function t(locale: Locale, key: I18nKey): string {
   return DICT[locale][key];
+}
+
+const AUDIO_ISSUE_KEYS = {
+  'This browser cannot play Opus audio.': 'audioUnsupported',
+  'Audio playback failed.': 'audioFailed',
+  'The browser blocked audio until a user gesture.': 'audioGesture',
+  'The host refused audio.': 'audioDenied',
+} as const satisfies Record<string, I18nKey>;
+
+export function translateAudioIssue(locale: Locale, issue: string): string {
+  const key = AUDIO_ISSUE_KEYS[issue as keyof typeof AUDIO_ISSUE_KEYS];
+  return key ? t(locale, key) : issue;
 }
 
 export function missingLocaleKeys(): string[] {
