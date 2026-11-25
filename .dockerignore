@@ -1,0 +1,17 @@
+.git
+.github
+node_modules
+**/node_modules
+**/dist
+coverage
+*.log
+.env
+.env.*
+!.env.example
+docs/migration
+deploy/nginx/certs
+deploy/.env.docker
+playwright-report
+test-results
+*.md
+!README.md

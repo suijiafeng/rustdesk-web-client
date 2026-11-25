@@ -1,0 +1,31 @@
+{
+  "name": "rustdesk-web-client",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Unofficial RustDesk-compatible web client",
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "packageManager": "yarn@1.22.22",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "yarn workspace @rustdesk-web/web dev",
+    "dev:gateway": "yarn workspace @rustdesk-web/gateway dev",
+    "start": "node --env-file-if-exists=.env apps/gateway/dist/index.js",
+    "build": "yarn workspace @rustdesk-web/web build && yarn workspace @rustdesk-web/gateway build",
+    "typecheck": "tsc --noEmit -p tsconfig.json && yarn workspace @rustdesk-web/shared typecheck && yarn workspace @rustdesk-web/protocol typecheck && yarn workspace @rustdesk-web/web typecheck && yarn workspace @rustdesk-web/gateway typecheck",
+    "lint": "yarn typecheck",
+    "test": "yarn workspace @rustdesk-web/protocol test && yarn workspace @rustdesk-web/gateway test && yarn workspace @rustdesk-web/web test"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
+  }
+}

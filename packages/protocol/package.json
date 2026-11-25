@@ -1,0 +1,17 @@
+{
+  "name": "@rustdesk-web/protocol",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "protobufjs": "8.8.1"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --import tsx --test src/header.test.ts src/codec/bytesFrame.test.ts src/codec/rdv1.test.ts src/definitions/messages.test.ts"
+  }
+}

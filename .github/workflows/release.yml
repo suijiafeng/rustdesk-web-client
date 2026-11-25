@@ -1,0 +1,23 @@
+name: release-build
+
+# Builds a local image when someone dispatches the workflow or pushes a tag.
+# It does not push the image, create a GitHub Release, or publish a package.
+# The release gate in CHANGELOG.md is not met, so publication stays disabled.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the local image
+        run: docker build -f deploy/Dockerfile -t rustdesk-web-client:local .
+      - name: Do not publish
+        run: echo "Release gate is not met. No image push, GitHub Release, or package publish is performed."

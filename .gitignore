@@ -45,8 +45,17 @@ lerna-debug.log*
 .env
 .env.*
 !.env.example
+.env.docker
+deploy/.env.docker
+deploy/nginx/certs/
 *.pem
 *.key
+*.pfx
+*.p12
+id_rsa
+id_ed25519
+id_ecdsa
+credentials.json
 
 # Editor and OS
 .DS_Store

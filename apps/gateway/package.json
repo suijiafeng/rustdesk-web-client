@@ -1,0 +1,25 @@
+{
+  "name": "@rustdesk-web/gateway",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx --env-file-if-exists=../../.env src/index.ts",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --external:express --external:ws --external:tweetnacl --external:@noble/hashes --outfile=dist/index.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --import tsx --test src/health.test.ts src/auth/auth.test.ts src/connection/stream.test.ts src/media/video.test.ts src/media/cursor.test.ts src/control/mouse.test.ts src/control/keyboard.test.ts src/control/chat.test.ts src/control/audio.test.ts src/security.test.ts src/webRoot.test.ts"
+  },
+  "dependencies": {
+    "@noble/hashes": "2.4.0",
+    "@rustdesk-web/protocol": "0.0.0",
+    "@rustdesk-web/shared": "0.0.0",
+    "express": "4.22.3",
+    "tweetnacl": "1.0.3",
+    "ws": "8.23.0"
+  },
+  "devDependencies": {
+    "@types/express": "4.17.25",
+    "@types/ws": "8.18.2",
+    "esbuild": "0.25.12"
+  }
+}

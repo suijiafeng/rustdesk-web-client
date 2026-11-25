@@ -1,0 +1,62 @@
+# Local image only. Do not push this image or publish a release.
+# Production mode refuses to start until RUSTDESK_GATEWAY_TOKEN is a real value.
+services:
+  rustdesk-web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: rustdesk-web-client:local
+    container_name: ${CONTAINER_NAME:-rustdesk-web-client}
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${HOST_BIND:-127.0.0.1}:${HOST_PORT:-21120}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOST: 0.0.0.0
+      WEB_ROOT: /app/web
+      NODE_OPTIONS: "--dns-result-order=ipv4first"
+      RUSTDESK_GATEWAY_TOKEN: "${RUSTDESK_GATEWAY_TOKEN:?Set RUSTDESK_GATEWAY_TOKEN in deploy/.env.docker}"
+      RUSTDESK_ALLOWED_ORIGINS: "${RUSTDESK_ALLOWED_ORIGINS:-}"
+    mem_limit: 512m
+    cpus: 1.0
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional TLS proxy. Start with: docker compose --profile https up -d
+  # Put fullchain.pem and privkey.pem in deploy/nginx/certs. Those files stay untracked.
+  nginx:
+    image: nginx:1.27-alpine
+    profiles: ["https"]
+    restart: unless-stopped
+    depends_on:
+      rustdesk-web:
+        condition: service_healthy
+    ports:
+      - "${HTTPS_BIND:-127.0.0.1}:${HTTPS_PORT:-8443}:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    mem_limit: 128m
+    cpus: 0.5
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
