@@ -35,6 +35,7 @@ import {
   reduceSession,
   restartReconnectDue,
   wsUrl,
+  type RestartNotice,
   type SessionSnapshot,
 } from './sessionMachine.ts';
 
@@ -85,7 +86,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
   const [clipboardSync, setClipboardSync] = useState(false);
   const [clipboardFallback, setClipboardFallback] = useState<string | null>(null);
   const [privacy, setPrivacy] = useState({ enabled: false, pending: false, failed: false });
-  const [restartNotice, setRestartNotice] = useState<null | 'requested' | 'waiting' | 'failed' | 'ended'>(null);
+  const [restartNotice, setRestartNotice] = useState<RestartNotice>(null);
   const lastConnectRef = useRef<ConnectRequest | null>(null);
   const restartDeadlineRef = useRef(0);
   const restartModeRef = useRef<null | 'requested' | 'waiting'>(null);

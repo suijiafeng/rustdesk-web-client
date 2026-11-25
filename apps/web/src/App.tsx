@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { RemoteScreen } from './components/RemoteScreen.tsx';
 import { RustDeskShell, type ConnectRequest, type ConnectionField, type ConnectionMode } from './components/RustDeskShell.tsx';
+import { useToast } from './components/ToastProvider.tsx';
+import { useSessionToasts } from './hooks/useSessionToasts.ts';
 import {
   loadSavedDevices,
   persistSavedDevices,
@@ -76,6 +78,7 @@ function loadPrefs(): SavedConnectionPrefs {
 }
 
 export function App() {
+  const showToast = useToast();
   const prefs = useState(loadPrefs)[0];
   const [directIpEnabled, setDirectIpEnabled] = useState(Boolean(prefs.directIpEnabled));
   const [mode, setMode] = useState<ConnectionMode>(
@@ -214,11 +217,33 @@ export function App() {
     session, connect, disconnect, sendInput, setHeldRelease, setArmedKeys, canvasRef, frameSize, codecSupport, decoderError,
     stats, quality: linkQuality, audio, startAudio, stopAudio, setAudioVolume,
     clipboardFallback, sendClipboard, pasteLocalClipboard, dismissClipboard,
-    clipboardSync, toggleClipboardSync, syncClipboardNow, syncPastedClipboard, noteClipboardCopied, clipboardSyncNeedsRead,     privacy, togglePrivacy, restartNotice, requestRestart,     reconnectAttempt, cancelReconnect,     chatLines, sendChat, twoFactor, submitTwoFactor,
+    clipboardSync, toggleClipboardSync, syncClipboardNow, syncPastedClipboard, noteClipboardCopied, clipboardSyncNeedsRead,
+    privacy, togglePrivacy, restartNotice, requestRestart,
+    reconnectAttempt, cancelReconnect,
+    chatLines, sendChat, twoFactor, submitTwoFactor,
   } = useSession({
     readInput: () => formRef.current,
     onPasswordRejected: rejectSavedPassword,
   });
+  const privacyAllowed = remotePrivacyAllowed(session.peer);
+  const restartPending = restartNotice === 'requested' || restartNotice === 'waiting';
+  useSessionToasts({
+    locale,
+    audioIssue: audio.issue,
+    privacyFailed: privacy.failed,
+    privacyAllowed: session.phase === 'live' ? privacyAllowed : null,
+    restartNotice,
+  });
+
+  async function copyDiagnostics(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast(t(locale, 'clipCopied'));
+    } catch {
+      showToast(t(locale, 'clipDenied'), 'error');
+    }
+  }
+
   const onConnect = useCallback((request?: ConnectRequest) => {
     if (request?.remember && request.password) {
       const key = request.mode === 'direct'
@@ -322,7 +347,7 @@ export function App() {
           });
           return true;
         }}
-        privacyAllowed={remotePrivacyAllowed(session.peer)}
+        privacyAllowed={privacyAllowed}
         onSwitchDisplay={(display) => sendInput([{ type: 'switchDisplay', display }])}
         onQuality={(quality) => {
           const fps = sessionFps ?? resolveTargetFps(quality, displayPrefs.customFps);
@@ -342,7 +367,6 @@ export function App() {
           });
         }}
         audioEnabled={audio.enabled}
-        audioIssue={audio.issue}
         volume={audio.volume}
         onToggleAudio={() => {
           if (audio.enabled) stopAudio();
@@ -353,9 +377,7 @@ export function App() {
         stats={stats}
         linkQuality={linkQuality}
         decodeError={decoderError}
-        onCopyDiagnostics={(text) => {
-          void navigator.clipboard?.writeText(text);
-        }}
+        onCopyDiagnostics={copyDiagnostics}
         onToggleDiagnostics={() => setDiagnosticsOpen((current) => !current)}
         remotePlatform={session.peer?.platform ?? ''}
         connectionRoute={session.peer?.route}
@@ -374,7 +396,6 @@ export function App() {
         onDismissClipboard={dismissClipboard}
         privacyEnabled={privacy.enabled}
         privacyPending={privacy.pending}
-        privacyFailed={privacy.failed}
         onTogglePrivacy={() => {
           if (classifyRemoteOs(session.peer?.platform ?? '') !== 'windows') return;
           togglePrivacy();
@@ -382,7 +403,7 @@ export function App() {
         resolutions={session.resolutions?.display === session.currentDisplay ? session.resolutions.sizes : []}
         onResolution={(width, height) => sendInput([{ type: 'resolution', display: session.currentDisplay, width, height }])}
         restartAllowed={session.peer?.restartAllowed === true && remoteFeatures(classifyRemoteOs(session.peer?.platform ?? '')).restart}
-        restartNotice={restartNotice}
+        restartPending={restartPending}
         onRestart={requestRestart}
         chatLines={chatLines}
         onSendChat={sendChat}

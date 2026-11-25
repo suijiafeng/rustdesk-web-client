@@ -1,6 +1,6 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { ChevronLeft, ChevronRight, CircleHelp, Keyboard, Layers2, Monitor, MousePointer2, Pointer } from 'lucide-react';
 import { t, type I18nKey } from '../lib/i18n.ts';
 import { classifyRemoteOs, remoteFeatures } from '../lib/platform.ts';
@@ -13,8 +13,6 @@ const menuLabels = {
   gestures: 'dockGuide',
   actions: 'moreActions',
 } as const;
-
-const NOTICE_DURATION_MS = 2200;
 
 type DockMenu = keyof typeof menuLabels;
 type DockView = 'collapsed' | 'toolbar' | DockMenu;
@@ -31,18 +29,9 @@ export function MobileSessionDock(props: MobileSessionDockProps) {
   const { locale, touchMode, remotePlatform, onToggleKeyboard, onToggleTouchMode, onQuickKey } = props;
   const features = remoteFeatures(classifyRemoteOs(remotePlatform));
   const [dockView, setDockView] = useState<DockView>('collapsed');
-  const [notice, setNotice] = useState('');
-  const noticeTimer = useRef<number | undefined>(undefined);
-  useEffect(() => () => window.clearTimeout(noticeTimer.current), []);
 
   const label = (key: I18nKey) => t(locale, key);
   const collapseDock = () => setDockView('collapsed');
-
-  function showNotice(text: string) {
-    setNotice(text);
-    window.clearTimeout(noticeTimer.current);
-    noticeTimer.current = window.setTimeout(() => setNotice(''), NOTICE_DURATION_MS);
-  }
 
   function renderMenu(menu: DockMenu) {
     switch (menu) {
@@ -68,7 +57,6 @@ export function MobileSessionDock(props: MobileSessionDockProps) {
             onQuality={props.onQuality}
             onFps={props.onFps}
             onCodec={props.onCodec}
-            onNotice={showNotice}
           />
         );
       case 'gestures':
@@ -79,7 +67,6 @@ export function MobileSessionDock(props: MobileSessionDockProps) {
             locale={locale}
             viewOnly={props.viewOnly}
             audioEnabled={props.audioEnabled}
-            audioIssue={props.audioIssue}
             onToggleAudio={props.onToggleAudio}
             clipboardSync={props.clipboardSync}
             clipboardPermitted={props.clipboardPermitted}
@@ -87,12 +74,11 @@ export function MobileSessionDock(props: MobileSessionDockProps) {
             privacyAllowed={features.privacyMode && props.privacyAllowed}
             privacyEnabled={props.privacyEnabled}
             privacyPending={props.privacyPending}
-            privacyFailed={props.privacyFailed}
             onTogglePrivacy={props.onTogglePrivacy}
             diagnosticsOpen={props.diagnosticsOpen}
             onToggleDiagnostics={props.onToggleDiagnostics}
             restartAllowed={features.restart && props.restartAllowed}
-            restartNotice={props.restartNotice}
+            restartPending={props.restartPending}
             onRestart={props.onRestart}
             onDisconnect={props.onDisconnect}
             canLockScreen={features.lockScreen}
@@ -137,7 +123,6 @@ export function MobileSessionDock(props: MobileSessionDockProps) {
           </section>
         ) : null}
       </div>
-      <div className="remote-control-notice" role="status">{notice}</div>
       <nav className="remote-tools" data-testid="mobile-dock" aria-label={label('session')} onPointerDown={(event) => event.stopPropagation()}>
         <button type="button" data-testid="dock-keyboard" onClick={onToggleKeyboard}>
           <Keyboard size={20} />

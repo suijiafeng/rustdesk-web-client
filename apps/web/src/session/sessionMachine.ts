@@ -21,6 +21,7 @@ export function restartReconnectDue(now: number, deadline: number, phase: Sessio
 }
 
 export type SessionPhase = 'idle' | 'connecting' | 'live' | 'error';
+export type RestartNotice = 'requested' | 'waiting' | 'failed' | 'ended' | null;
 
 export function canSendSessionMessage(phase: SessionPhase, type: ClientMessage['type']): boolean {
   if (type === 'auth2fa') return phase === 'connecting';

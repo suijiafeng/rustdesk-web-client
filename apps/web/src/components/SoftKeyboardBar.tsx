@@ -9,6 +9,7 @@ import { keyboardInset } from '../lib/gestures.ts';
 import { t, type I18nKey, type Locale } from '../lib/i18n.ts';
 import { controlFromKeyOrCode, isImeEvent } from '../lib/keys.ts';
 import { softControlMessages, softTextEdit, toggleLatched } from '../lib/softKeyboard.ts';
+import { useToast } from './ToastProvider.tsx';
 
 interface SoftKeyboardBarProps {
   locale: Locale;
@@ -48,7 +49,7 @@ export function SoftKeyboardBar({ locale, inputRef, viewOnly, onSend, onHide, on
   const composingRef = useRef(false);
   const lastSentRef = useRef('');
   const latchedRef = useRef<string[]>([]);
-  const [pasteFailed, setPasteFailed] = useState(false);
+  const showToast = useToast();
   const [latched, setLatched] = useState<string[]>([]);
   latchedRef.current = latched;
 
@@ -146,7 +147,6 @@ export function SoftKeyboardBar({ locale, inputRef, viewOnly, onSend, onHide, on
       <button type="button" className="soft-key-btn" data-testid="soft-hide" aria-label={t(locale, 'softHide')} onClick={onHide}>
         <ChevronDown size={18} aria-hidden="true" />
       </button>
-      {pasteFailed ? <span role="status">{t(locale, 'clipSyncPasteFailed')}</span> : null}
       <input
         ref={inputRef}
         type="text"
@@ -193,9 +193,10 @@ export function SoftKeyboardBar({ locale, inputRef, viewOnly, onSend, onHide, on
           const text = event.clipboardData.getData('text/plain');
           if (!text) return;
           event.preventDefault();
-          const sent = onSyncPaste(text) === 'ok';
-          setPasteFailed(!sent);
-          if (!sent) return;
+          if (onSyncPaste(text) !== 'ok') {
+            showToast(t(locale, 'clipSyncPasteFailed'), 'error');
+            return;
+          }
           onSend(textMessages(text, false));
           lastSentRef.current = '';
           event.currentTarget.value = '';

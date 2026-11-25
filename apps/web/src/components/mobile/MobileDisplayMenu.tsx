@@ -5,6 +5,7 @@ import { Focus, Monitor } from 'lucide-react';
 import { t } from '../../lib/i18n.ts';
 import { ResolutionSelect } from '../ResolutionSelect.tsx';
 import { SessionDisplayControls, type SessionDisplayControlsProps } from '../SessionDisplayControls.tsx';
+import { useToast } from '../ToastProvider.tsx';
 import { MobileMenuSwitch } from './MobileMenuSwitch.tsx';
 
 export interface MobileDisplayMenuProps extends Omit<SessionDisplayControlsProps, 'rows' | 'onRequestSent'> {
@@ -32,19 +33,18 @@ export function MobileDisplayMenu({
   frameHeight,
   onResolution,
   canChangeResolution,
-  onNotice,
   ...displayControls
 }: MobileDisplayMenuProps & {
   canChangeResolution: boolean;
-  onNotice: (text: string) => void;
 }) {
+  const showToast = useToast();
   const { locale } = displayControls;
   const hasMultipleDisplays = displays.length > 1;
   const resolutionLabel = t(locale, 'remoteResolution');
   const followWindowLabel = t(locale, 'followWindow');
 
   function showRequestSent(selection: string) {
-    onNotice(`${t(locale, 'displayRequestSent')} · ${selection}`);
+    showToast(`${t(locale, 'displayRequestSent')} · ${selection}`);
   }
 
   return (
@@ -94,7 +94,7 @@ export function MobileDisplayMenu({
           <MobileMenuSwitch icon={Focus} label={followWindowLabel} checked={followWindow} onChange={() => {
             onToggleFollowWindow();
             const nextStateLabel = t(locale, followWindow ? 'optionOff' : 'optionOn');
-            onNotice(`${followWindowLabel} · ${nextStateLabel}`);
+            showToast(`${followWindowLabel} · ${nextStateLabel}`);
           }} />
         </div>
       ) : null}

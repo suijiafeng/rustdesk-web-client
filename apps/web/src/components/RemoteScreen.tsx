@@ -69,7 +69,6 @@ interface RemoteScreenProps extends Pick<SessionDisplayControlsProps, 'targetFps
   onQuality: SessionDisplayControlsProps['onQuality'];
   onToggleViewOnly: () => void;
   audioEnabled: boolean;
-  audioIssue: string;
   volume: number;
   onToggleAudio: () => void;
   onVolume: (volume: number) => void;
@@ -103,12 +102,11 @@ interface RemoteScreenProps extends Pick<SessionDisplayControlsProps, 'targetFps
   onDismissClipboard: () => void;
   privacyEnabled: boolean;
   privacyPending: boolean;
-  privacyFailed: boolean;
   onTogglePrivacy: () => void;
   resolutions: readonly { width: number; height: number }[];
   onResolution: (width: number, height: number) => boolean;
   restartAllowed: boolean;
-  restartNotice: null | 'requested' | 'waiting' | 'failed' | 'ended';
+  restartPending: boolean;
   onRestart: () => void;
   onScreenshot: () => void;
   chatLines: readonly { direction: 'in' | 'out'; text: string }[];
@@ -160,7 +158,6 @@ export function RemoteScreen({
   onQuality,
   onToggleViewOnly,
   audioEnabled,
-  audioIssue,
   volume,
   onToggleAudio,
   onVolume,
@@ -187,12 +184,11 @@ export function RemoteScreen({
   onDismissClipboard,
   privacyEnabled,
   privacyPending,
-  privacyFailed,
   onTogglePrivacy,
   resolutions,
   onResolution,
   restartAllowed,
-  restartNotice,
+  restartPending,
   onRestart,
   onScreenshot,
   chatLines,
@@ -793,7 +789,6 @@ export function RemoteScreen({
           onFps={onFps}
           onCodec={onCodec}
           audioEnabled={audioEnabled}
-          audioIssue={audioIssue}
           viewOnly={viewOnly}
           privacyAllowed={privacyAllowed}
           followWindow={followWindow}
@@ -813,14 +808,13 @@ export function RemoteScreen({
           onQuickKey={sendQuickKey}
           privacyEnabled={privacyEnabled}
           privacyPending={privacyPending}
-          privacyFailed={privacyFailed}
           onTogglePrivacy={onTogglePrivacy}
           resolutions={resolutions}
           frameWidth={frameWidth}
           frameHeight={frameHeight}
           onResolution={onResolution}
           restartAllowed={restartAllowed}
-          restartNotice={restartNotice}
+          restartPending={restartPending}
           onRestart={confirmRestart}
         />
       ) : null}
@@ -851,7 +845,6 @@ export function RemoteScreen({
           onQuality={onQuality}
           onToggleViewOnly={onToggleViewOnly}
           audioEnabled={audioEnabled}
-          audioIssue={audioIssue}
           volume={volume}
           onToggleAudio={onToggleAudio}
           onVolume={onVolume}
@@ -862,14 +855,13 @@ export function RemoteScreen({
           onOpenClipboard={() => setClipboardOpen(true)}
           privacyEnabled={privacyEnabled}
           privacyPending={privacyPending}
-          privacyFailed={privacyFailed}
           onTogglePrivacy={onTogglePrivacy}
           resolutions={resolutions}
           frameWidth={frameWidth}
           frameHeight={frameHeight}
           onResolution={onResolution}
           restartAllowed={restartAllowed}
-          restartNotice={restartNotice}
+          restartPending={restartPending}
           onRestart={confirmRestart}
           onScreenshot={onScreenshot}
           onOpenChat={() => setChatOpen(true)}
@@ -890,7 +882,7 @@ export function RemoteScreen({
           onSubmit={(event) => {
             event.preventDefault();
             restartDialogRef.current?.close();
-            if (restartAllowed && restartNotice !== 'requested' && restartNotice !== 'waiting') onRestart();
+            if (restartAllowed && !restartPending) onRestart();
           }}
         >
           <h2 id="restart-title" className="mb-2 text-base font-semibold">{t(locale, 'restartDevice')}</h2>

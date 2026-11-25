@@ -2,7 +2,7 @@
 
 import type { DisplayInfo, QualityLevel } from '@rustdesk-web/shared';
 import { Camera, Clipboard, Eye, LockKeyhole, LogOut, Maximize2, MessageSquare, Monitor, RotateCcw, Shield, ShieldAlert, Volume2 } from 'lucide-react';
-import { t, translateAudioIssue, type Locale } from '../lib/i18n.ts';
+import { t, type Locale } from '../lib/i18n.ts';
 import { classifyRemoteOs, remoteFeatures } from '../lib/platform.ts';
 import { ResolutionSelect } from './ResolutionSelect.tsx';
 import { SessionDisplayControls, type SessionDisplayControlsProps } from './SessionDisplayControls.tsx';
@@ -18,7 +18,6 @@ interface SessionToolbarProps extends Pick<SessionDisplayControlsProps, 'targetF
   onQuality: SessionDisplayControlsProps['onQuality'];
   onToggleViewOnly: () => void;
   audioEnabled: boolean;
-  audioIssue: string;
   volume: number;
   onToggleAudio: () => void;
   onVolume: (volume: number) => void;
@@ -29,14 +28,13 @@ interface SessionToolbarProps extends Pick<SessionDisplayControlsProps, 'targetF
   onOpenClipboard: () => void;
   privacyEnabled: boolean;
   privacyPending: boolean;
-  privacyFailed: boolean;
   onTogglePrivacy: () => void;
   resolutions: readonly { width: number; height: number }[];
   frameWidth: number;
   frameHeight: number;
   onResolution: (width: number, height: number) => void;
   restartAllowed: boolean;
-  restartNotice: null | 'requested' | 'waiting' | 'failed' | 'ended';
+  restartPending: boolean;
   onRestart: () => void;
   onScreenshot: () => void;
   onOpenChat: () => void;
@@ -58,7 +56,6 @@ export function SessionToolbar({
   onQuality,
   onToggleViewOnly,
   audioEnabled,
-  audioIssue,
   volume,
   onToggleAudio,
   onVolume,
@@ -69,14 +66,13 @@ export function SessionToolbar({
   onOpenClipboard,
   privacyEnabled,
   privacyPending,
-  privacyFailed,
   onTogglePrivacy,
   resolutions,
   frameWidth,
   frameHeight,
   onResolution,
   restartAllowed,
-  restartNotice,
+  restartPending,
   onRestart,
   onScreenshot,
   onOpenChat,
@@ -157,7 +153,6 @@ export function SessionToolbar({
           {t(locale, privacyPending ? 'privacyWaiting' : 'privacyMode')}
         </button>
       ) : null}
-      {privacyFailed ? <span className="rd-session-note">{t(locale, 'privacyFailed')}</span> : null}
       {features.lockScreen ? (
         <button type="button" className="rd-session-btn" disabled={viewOnly} onClick={() => onQuickKey('Lock')}>
           <LockKeyhole size={15} />
@@ -182,18 +177,15 @@ export function SessionToolbar({
         {t(locale, 'sessionFullscreen')}
       </button>
       {features.restart && restartAllowed ? (
-        <button type="button" className="rd-session-btn" disabled={restartNotice === 'requested' || restartNotice === 'waiting'} onClick={onRestart}>
+        <button type="button" className="rd-session-btn" disabled={restartPending} onClick={onRestart}>
           <RotateCcw size={15} />
           {t(locale, 'restartDevice')}
         </button>
       ) : null}
-      {restartNotice ? <span className="rd-session-note">{t(locale, restartNotice === 'requested' ? 'restartWaiting' : restartNotice === 'waiting' ? 'retryWaiting' : restartNotice === 'failed' ? 'restartFailed' : 'retryEnded')}</span> : null}
       <button type="button" className="rd-session-btn danger" onClick={onDisconnect}>
         <LogOut size={15} />
         {t(locale, 'disconnect')}
       </button>
-      {audioIssue ? <span className="rd-session-note" data-testid="audio-issue">{translateAudioIssue(locale, audioIssue)}</span> : null}
-      {!privacyAllowed ? <span className="rd-session-note" data-testid="privacy-revoked">{t(locale, 'privacyUnavailable')}</span> : null}
     </div>
   );
 }

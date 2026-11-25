@@ -1,21 +1,13 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
 import { Activity, Clipboard, LockKeyhole, LogOut, RotateCcw, Shield, Volume2 } from 'lucide-react';
-import { t, translateAudioIssue, type Locale } from '../../lib/i18n.ts';
+import { t, type Locale } from '../../lib/i18n.ts';
 import { MobileMenuSwitch } from './MobileMenuSwitch.tsx';
-
-const restartStatusLabels = {
-  requested: 'restartWaiting',
-  waiting: 'retryWaiting',
-  failed: 'restartFailed',
-  ended: 'retryEnded',
-} as const;
 
 export interface MobileActionsMenuProps {
   locale: Locale;
   viewOnly: boolean;
   audioEnabled: boolean;
-  audioIssue: string;
   onToggleAudio: () => void;
   clipboardSync: boolean;
   clipboardPermitted: boolean;
@@ -23,12 +15,11 @@ export interface MobileActionsMenuProps {
   privacyAllowed: boolean;
   privacyEnabled: boolean;
   privacyPending: boolean;
-  privacyFailed: boolean;
   onTogglePrivacy: () => void;
   diagnosticsOpen: boolean;
   onToggleDiagnostics: () => void;
   restartAllowed: boolean;
-  restartNotice: keyof typeof restartStatusLabels | null;
+  restartPending: boolean;
   onRestart: () => void;
   onDisconnect: () => void;
 }
@@ -37,7 +28,6 @@ export function MobileActionsMenu({
   locale,
   viewOnly,
   audioEnabled,
-  audioIssue,
   onToggleAudio,
   clipboardSync,
   clipboardPermitted,
@@ -45,12 +35,11 @@ export function MobileActionsMenu({
   privacyAllowed,
   privacyEnabled,
   privacyPending,
-  privacyFailed,
   onTogglePrivacy,
   diagnosticsOpen,
   onToggleDiagnostics,
   restartAllowed,
-  restartNotice,
+  restartPending,
   onRestart,
   onDisconnect,
   canLockScreen,
@@ -59,8 +48,6 @@ export function MobileActionsMenu({
   canLockScreen: boolean;
   onLockScreen: () => void;
 }) {
-  const restartPending = restartNotice === 'requested' || restartNotice === 'waiting';
-
   return (
     <>
       <div className="tool-group">
@@ -71,8 +58,6 @@ export function MobileActionsMenu({
           <MobileMenuSwitch icon={Shield} label={t(locale, 'privacyMode')} checked={privacyEnabled}
             disabled={viewOnly || privacyPending} onChange={onTogglePrivacy} />
         ) : null}
-        {audioIssue ? <p role="alert">{translateAudioIssue(locale, audioIssue)}</p> : null}
-        {privacyFailed ? <p role="alert">{t(locale, 'privacyFailed')}</p> : null}
       </div>
       <div className="tool-group">
         <button type="button" className="tool-row" aria-pressed={diagnosticsOpen} onClick={onToggleDiagnostics}>
@@ -87,7 +72,6 @@ export function MobileActionsMenu({
             {t(locale, 'restartDevice')}
           </button>
         ) : null}
-        {restartNotice ? <p role="status">{t(locale, restartStatusLabels[restartNotice])}</p> : null}
         <button type="button" className="tool-row" disabled={!canLockScreen || viewOnly} onClick={onLockScreen}>
           <LockKeyhole size={18} aria-hidden="true" />
           {t(locale, 'lockScreen')}

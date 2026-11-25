@@ -1,8 +1,9 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { t, type I18nKey, type Locale } from '../lib/i18n.ts';
 import { validateClipboardText, type ClipboardActionResult } from '../lib/platform.ts';
+import { useToast } from './ToastProvider.tsx';
 
 interface ClipboardPanelProps {
   locale: Locale;
@@ -34,24 +35,40 @@ const clipboardNotice: Record<Exclude<ClipboardActionResult, 'ok'>, I18nKey> = {
 export function ClipboardPanel({ locale, open, incoming, permitted, disabled, viewOnly, onSend, onPasteLocalClipboard,
   sync, syncNeedsRead, onToggleSync, onSyncNow, onCopied, onClose }: ClipboardPanelProps) {
   const [draft, setDraft] = useState('');
-  const [note, setNote] = useState<I18nKey | null>(null);
   const [pasting, setPasting] = useState(false);
-  useEffect(() => {
-    if (incoming) setNote('copyRemoteText');
-  }, [incoming]);
+  const showToast = useToast();
   if (!open || disabled) return null;
+
+  function reportClipboardResult(result: ClipboardActionResult, successLabel: I18nKey) {
+    if (result === 'ok') showToast(t(locale, successLabel));
+    else showToast(t(locale, clipboardNotice[result]), 'error');
+  }
+
   const readLocal = async (send: () => Promise<ClipboardActionResult>, success: I18nKey) => {
     setPasting(true);
-    setNote(null);
     try {
-      const result = await send();
-      setNote(result === 'ok' ? success : clipboardNotice[result]);
+      reportClipboardResult(await send(), success);
     } catch {
-      setNote('clipDisconnected');
+      reportClipboardResult('disconnected', success);
     } finally {
       setPasting(false);
     }
   };
+
+  async function copyRemoteText(text: string) {
+    const validation = validateClipboardText(text, false, permitted);
+    if (validation !== 'ok') {
+      reportClipboardResult(validation, 'clipCopied');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      onCopied(text);
+      showToast(t(locale, 'clipCopied'));
+    } catch {
+      showToast(t(locale, 'clipDenied'), 'error');
+    }
+  }
 
   return (
     <form
@@ -61,7 +78,7 @@ export function ClipboardPanel({ locale, open, incoming, permitted, disabled, vi
       onSubmit={(event) => {
         event.preventDefault();
         const decision = onSend(draft);
-        setNote(decision === 'ok' ? 'clipSent' : clipboardNotice[decision]);
+        reportClipboardResult(decision, 'clipSent');
         if (decision === 'ok') setDraft('');
       }}
     >
@@ -74,20 +91,7 @@ export function ClipboardPanel({ locale, open, incoming, permitted, disabled, vi
       {incoming ? (
         <>
           <textarea readOnly value={incoming} aria-label={t(locale, 'copyRemoteText')} />
-          <button
-            type="button"
-            onClick={() => {
-              if (validateClipboardText(incoming, false, permitted) !== 'ok') return;
-              if (!navigator.clipboard?.writeText) {
-                setNote('clipDenied');
-                return;
-              }
-              void navigator.clipboard.writeText(incoming).then(
-                () => { onCopied(incoming); setNote('clipCopied'); },
-                () => setNote('clipDenied'),
-              );
-            }}
-          >
+          <button type="button" onClick={() => void copyRemoteText(incoming)}>
             {t(locale, 'copy')}
           </button>
         </>
@@ -110,7 +114,6 @@ export function ClipboardPanel({ locale, open, incoming, permitted, disabled, vi
         ) : null}
         <button type="button" onClick={onClose}>{t(locale, 'close')}</button>
       </div>
-      <p role="status">{note ? t(locale, note) : null}</p>
     </form>
   );
 }
