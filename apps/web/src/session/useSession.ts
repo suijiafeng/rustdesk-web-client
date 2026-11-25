@@ -6,6 +6,7 @@ import type { ClientMessage, ServerMessage } from '@rustdesk-web/shared';
 import type { ConnectRequest } from '../components/RustDeskShell.tsx';
 import { probeCodecs, webCodecsStatus } from '../lib/codecs.ts';
 import { RemoteDecoder } from '../lib/decoder.ts';
+import { acceptRtt } from '../lib/diagnostics.ts';
 import { sessionEndLock } from '../lib/displays.ts';
 import { RemoteAudio, clampVolume, webAudioStatus } from '../lib/remoteAudio.ts';
 import { filterCodecSupport, resolveQualityLevel, resolveTargetFps, type DisplayPrefs } from '../lib/displayPrefs.ts';
@@ -43,6 +44,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
   const [decoderError, setDecoderError] = useState('');
   const [audio, setAudio] = useState({ enabled: false, denied: false, volume: 1, issue: '' });
+  const [stats, setStats] = useState({ startedAt: 0, frames: 0, bytes: 0, rttMs: null as number | null });
   const audioRef = useRef<RemoteAudio | null>(null);
   const generation = useRef(0);
   const socketRef = useRef<WebSocket | null>(null);
@@ -175,6 +177,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     releaseHeldInput();
     closeAudio();
     setAudio({ enabled: false, denied: false, volume: 1, issue: '' });
+    setStats({ startedAt: 0, frames: 0, bytes: 0, rttMs: null });
     closeSocket(socketRef.current, true);
     socketRef.current = null;
     releaseDecoder();
@@ -265,6 +268,12 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
       if (ev.data instanceof ArrayBuffer) {
         const frame = decodeRdv1Frame(new Uint8Array(ev.data));
         if (!frame) return;
+        setStats((current) => ({
+          startedAt: current.startedAt || Date.now(),
+          frames: current.frames + 1,
+          bytes: current.bytes + ev.data.byteLength,
+          rttMs: current.rttMs,
+        }));
         ensureDecoder().push(
           {
             codec: frame.codec,
@@ -289,6 +298,14 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
         return;
       }
       if (!parsed || typeof parsed !== 'object' || typeof parsed.type !== 'string') return;
+      if (parsed.type === 'rtt') {
+        const rttMs = acceptRtt(parsed.ms);
+        if (rttMs !== null) setStats((current) => ({ ...current, rttMs }));
+        return;
+      }
+      if (parsed.type === 'status' && parsed.state === 'live' ) {
+        setStats((current) => ({ ...current, startedAt: current.startedAt || Date.now() }));
+      }
       if (parsed.type === 'audioFormat') {
         audioRef.current?.configure(parsed.sampleRate, parsed.channels);
         return;
@@ -347,6 +364,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     canvasRef,
     frameSize,
     decoderError,
+    stats,
     audio,
     startAudio,
     stopAudio,

@@ -685,6 +685,15 @@ export function t(locale: Locale, key: I18nKey): string {
   return DICT[locale][key];
 }
 
+export function missingLocaleKeys(): string[] {
+  const en = new Set(Object.keys(DICT.en));
+  const zh = new Set(Object.keys(DICT.zh));
+  const missing: string[] = [];
+  for (const key of en) if (!zh.has(key)) missing.push(`zh:${key}`);
+  for (const key of zh) if (!en.has(key)) missing.push(`en:${key}`);
+  return missing;
+}
+
 export function statusLabel(locale: Locale, phase: 'idle' | 'connecting' | 'live' | 'error'): string {
   if (phase === 'idle') return t(locale, 'statusIdle');
   if (phase === 'connecting') return t(locale, 'statusConnecting');

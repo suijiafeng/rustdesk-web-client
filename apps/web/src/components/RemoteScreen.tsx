@@ -15,6 +15,7 @@ import {
 } from '../lib/gestures.ts';
 import { applyTouchEffects, isNarrowViewport } from '../lib/touchInput.ts';
 import { MobileChrome } from './MobileChrome.tsx';
+import { DiagnosticsPanel } from './DiagnosticsPanel.tsx';
 import { offsetPointerMessages } from '../lib/displays.ts';
 import { isImeEvent } from '../lib/keys.ts';
 import { SessionToolbar } from './SessionToolbar.tsx';
@@ -67,6 +68,10 @@ interface RemoteScreenProps {
   volume: number;
   onToggleAudio: () => void;
   onVolume: (volume: number) => void;
+  diagnosticsOpen: boolean;
+  stats: { startedAt: number; frames: number; bytes: number; rttMs: number | null };
+  decodeError: string;
+  onCopyDiagnostics: (text: string) => void;
 }
 
 interface Drag {
@@ -105,6 +110,10 @@ export function RemoteScreen({
   volume,
   onToggleAudio,
   onVolume,
+  diagnosticsOpen,
+  stats,
+  decodeError,
+  onCopyDiagnostics,
 }: RemoteScreenProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const captureRef = useRef<HTMLInputElement>(null);
@@ -606,6 +615,11 @@ export function RemoteScreen({
           if (messages.length > 0) onKeyboardRef.current(messages);
         }}
         style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 1, height: 1 }}
+      />
+      <DiagnosticsPanel
+        open={diagnosticsOpen}
+        snapshot={{ ...stats, now: 0, decodeError }}
+        onCopy={onCopyDiagnostics}
       />
       {isNarrowViewport(box.width) ? (
         <MobileChrome

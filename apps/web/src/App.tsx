@@ -74,6 +74,7 @@ export function App() {
   const [locale, setLocale] = useState<Locale>(() => resolveInitialLocale(null));
   const [theme, setTheme] = useState<ThemePreference>(() => loadSavedTheme());
   const [displayPrefs, setDisplayPrefs] = useState<DisplayPrefs>(() => loadDisplayPrefs());
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width: 768px)').matches);
 
   useEffect(() => {
@@ -186,7 +187,7 @@ export function App() {
   }, []);
   const {
     session, connect, disconnect, sendInput, setHeldRelease, setArmedKeys, canvasRef, frameSize, decoderError,
-    audio, startAudio, stopAudio, setAudioVolume,
+    stats, audio, startAudio, stopAudio, setAudioVolume,
   } = useSession({
     readInput: () => formRef.current,
     onPasswordRejected: rejectSavedPassword,
@@ -261,6 +262,12 @@ export function App() {
           else startAudio();
         }}
         onVolume={setAudioVolume}
+        diagnosticsOpen={diagnosticsOpen}
+        stats={stats}
+        decodeError={decoderError}
+        onCopyDiagnostics={(text) => {
+          void navigator.clipboard?.writeText(text);
+        }}
       />
     );
   }
@@ -300,7 +307,7 @@ export function App() {
       detail={session.detail}
       decoderError={session.phase === 'error' ? session.errorMessage : decoderError}
       touchMode={!isDesktop}
-      diagnosticsOpen={false}
+      diagnosticsOpen={diagnosticsOpen}
       devices={devices}
       savedPasswords={savedPasswords}
       rememberPassword={rememberPassword}
@@ -334,7 +341,7 @@ export function App() {
       onRemoveDevice={(key) => setDevices((current) => removeDevice(current, key))}
       onRenameDevice={(key, alias) => setDevices((current) => renameDevice(current, key, alias))}
       onToggleTouchMode={() => undefined}
-      onToggleDiagnostics={() => undefined}
+      onToggleDiagnostics={() => setDiagnosticsOpen((current) => !current)}
       onConnect={onConnect}
       onDisconnect={disconnect}
       onDismissError={disconnect}
