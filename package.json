@@ -13,7 +13,9 @@
     "packages/*"
   ],
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "dev:web": "yarn workspace @rustdesk-web/web dev",
+    "build": "yarn workspace @rustdesk-web/web build",
+    "typecheck": "tsc --noEmit -p tsconfig.json && yarn workspace @rustdesk-web/web typecheck",
     "lint": "yarn typecheck"
   },
   "devDependencies": {
