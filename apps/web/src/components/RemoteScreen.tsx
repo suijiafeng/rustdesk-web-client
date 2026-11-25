@@ -101,6 +101,12 @@ interface RemoteScreenProps extends Pick<SessionDisplayControlsProps, 'targetFps
   clipboardDisabled: boolean;
   onSendClipboard: (text: string) => ClipboardActionResult;
   onPasteLocalClipboard: () => Promise<ClipboardActionResult>;
+  clipboardSync: boolean;
+  clipboardSyncNeedsRead: boolean;
+  onToggleClipboardSync: () => void;
+  onSyncClipboardNow: () => Promise<ClipboardActionResult>;
+  onSyncPastedClipboard: (text: string) => ClipboardActionResult;
+  onClipboardCopied: (text: string) => void;
   onDismissClipboard: () => void;
   privacyEnabled: boolean;
   privacyPending: boolean;
@@ -175,6 +181,12 @@ export function RemoteScreen({
   clipboardDisabled,
   onSendClipboard,
   onPasteLocalClipboard,
+  clipboardSync,
+  clipboardSyncNeedsRead,
+  onToggleClipboardSync,
+  onSyncClipboardNow,
+  onSyncPastedClipboard,
+  onClipboardCopied,
   onDismissClipboard,
   privacyEnabled,
   privacyPending,
@@ -891,6 +903,7 @@ export function RemoteScreen({
           viewOnly={viewOnly}
           onSend={sendKeys}
           onHide={hideSoftKeyboard}
+          onSyncPaste={clipboardSync ? onSyncPastedClipboard : undefined}
         />
       ) : null}
       {chrome === 'desktop' ? (
@@ -972,6 +985,11 @@ export function RemoteScreen({
         onSend={onSendClipboard}
         viewOnly={viewOnly}
         onPasteLocalClipboard={onPasteLocalClipboard}
+        sync={clipboardSync}
+        syncNeedsRead={clipboardSyncNeedsRead}
+        onToggleSync={onToggleClipboardSync}
+        onSyncNow={onSyncClipboardNow}
+        onCopied={onClipboardCopied}
         onClose={() => {
           setClipboardOpen(false);
           onDismissClipboard();

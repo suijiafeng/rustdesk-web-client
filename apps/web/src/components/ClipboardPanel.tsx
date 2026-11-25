@@ -13,6 +13,11 @@ interface ClipboardPanelProps {
   viewOnly: boolean;
   onSend: (text: string) => ClipboardActionResult;
   onPasteLocalClipboard: () => Promise<ClipboardActionResult>;
+  sync: boolean;
+  syncNeedsRead: boolean;
+  onToggleSync: () => void;
+  onSyncNow: () => Promise<ClipboardActionResult>;
+  onCopied: (text: string) => void;
   onClose: () => void;
 }
 
@@ -26,7 +31,8 @@ const clipboardNotice: Record<Exclude<ClipboardActionResult, 'ok'>, I18nKey> = {
   'view-only': 'viewOnlyLabel',
 };
 
-export function ClipboardPanel({ locale, open, incoming, permitted, disabled, viewOnly, onSend, onPasteLocalClipboard, onClose }: ClipboardPanelProps) {
+export function ClipboardPanel({ locale, open, incoming, permitted, disabled, viewOnly, onSend, onPasteLocalClipboard,
+  sync, syncNeedsRead, onToggleSync, onSyncNow, onCopied, onClose }: ClipboardPanelProps) {
   const [draft, setDraft] = useState('');
   const [note, setNote] = useState<I18nKey | null>(null);
   const [pasting, setPasting] = useState(false);
@@ -34,12 +40,12 @@ export function ClipboardPanel({ locale, open, incoming, permitted, disabled, vi
     if (incoming) setNote('copyRemoteText');
   }, [incoming]);
   if (!open || disabled) return null;
-  const pasteLocal = async () => {
+  const readLocal = async (send: () => Promise<ClipboardActionResult>, success: I18nKey) => {
     setPasting(true);
     setNote(null);
     try {
-      const result = await onPasteLocalClipboard();
-      setNote(result === 'ok' ? 'clipInputSent' : clipboardNotice[result]);
+      const result = await send();
+      setNote(result === 'ok' ? success : clipboardNotice[result]);
     } catch {
       setNote('clipDisconnected');
     } finally {
@@ -60,6 +66,11 @@ export function ClipboardPanel({ locale, open, incoming, permitted, disabled, vi
       }}
     >
       <div className="rd-clipboard-title">{t(locale, 'clipboard')}</div>
+      <label className="inline-flex items-center gap-2">
+        <input type="checkbox" role="switch" checked={sync} disabled={!permitted} onChange={onToggleSync} />
+        {t(locale, 'clipSync')}
+      </label>
+      {syncNeedsRead ? <p>{t(locale, 'clipSyncPrompt')}</p> : null}
       {incoming ? (
         <>
           <textarea readOnly value={incoming} aria-label={t(locale, 'copyRemoteText')} />
@@ -72,7 +83,7 @@ export function ClipboardPanel({ locale, open, incoming, permitted, disabled, vi
                 return;
               }
               void navigator.clipboard.writeText(incoming).then(
-                () => setNote('clipCopied'),
+                () => { onCopied(incoming); setNote('clipCopied'); },
                 () => setNote('clipDenied'),
               );
             }}
@@ -89,9 +100,14 @@ export function ClipboardPanel({ locale, open, incoming, permitted, disabled, vi
       />
       <div className="rd-clipboard-actions">
         <button type="submit" disabled={!permitted}>{t(locale, 'send')}</button>
-        <button type="button" disabled={!permitted || viewOnly || pasting} onClick={() => void pasteLocal()}>
+        <button type="button" disabled={!permitted || viewOnly || pasting} onClick={() => void readLocal(onPasteLocalClipboard, 'clipInputSent')}>
           {t(locale, 'clipTypeLocal')}
         </button>
+        {sync ? (
+          <button type="button" disabled={pasting || !permitted} onClick={() => void readLocal(onSyncNow, 'clipSent')}>
+            {t(locale, 'clipSyncNow')}
+          </button>
+        ) : null}
         <button type="button" onClick={onClose}>{t(locale, 'close')}</button>
       </div>
       <p role="status">{note ? t(locale, note) : null}</p>

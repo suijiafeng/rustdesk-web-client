@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import type { ClientMessage } from '@rustdesk-web/shared';
 import { ChevronDown } from 'lucide-react';
+import { textMessages } from '../lib/keyboard.ts';
+import type { ClipboardActionResult } from '../lib/platform.ts';
 import { keyboardInset } from '../lib/gestures.ts';
 import { t, type I18nKey, type Locale } from '../lib/i18n.ts';
 import { controlFromKeyOrCode, isImeEvent } from '../lib/keys.ts';
@@ -14,6 +16,7 @@ interface SoftKeyboardBarProps {
   viewOnly: boolean;
   onSend: (messages: ClientMessage[]) => void;
   onHide: () => void;
+  onSyncPaste?: (text: string) => ClipboardActionResult;
 }
 
 const STICKY_MODIFIERS = [
@@ -41,10 +44,11 @@ const EXTRA_KEYS: Array<{ label: string; control: string; labelKey?: I18nKey; ar
   }),
 ];
 
-export function SoftKeyboardBar({ locale, inputRef, viewOnly, onSend, onHide }: SoftKeyboardBarProps) {
+export function SoftKeyboardBar({ locale, inputRef, viewOnly, onSend, onHide, onSyncPaste }: SoftKeyboardBarProps) {
   const composingRef = useRef(false);
   const lastSentRef = useRef('');
   const latchedRef = useRef<string[]>([]);
+  const [pasteFailed, setPasteFailed] = useState(false);
   const [latched, setLatched] = useState<string[]>([]);
   latchedRef.current = latched;
 
@@ -142,6 +146,7 @@ export function SoftKeyboardBar({ locale, inputRef, viewOnly, onSend, onHide }: 
       <button type="button" className="soft-key-btn" data-testid="soft-hide" aria-label={t(locale, 'softHide')} onClick={onHide}>
         <ChevronDown size={18} aria-hidden="true" />
       </button>
+      {pasteFailed ? <span role="status">{t(locale, 'clipSyncPasteFailed')}</span> : null}
       <input
         ref={inputRef}
         type="text"
@@ -182,6 +187,18 @@ export function SoftKeyboardBar({ locale, inputRef, viewOnly, onSend, onHide }: 
           if (control === 'Backspace' && event.currentTarget.value.length > 0) return;
           event.preventDefault();
           if (!viewOnly) onSend([{ type: 'key', action: 'up', control }]);
+        }}
+        onPaste={(event) => {
+          if (!onSyncPaste || viewOnly) return;
+          const text = event.clipboardData.getData('text/plain');
+          if (!text) return;
+          event.preventDefault();
+          const sent = onSyncPaste(text) === 'ok';
+          setPasteFailed(!sent);
+          if (!sent) return;
+          onSend(textMessages(text, false));
+          lastSentRef.current = '';
+          event.currentTarget.value = '';
         }}
         onCompositionStart={() => {
           composingRef.current = true;

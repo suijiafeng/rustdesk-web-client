@@ -213,7 +213,8 @@ export function App() {
   const {
     session, connect, disconnect, sendInput, setHeldRelease, setArmedKeys, canvasRef, frameSize, codecSupport, decoderError,
     stats, quality: linkQuality, audio, startAudio, stopAudio, setAudioVolume,
-    clipboardFallback, sendClipboard, pasteLocalClipboard, dismissClipboard,     privacy, togglePrivacy, restartNotice, requestRestart,     reconnectAttempt, cancelReconnect,     chatLines, sendChat, twoFactor, submitTwoFactor,
+    clipboardFallback, sendClipboard, pasteLocalClipboard, dismissClipboard,
+    clipboardSync, toggleClipboardSync, syncClipboardNow, syncPastedClipboard, noteClipboardCopied, clipboardSyncNeedsRead,     privacy, togglePrivacy, restartNotice, requestRestart,     reconnectAttempt, cancelReconnect,     chatLines, sendChat, twoFactor, submitTwoFactor,
   } = useSession({
     readInput: () => formRef.current,
     onPasswordRejected: rejectSavedPassword,
@@ -358,6 +359,12 @@ export function App() {
         clipboardDisabled={displayPrefs.disableClipboard}
         onSendClipboard={sendClipboard}
         onPasteLocalClipboard={pasteLocalClipboard}
+        clipboardSync={clipboardSync}
+        clipboardSyncNeedsRead={clipboardSyncNeedsRead}
+        onToggleClipboardSync={toggleClipboardSync}
+        onSyncClipboardNow={syncClipboardNow}
+        onSyncPastedClipboard={syncPastedClipboard}
+        onClipboardCopied={noteClipboardCopied}
         onDismissClipboard={dismissClipboard}
         privacyEnabled={privacy.enabled}
         privacyPending={privacy.pending}

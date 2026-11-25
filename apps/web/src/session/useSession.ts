@@ -17,7 +17,8 @@ import {
 } from '../lib/linkHealth.ts';
 import { sessionEndLock } from '../lib/displays.ts';
 import { textMessages } from '../lib/keyboard.ts';
-import { classifyBrowser, clipboardDelivery, reconnectDelayMs, TWO_FACTOR_TIMEOUT_MS, twoFactorStatus, validateChatText, validateClipboardText, validateTwoFactorCode, type ClipboardActionResult } from '../lib/platform.ts';
+import { useClipboardSync } from '../hooks/useClipboardSync.ts';
+import { reconnectDelayMs, TWO_FACTOR_TIMEOUT_MS, twoFactorStatus, validateChatText, validateClipboardText, validateTwoFactorCode, type ClipboardActionResult } from '../lib/platform.ts';
 import { RemoteAudio, clampVolume, webAudioStatus } from '../lib/remoteAudio.ts';
 import { resolveQualityLevel, resolveTargetFps, type DisplayPrefs } from '../lib/displayPrefs.ts';
 import {
@@ -80,6 +81,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
   const phaseRef = useRef(session.phase);
   const sessionRef = useRef(session);
   const [codecSupport, setCodecSupport] = useState<CodecSupport | null>(null);
+  const [clipboardSync, setClipboardSync] = useState(false);
   const [clipboardFallback, setClipboardFallback] = useState<string | null>(null);
   const [privacy, setPrivacy] = useState({ enabled: false, pending: false, failed: false });
   const [restartNotice, setRestartNotice] = useState<null | 'requested' | 'waiting' | 'failed' | 'ended'>(null);
@@ -247,6 +249,41 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     setRestartNotice(null);
     apply(eventGeneration, { type: 'disconnect' });
   }, [apply, closeAudio, closeSocket, readInput, releaseDecoder, releaseHeldInput, sendInput]);
+
+  const sendClipboard = useCallback((text: string, asInput = false): ClipboardActionResult => {
+    const socket = socketRef.current;
+    const { disableClipboard, viewOnly } = readInput().displayPrefs;
+    const allowed = sessionRef.current.peer?.clipboardAllowed === true;
+    const decision = validateClipboardText(text, disableClipboard, allowed);
+    if (decision !== 'ok') return decision;
+    if (asInput && viewOnly) return 'view-only';
+    if (!socket || socket.readyState !== WebSocket.OPEN || phaseRef.current !== 'live') return 'disconnected';
+    const messages: ClientMessage[] = asInput ? textMessages(text, false) : [{ type: 'clipboard', text }];
+    try {
+      for (const message of messages) socket.send(JSON.stringify(message));
+      return 'ok';
+    } catch {
+      return 'disconnected';
+    }
+  }, [readInput]);
+
+  const clipboardAllowed = session.phase === 'live' && session.peer?.clipboardAllowed === true
+    && !readInput().displayPrefs.disableClipboard;
+  const syncEnabled = clipboardSync && clipboardAllowed;
+  const { receive: receiveClipboard, readLocal: syncClipboardNow, sendLocal: syncPastedClipboard,
+    noteCopied: noteClipboardCopied, needsRead: clipboardSyncNeedsRead } =
+    useClipboardSync(syncEnabled, sendClipboard, setClipboardFallback);
+
+  useEffect(() => {
+    if (!clipboardAllowed) {
+      setClipboardSync(false);
+      setClipboardFallback(null);
+    }
+  }, [clipboardAllowed]);
+
+  const toggleClipboardSync = useCallback(() => {
+    if (clipboardAllowed) setClipboardSync((current) => !current);
+  }, [clipboardAllowed]);
 
   const connectRef = useRef<(request?: ConnectRequest) => Promise<void>>(async () => {});
   const connect = useCallback(async (request?: ConnectRequest) => {
@@ -416,12 +453,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
         const decision = validateClipboardText(text, readInput().displayPrefs.disableClipboard, allowed);
         if (decision !== 'ok') return;
         apply(eventGeneration, { type: 'server', message: parsed });
-        const delivery = clipboardDelivery(classifyBrowser(navigator.userAgent), window.isSecureContext, false);
-        if (delivery === 'write') {
-          void navigator.clipboard.writeText(text).catch(() => setClipboardFallback(text));
-        } else {
-          setClipboardFallback(text);
-        }
+        void receiveClipboard(text);
         return;
       }
       if (parsed.type === 'twoFactorRequired') {
@@ -483,7 +515,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
       }
       apply(eventGeneration, { type: 'socket-close' });
     };
-  }, [apply, closeAudio, closeSocket, ensureDecoder, readInput, releaseDecoder]);
+  }, [apply, closeAudio, closeSocket, ensureDecoder, readInput, receiveClipboard, releaseDecoder]);
   connectRef.current = connect;
 
   useEffect(() => {
@@ -527,23 +559,6 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     audioRef.current?.close();
     audioRef.current = null;
   }, [closeSocket]);
-
-  const sendClipboard = useCallback((text: string, asInput = false): ClipboardActionResult => {
-    const socket = socketRef.current;
-    const { disableClipboard, viewOnly } = readInput().displayPrefs;
-    const allowed = sessionRef.current.peer?.clipboardAllowed === true;
-    const decision = validateClipboardText(text, disableClipboard, allowed);
-    if (decision !== 'ok') return decision;
-    if (asInput && viewOnly) return 'view-only';
-    if (!socket || socket.readyState !== WebSocket.OPEN || phaseRef.current !== 'live') return 'disconnected';
-    const messages: ClientMessage[] = asInput ? textMessages(text, false) : [{ type: 'clipboard', text }];
-    try {
-      for (const message of messages) socket.send(JSON.stringify(message));
-      return 'ok';
-    } catch {
-      return 'disconnected';
-    }
-  }, [readInput]);
 
   const pasteLocalClipboard = useCallback(async (): Promise<ClipboardActionResult> => {
     const socket = socketRef.current;
@@ -667,6 +682,12 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     stopAudio,
     setAudioVolume,
     clipboardFallback,
+    clipboardSync: syncEnabled,
+    toggleClipboardSync,
+    syncClipboardNow,
+    syncPastedClipboard,
+    noteClipboardCopied,
+    clipboardSyncNeedsRead,
     sendClipboard,
     pasteLocalClipboard,
     dismissClipboard,
