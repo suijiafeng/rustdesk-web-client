@@ -23,9 +23,13 @@ import {
   CONNECT_TIMEOUT_MS,
   buildConnectMessage,
   initialSession,
+  RESTART_GAP_MS,
+  RESTART_OFFLINE_MS,
+  RESTART_RETRY_MS,
   isCurrentGeneration,
   nextPrivacyState,
   reduceSession,
+  restartReconnectDue,
   wsUrl,
   type SessionSnapshot,
 } from './sessionMachine.ts';
@@ -75,6 +79,10 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
   const sessionRef = useRef(session);
   const [clipboardFallback, setClipboardFallback] = useState<string | null>(null);
   const [privacy, setPrivacy] = useState({ enabled: false, pending: false, failed: false });
+  const [restartNotice, setRestartNotice] = useState<null | 'requested' | 'waiting' | 'failed' | 'ended'>(null);
+  const lastConnectRef = useRef<ConnectRequest | null>(null);
+  const restartDeadlineRef = useRef(0);
+  const restartModeRef = useRef<null | 'requested' | 'waiting'>(null);
   const heldReleaseRef = useRef<ClientMessage | null>(null);
   const armedKeysRef = useRef<ClientMessage[]>([]);
   phaseRef.current = session.phase;
@@ -216,6 +224,9 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     setDecoderError('');
     setClipboardFallback(null);
     setPrivacy({ enabled: false, pending: false, failed: false });
+    lastConnectRef.current = null;
+    restartModeRef.current = null;
+    setRestartNotice(null);
     apply(eventGeneration, { type: 'disconnect' });
   }, [apply, closeAudio, closeSocket, readInput, releaseDecoder, releaseHeldInput, sendInput]);
 
@@ -245,6 +256,17 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
       return;
     }
 
+    lastConnectRef.current = {
+      mode,
+      peerId,
+      idServer,
+      relayServer: (request?.relayServer ?? input.relayServer).trim(),
+      serverKey: (request?.serverKey ?? input.serverKey).trim(),
+      forceRelay: request?.forceRelay ?? input.forceRelay,
+      host,
+      port: portText,
+      password: request?.password ?? input.password,
+    };
     const eventGeneration = ++generation.current;
     releaseDecoder();
     closeAudio();
@@ -382,6 +404,10 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
       if (parsed.type === 'privacyResult') {
         setPrivacy((current) => nextPrivacyState(current, parsed));
       }
+      if (parsed.type === 'restartResult' && !parsed.sent) {
+        restartModeRef.current = null;
+        setRestartNotice('failed');
+      }
       apply(eventGeneration, { type: 'server', message: parsed });
     };
     socket.onerror = () => {
@@ -394,6 +420,10 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
       finishTimer();
       socketRef.current = null;
       releaseDecoder();
+      if (restartModeRef.current === 'requested') {
+        restartModeRef.current = 'waiting';
+        setRestartNotice('waiting');
+      }
       apply(eventGeneration, { type: 'socket-close' });
     };
   }, [apply, closeAudio, closeSocket, ensureDecoder, readInput, releaseDecoder]);
@@ -450,6 +480,39 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
 
   const dismissClipboard = useCallback(() => setClipboardFallback(null), []);
 
+  const requestRestart = useCallback(() => {
+    if (phaseRef.current !== 'live' || sessionRef.current.peer?.restartAllowed !== true || restartModeRef.current) return;
+    restartDeadlineRef.current = Date.now() + RESTART_RETRY_MS;
+    restartModeRef.current = 'requested';
+    setRestartNotice('requested');
+    sendInput([{ type: 'restart' }]);
+  }, [sendInput]);
+
+  useEffect(() => {
+    if (restartNotice !== 'waiting') return;
+    if (!restartReconnectDue(Date.now(), restartDeadlineRef.current, session.phase)) {
+      if (session.phase === 'idle' || session.phase === 'error') setRestartNotice('ended');
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      const saved = lastConnectRef.current;
+      if (saved && restartReconnectDue(Date.now(), restartDeadlineRef.current, phaseRef.current)) void connect(saved);
+    }, RESTART_GAP_MS);
+    return () => window.clearTimeout(timer);
+  }, [connect, restartNotice, session.phase]);
+
+  useEffect(() => {
+    if (restartNotice !== 'requested' && restartNotice !== 'waiting') return;
+    const limit = restartNotice === 'requested'
+      ? RESTART_OFFLINE_MS
+      : Math.max(0, restartDeadlineRef.current - Date.now());
+    const timer = window.setTimeout(() => {
+      restartModeRef.current = null;
+      setRestartNotice(restartNotice === 'requested' ? 'failed' : 'ended');
+    }, limit);
+    return () => window.clearTimeout(timer);
+  }, [restartNotice]);
+
   const togglePrivacy = useCallback(() => {
     if (phaseRef.current !== 'live' || sessionRef.current.peer?.privacyAllowed !== true || privacy.pending) return;
     const enabled = !privacy.enabled;
@@ -478,5 +541,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     dismissClipboard,
     privacy,
     togglePrivacy,
+    restartNotice,
+    requestRestart,
   };
 }

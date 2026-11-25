@@ -1,7 +1,7 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
 import type { DisplayInfo, QualityLevel } from '@rustdesk-web/shared';
-import { Clipboard, Eye, LockKeyhole, LogOut, Maximize2, Monitor, Shield, ShieldAlert, SlidersHorizontal, Volume2 } from 'lucide-react';
+import { Clipboard, Eye, LockKeyhole, LogOut, Maximize2, Monitor, RotateCcw, Shield, ShieldAlert, SlidersHorizontal, Volume2 } from 'lucide-react';
 import { t, translateAudioIssue, type Locale } from '../lib/i18n.ts';
 import { classifyRemoteOs, remoteFeatures } from '../lib/platform.ts';
 
@@ -33,6 +33,9 @@ interface SessionToolbarProps {
   frameWidth: number;
   frameHeight: number;
   onResolution: (width: number, height: number) => void;
+  restartAllowed: boolean;
+  restartNotice: null | 'requested' | 'waiting' | 'failed' | 'ended';
+  onRestart: () => void;
 }
 
 const QUALITIES: QualityLevel[] = ['low', 'balanced', 'best'];
@@ -65,6 +68,9 @@ export function SessionToolbar({
   frameWidth,
   frameHeight,
   onResolution,
+  restartAllowed,
+  restartNotice,
+  onRestart,
 }: SessionToolbarProps) {
   const features = remoteFeatures(classifyRemoteOs(remotePlatform));
   return (
@@ -181,6 +187,13 @@ export function SessionToolbar({
         <Maximize2 size={15} />
         {t(locale, 'sessionFullscreen')}
       </button>
+      {features.restart && restartAllowed ? (
+        <button type="button" className="rd-session-btn" disabled={restartNotice === 'requested' || restartNotice === 'waiting'} onClick={onRestart}>
+          <RotateCcw size={15} />
+          {t(locale, 'restartDevice')}
+        </button>
+      ) : null}
+      {restartNotice ? <span className="rd-session-note">{t(locale, restartNotice === 'requested' ? 'restartWaiting' : restartNotice === 'waiting' ? 'retryWaiting' : restartNotice === 'failed' ? 'restartFailed' : 'retryEnded')}</span> : null}
       <button type="button" className="rd-session-btn danger" onClick={onDisconnect}>
         <LogOut size={15} />
         {t(locale, 'disconnect')}

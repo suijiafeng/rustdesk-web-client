@@ -18,6 +18,7 @@ import {
   Monitor,
   MousePointer2,
   Pointer,
+  RotateCcw,
   SlidersHorizontal,
   Volume2,
 } from 'lucide-react';
@@ -82,6 +83,9 @@ interface MobileSessionDockProps {
   frameWidth: number;
   frameHeight: number;
   onResolution: (width: number, height: number) => void;
+  restartAllowed: boolean;
+  restartNotice: null | 'requested' | 'waiting' | 'failed' | 'ended';
+  onRestart: () => void;
 }
 
 export function MobileSessionDock({
@@ -117,6 +121,9 @@ export function MobileSessionDock({
   frameWidth,
   frameHeight,
   onResolution,
+  restartAllowed,
+  restartNotice,
+  onRestart,
 }: MobileSessionDockProps) {
   const features = remoteFeatures(classifyRemoteOs(remotePlatform));
   const [menuOpen, setMenuOpen] = useState(false);
@@ -263,6 +270,13 @@ export function MobileSessionDock({
                 <Maximize2 size={18} />
                 {label('sessionFullscreen')}
               </button>
+              {features.restart && restartAllowed ? (
+                <button type="button" className="tool-row" disabled={restartNotice === 'requested' || restartNotice === 'waiting'} onClick={onRestart}>
+                  <RotateCcw size={18} />
+                  {label('restartDevice')}
+                </button>
+              ) : null}
+              {restartNotice ? <p role="status">{label(restartNotice === 'requested' ? 'restartWaiting' : restartNotice === 'waiting' ? 'retryWaiting' : restartNotice === 'failed' ? 'restartFailed' : 'retryEnded')}</p> : null}
               <button type="button" className="tool-row destructive" onClick={onDisconnect}>
                 <LogOut size={18} />
                 {label('disconnect')}

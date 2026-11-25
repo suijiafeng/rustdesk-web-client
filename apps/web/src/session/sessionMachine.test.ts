@@ -5,6 +5,8 @@ import test from 'node:test';
 import type { CodecSupport, PeerMessage } from '@rustdesk-web/shared';
 import {
   CONNECT_TIMEOUT_MS,
+  RESTART_GAP_MS,
+  restartReconnectDue,
   buildConnectMessage,
   initialSession,
   isCurrentGeneration,
@@ -206,6 +208,13 @@ test('hot-plug and display switch keep a valid monitor, including a negative ori
   assert.equal(copied.clipboardSeq, 1);
   const huge = reduceSession(copied, { type: 'server', message: { type: 'clipboard', text: 'x'.repeat(256 * 1024 + 1) } });
   assert.equal(huge.clipboardSeq, 1);
+});
+
+test('restart reconnect waits until the host drops and stops at the deadline', () => {
+  assert.equal(restartReconnectDue(1_000, 2_000, 'live'), false);
+  assert.equal(restartReconnectDue(1_000, 2_000, 'idle'), true);
+  assert.equal(restartReconnectDue(2_000, 2_000, 'error'), false);
+  assert.equal(RESTART_GAP_MS, 5_000);
 });
 
 test('privacy results keep the previous state when the host rejects the change', () => {

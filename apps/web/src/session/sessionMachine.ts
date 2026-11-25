@@ -12,6 +12,13 @@ import { chooseDisplay } from '../lib/displays.ts';
 import { validateClipboardText } from '../lib/platform.ts';
 
 export const CONNECT_TIMEOUT_MS = 45_000;
+export const RESTART_OFFLINE_MS = 45_000;
+export const RESTART_RETRY_MS = 180_000;
+export const RESTART_GAP_MS = 5_000;
+
+export function restartReconnectDue(now: number, deadline: number, phase: SessionPhase): boolean {
+  return (phase === 'idle' || phase === 'error') && now < deadline;
+}
 
 export type SessionPhase = 'idle' | 'connecting' | 'live' | 'error';
 

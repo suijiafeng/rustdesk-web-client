@@ -13,11 +13,12 @@ import {
 } from './lib/devices.ts';
 import { loadDisplayPrefs, persistDisplayPrefs, resolveQualityLevel, resolveTargetFps, type DisplayPrefs } from './lib/displayPrefs.ts';
 import { qualityCommand, remotePrivacyAllowed, shouldFollowFocusedDisplay } from './lib/displays.ts';
-import { classifyRemoteOs } from './lib/platform.ts';
+import { classifyRemoteOs, remoteFeatures } from './lib/platform.ts';
 import {
   LOCALE_STORAGE_KEY,
   resolveEffectiveLocale,
   resolveStartupLocale,
+  t,
   type Locale,
   type LocalePreference,
 } from './lib/i18n.ts';
@@ -210,7 +211,7 @@ export function App() {
   const {
     session, connect, disconnect, sendInput, setHeldRelease, setArmedKeys, canvasRef, frameSize, decoderError,
     stats, quality: linkQuality, audio, startAudio, stopAudio, setAudioVolume,
-    clipboardFallback, sendClipboard, dismissClipboard, privacy, togglePrivacy,
+    clipboardFallback, sendClipboard, dismissClipboard,     privacy, togglePrivacy, restartNotice, requestRestart,
   } = useSession({
     readInput: () => formRef.current,
     onPasswordRejected: rejectSavedPassword,
@@ -308,6 +309,11 @@ export function App() {
         }}
         resolutions={session.resolutions?.display === session.currentDisplay ? session.resolutions.sizes : []}
         onResolution={(width, height) => sendInput([{ type: 'resolution', display: session.currentDisplay, width, height }])}
+        restartAllowed={session.peer?.restartAllowed === true && remoteFeatures(classifyRemoteOs(session.peer?.platform ?? '')).restart}
+        restartNotice={restartNotice}
+        onRestart={() => {
+          if (window.confirm(t(locale, 'confirmRestart'))) requestRestart();
+        }}
         locale={locale}
       />
     );

@@ -101,6 +101,9 @@ interface RemoteScreenProps {
   onTogglePrivacy: () => void;
   resolutions: readonly { width: number; height: number }[];
   onResolution: (width: number, height: number) => void;
+  restartAllowed: boolean;
+  restartNotice: null | 'requested' | 'waiting' | 'failed' | 'ended';
+  onRestart: () => void;
   locale?: Locale;
 }
 
@@ -158,6 +161,9 @@ export function RemoteScreen({
   onTogglePrivacy,
   resolutions,
   onResolution,
+  restartAllowed,
+  restartNotice,
+  onRestart,
   locale = 'en',
 }: RemoteScreenProps) {
   const stageRef = useRef<HTMLDivElement>(null);
@@ -769,6 +775,9 @@ export function RemoteScreen({
           frameWidth={frameWidth}
           frameHeight={frameHeight}
           onResolution={onResolution}
+          restartAllowed={restartAllowed}
+          restartNotice={restartNotice}
+          onRestart={onRestart}
         />
       ) : null}
       {chrome === 'keyboard' ? (
@@ -808,6 +817,9 @@ export function RemoteScreen({
           frameWidth={frameWidth}
           frameHeight={frameHeight}
           onResolution={onResolution}
+          restartAllowed={restartAllowed}
+          restartNotice={restartNotice}
+          onRestart={onRestart}
         />
       ) : null}
       <ClipboardPanel
