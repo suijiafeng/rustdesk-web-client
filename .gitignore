@@ -45,6 +45,9 @@ lerna-debug.log*
 .env
 .env.*
 !.env.example
+.env.docker
+deploy/.env.docker
+deploy/nginx/certs/
 *.pem
 *.key
 

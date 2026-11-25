@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { originAllowed, productionTokenProblem, targetHostAllowed } from './security.ts';
+import { originAllowed, productionTokenProblem, redactLog, targetHostAllowed } from './security.ts';
 
 test('browser origins are rejected unless they match the host, loopback, or the allowlist', () => {
   assert.equal(originAllowed('', '127.0.0.1:3001', ''), true);
@@ -17,6 +17,10 @@ test('production refuses to start without a real gateway token', () => {
   assert.equal(productionTokenProblem('production', ''), 'Set RUSTDESK_GATEWAY_TOKEN before starting the gateway in production.');
   assert.equal(productionTokenProblem('production', 'real-token'), null);
   assert.equal(productionTokenProblem('development', ''), null);
+});
+
+test('log lines do not keep tokens or passwords', () => {
+  assert.equal(redactLog('rejected token=abc password: hunter2'), 'rejected token=[redacted] password: [redacted]');
 });
 
 test('the gateway will not dial a cloud metadata address', () => {

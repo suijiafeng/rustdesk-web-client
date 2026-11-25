@@ -18,6 +18,8 @@ test('GET /api/health reports the gateway is up', async () => {
     }
     const response = await fetch(`http://127.0.0.1:${address.port}${HEALTH_PATH}`);
     assert.equal(response.status, 200);
+    assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+    assert.equal(response.headers.get('x-powered-by'), null);
     const body = (await response.json()) as HealthResponse;
     assert.deepEqual(body, { ok: true, service: GATEWAY_SERVICE, authRequired: false });
     for (let i = 0; i < 20; i += 1) {

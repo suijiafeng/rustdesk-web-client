@@ -26,6 +26,12 @@ export function productionTokenProblem(nodeEnv: string | undefined, token: strin
   return null;
 }
 
+const SECRET_LOG = /((?:token|password|authorization|secret|serverkey)\s*[:=]\s*)(\S+)/gi;
+
+export function redactLog(message: string): string {
+  return message.replace(SECRET_LOG, '$1[redacted]');
+}
+
 /** Blocks empty targets and well-known cloud metadata addresses. */
 export function targetHostAllowed(host: string): boolean {
   const text = host.trim().toLowerCase().replace(/^\[|\]$/g, '');

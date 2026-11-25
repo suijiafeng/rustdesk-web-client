@@ -3,11 +3,12 @@
 import { FRAME_HEADER_LENGTH, hasRoomForHeader } from '@rustdesk-web/protocol';
 import { GATEWAY_SERVICE, HEALTH_PATH, type HealthResponse } from '@rustdesk-web/shared';
 import express from 'express';
+import { existsSync } from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
-import { originAllowed, productionTokenProblem } from './security.ts';
+import { originAllowed, productionTokenProblem, redactLog } from './security.ts';
 import { serveSocket } from './session/index.ts';
 
 export function normalizeGatewayToken(raw: string | undefined): string {
@@ -24,6 +25,17 @@ export function createApp(token = '') {
   }
   const app = express();
   app.disable('x-powered-by');
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws: wss:; media-src 'self' blob:; worker-src 'self' blob:; frame-ancestors 'self'",
+    );
+    next();
+  });
   app.get(HEALTH_PATH, (_req, res) => {
     const body: HealthResponse & { authRequired: boolean } = {
       ok: true,
@@ -35,10 +47,26 @@ export function createApp(token = '') {
   return app;
 }
 
+/** Serves the built browser client. Dotfiles are denied. Unknown paths return the client shell. */
+export function attachWebRoot(app: express.Express, webRoot: string): void {
+  const root = path.resolve(webRoot);
+  if (!root || !existsSync(root)) return;
+  app.use(express.static(root, { index: false, fallthrough: true, dotfiles: 'deny' }));
+  app.use((req, res, next) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+    if (req.path.startsWith('/api/') || req.path === '/ws') return next();
+    if (req.path.split('/').some((part) => part.startsWith('.'))) return next();
+    res.sendFile(path.join(root, 'index.html'), (error) => {
+      if (error) next();
+    });
+  });
+}
+
 export function attachWebSocket(server: http.Server, token: string) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 4 * 1024 * 1024 });
   wss.on('error', (error) => {
-    console.error('WebSocketServer error:', error);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(redactLog(`WebSocketServer error: ${message}`));
   });
   server.on('clientError', (_error, socket) => {
     if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
@@ -69,11 +97,13 @@ export function attachWebSocket(server: http.Server, token: string) {
   return wss;
 }
 
-export function listen(port: number, host = '127.0.0.1') {
+export function listen(port: number, host = '127.0.0.1', webRoot = '') {
   const token = normalizeGatewayToken(process.env.RUSTDESK_GATEWAY_TOKEN);
   const problem = productionTokenProblem(process.env.NODE_ENV, token);
   if (problem) throw new Error(problem);
-  const server = createApp(token).listen(port, host);
+  const app = createApp(token);
+  if (webRoot) attachWebRoot(app, webRoot);
+  const server = app.listen(port, host);
   attachWebSocket(server, token);
   return server;
 }
@@ -86,8 +116,9 @@ function isDirectRun(): boolean {
 
 if (isDirectRun()) {
   const port = Number(process.env.PORT) || 3001;
-  const server = listen(port);
+  const host = process.env.HOST || '127.0.0.1';
+  const server = listen(port, host, process.env.WEB_ROOT || '');
   server.on('listening', () => {
-    console.log(`gateway listening on http://127.0.0.1:${port}`);
+    console.log(redactLog(`gateway listening on http://${host}:${port}`));
   });
 }
