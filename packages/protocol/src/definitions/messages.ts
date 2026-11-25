@@ -49,16 +49,17 @@ export function decodeRendezvous(bytes: Uint8Array): Record<string, any> {
   return decodeType(RendezvousType, bytes, 'id-server');
 }
 
-export function encodeIdPk(id: string, pk: Uint8Array, kxVersion: number): Uint8Array {
-  return IdPkType.encode(IdPkType.create({ id, pk, kx_version: kxVersion })).finish();
+export function encodeIdPk(id: string, pk: Uint8Array, kxVersion: number, dtlsFingerprint?: string): Uint8Array {
+  return IdPkType.encode(IdPkType.create({ id, pk, kx_version: kxVersion, dtls_fingerprint: dtlsFingerprint })).finish();
 }
 
-export function decodeIdPk(bytes: Uint8Array): { id: string; pk: Uint8Array; kx_version: number } {
+export function decodeIdPk(bytes: Uint8Array): { id: string; pk: Uint8Array; kx_version: number; dtlsFingerprint?: string } {
   const obj = IdPkType.toObject(IdPkType.decode(bytes), { ...objectOptions, bytes: Array, defaults: true });
   return {
     id: String(obj.id ?? ''),
     pk: new Uint8Array(obj.pk ?? []),
     kx_version: Number(obj.kx_version ?? 0),
+    ...(obj.dtls_fingerprint ? { dtlsFingerprint: String(obj.dtls_fingerprint) } : {}),
   };
 }
 

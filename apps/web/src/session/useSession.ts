@@ -18,6 +18,7 @@ import {
 import { sessionEndLock } from '../lib/displays.ts';
 import { textMessages } from '../lib/keyboard.ts';
 import { useClipboardSync } from '../hooks/useClipboardSync.ts';
+import { createSessionSocket, gatewayEnablesWebRtc, type SessionSocket } from './sessionTransport.ts';
 import { reconnectDelayMs, TWO_FACTOR_TIMEOUT_MS, twoFactorStatus, validateChatText, validateClipboardText, validateTwoFactorCode, type ClipboardActionResult } from '../lib/platform.ts';
 import { RemoteAudio, clampVolume, webAudioStatus } from '../lib/remoteAudio.ts';
 import { resolveQualityLevel, resolveTargetFps, type DisplayPrefs } from '../lib/displayPrefs.ts';
@@ -75,7 +76,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
   const pingSeqRef = useRef(0);
   const audioRef = useRef<RemoteAudio | null>(null);
   const generation = useRef(0);
-  const socketRef = useRef<WebSocket | null>(null);
+  const socketRef = useRef<SessionSocket | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const decoderRef = useRef<RemoteDecoder | null>(null);
   const phaseRef = useRef(session.phase);
@@ -99,6 +100,15 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
   const armedKeysRef = useRef<ClientMessage[]>([]);
   phaseRef.current = session.phase;
   sessionRef.current = session;
+
+  const webRtcEnabled = useRef(false);
+  useEffect(() => {
+    const abort = new AbortController();
+    void gatewayEnablesWebRtc(abort.signal).then((enabled) => {
+      if (!abort.signal.aborted) webRtcEnabled.current = enabled;
+    });
+    return () => abort.abort();
+  }, []);
 
   const apply = useCallback((eventGeneration: number, event: Parameters<typeof reduceSession>[1]) => {
     if (!isCurrentGeneration(generation.current, eventGeneration)) return;
@@ -135,7 +145,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     return decoderRef.current;
   }, []);
 
-  const closeSocket = useCallback((socket: WebSocket | null, notify: boolean) => {
+  const closeSocket = useCallback((socket: SessionSocket | null, notify: boolean) => {
     if (!socket) return;
     socket.onopen = null;
     socket.onmessage = null;
@@ -362,7 +372,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
       codec: input.displayPrefs.codec,
     });
 
-    const socket = new WebSocket(wsUrl(window.location));
+    const socket = createSessionSocket(wsUrl(window.location), message, webRtcEnabled.current);
     socket.binaryType = 'arraybuffer';
     socketRef.current = socket;
     const onConnectTimeout = () => {

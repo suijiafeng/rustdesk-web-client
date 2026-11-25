@@ -35,3 +35,22 @@ test('GET /api/health reports the gateway is up', async () => {
     });
   }
 });
+
+
+test('health advertises WebRTC only when the gateway enables it', async () => {
+  const server = createApp('test-token', true).listen(0, '127.0.0.1');
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once('listening', resolve);
+      server.once('error', reject);
+    });
+    const address = server.address();
+    assert.ok(address && typeof address !== 'string');
+    const response = await fetch(`http://127.0.0.1:${address.port}${HEALTH_PATH}`);
+    assert.deepEqual(await response.json(), {
+      ok: true, service: GATEWAY_SERVICE, authRequired: true, webRtcEnabled: true,
+    });
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});

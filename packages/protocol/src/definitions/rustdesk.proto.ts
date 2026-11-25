@@ -531,6 +531,7 @@ message PunchHoleRequest {
   int32 upnp_port = 9;
   bytes socket_addr_v6 = 10;
   string switch_code = 11;
+  string webrtc_sdp_offer = 12;
 }
 
 message PunchHoleSent {
@@ -561,6 +562,7 @@ message PunchHoleResponse {
   bool is_udp = 9;
   int32 upnp_port = 10;
   bytes socket_addr_v6 = 11;
+  string webrtc_sdp_answer = 12;
 }
 
 message RequestRelay {
@@ -586,6 +588,7 @@ message RelayResponse {
   string version = 7;
   int32 feedback = 9;
   bytes socket_addr_v6 = 10;
+  string webrtc_sdp_answer = 12;
 }
 
 message KeyExchange {
@@ -599,6 +602,13 @@ message KxParams {
   uint32 version = 2;
 }
 
+message IceCandidate {
+  string id = 1;
+  bytes socket_addr = 2;
+  string session_key = 3;
+  string candidate = 4;
+}
+
 message RendezvousMessage {
   oneof union {
     PunchHoleRequest punch_hole_request = 8;
@@ -607,6 +617,7 @@ message RendezvousMessage {
     RequestRelay request_relay = 18;
     RelayResponse relay_response = 19;
     KeyExchange key_exchange = 25;
+    IceCandidate ice_candidate = 29;
   }
 }
 `;

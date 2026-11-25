@@ -6,6 +6,7 @@ export const HEALTH_PATH = '/api/health';
 export interface HealthResponse {
   ok: true;
   service: typeof GATEWAY_SERVICE;
+  webRtcEnabled?: boolean;
 }
 
 export { messageType } from './messages.ts';

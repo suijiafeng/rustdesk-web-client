@@ -30,6 +30,14 @@ Nginx terminates TLS, forwards `/` to the app, and upgrades `/ws` to WebSocket. 
 
 On the machine that built this image, `http://127.0.0.1:21120/api/health` returned the gateway JSON and a WebSocket upgrade on `/ws` returned `101 Switching Protocols`. Nginx started, resolved the app container, and then timed out opening a TCP connection across the Docker bridge (`504`). That bridge path was not proven here. The published port was.
 
+## Browser WebRTC
+
+The gateway uses WebSocket remote sessions by default. Set `RUSTDESK_ENABLE_WEBRTC=true` in the gateway's environment to advertise the optional browser transport over `/api/health`. Use a compatible RustDesk host and ID server configured for WebRTC, and serve the browser over HTTPS or localhost. The signaling endpoint uses the same gateway token and origin checks as `/ws`.
+
+Device-ID sessions can negotiate WebRTC. IP connections, forced relay, unsupported browsers, and failures before peer authentication use the regular gateway route. The browser checks the ID-server signature, peer identity, and signed DTLS fingerprint before submitting the remote password. Login failures after that point stay on the original attempt.
+
+Check the connection details to distinguish browser-direct, TURN relay, and gateway routes. The [reference ID-server compatibility notes](https://github.com/suijiafeng/rustdesk/blob/4325cb196ea690cef1a8898711a1512818bcb7d0/web-client/server-patches/hbbs/README.md) explain which hbbs configurations can forward the required signaling.
+
 ## Logs
 
 Compose keeps json-file logs at 10 MB times 3 files. The process redacts `token` and `password` values before writing an error line. Do not enable a logging driver that stores the environment block.

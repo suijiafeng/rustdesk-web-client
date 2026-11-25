@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import { flushSync } from 'react-dom';
-import type { ClientMessage, CursorShape, DisplayInfo, QualityLevel } from '@rustdesk-web/shared';
+import type { ClientMessage, CursorShape, DisplayInfo, PeerMessage, QualityLevel } from '@rustdesk-web/shared';
 import { MousePointer2 } from 'lucide-react';
 import { clampPan, computePinchStep, computeViewTransform, fitScale, mapFromRemote, panToKeepVisible, type ViewMode, type ViewTransform } from '../lib/mapping.ts';
 import type { DefaultViewStyle, ScrollStyle } from '../lib/displayPrefs.ts';
@@ -96,6 +96,8 @@ interface RemoteScreenProps extends Pick<SessionDisplayControlsProps, 'targetFps
   onCopyDiagnostics: (text: string) => void;
   onToggleDiagnostics: () => void;
   remotePlatform: string;
+  connectionRoute?: PeerMessage['route'];
+  connectionEncrypted: boolean;
   clipboardFallback: string | null;
   clipboardPermitted: boolean;
   clipboardDisabled: boolean;
@@ -178,6 +180,8 @@ export function RemoteScreen({
   onCopyDiagnostics,
   onToggleDiagnostics,
   remotePlatform,
+  connectionRoute,
+  connectionEncrypted,
   clipboardFallback,
   clipboardPermitted,
   clipboardDisabled,
@@ -863,6 +867,8 @@ export function RemoteScreen({
           open={diagnosticsOpen}
           snapshot={{ ...stats, now: 0, decodeError }}
           linkQuality={linkQuality}
+          route={connectionRoute}
+          encrypted={connectionEncrypted}
           onCopy={onCopyDiagnostics}
         />
       ) : null}

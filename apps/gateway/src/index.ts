@@ -10,6 +10,7 @@ import { pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { originAllowed, productionTokenProblem, redactLog } from './security.ts';
 import { serveSocket } from './session/index.ts';
+import { serveWebRtcSignal } from './session/webrtcSignal.ts';
 
 export function normalizeGatewayToken(raw: string | undefined): string {
   const trimmed = (raw ?? '').trim().replace(/^["']|["']$/g, '').trim();
@@ -19,7 +20,7 @@ export function normalizeGatewayToken(raw: string | undefined): string {
   return trimmed;
 }
 
-export function createApp(token = '') {
+export function createApp(token = '', webRtcEnabled = false) {
   if (!hasRoomForHeader(FRAME_HEADER_LENGTH)) {
     throw new Error('protocol frame header length is invalid');
   }
@@ -41,6 +42,7 @@ export function createApp(token = '') {
       ok: true,
       service: GATEWAY_SERVICE,
       authRequired: token.length > 0,
+      ...(webRtcEnabled ? { webRtcEnabled: true } : {}),
     };
     res.json(body);
   });
@@ -54,7 +56,7 @@ export function attachWebRoot(app: express.Express, webRoot: string): void {
   app.use(express.static(root, { index: false, fallthrough: true, dotfiles: 'deny' }));
   app.use((req, res, next) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();
-    if (req.path.startsWith('/api/') || req.path === '/ws') return next();
+    if (req.path.startsWith('/api/') || req.path === '/ws' || req.path.startsWith('/ws/')) return next();
     if (req.path.split('/').some((part) => part.startsWith('.'))) return next();
     res.sendFile(path.join(root, 'index.html'), (error) => {
       if (error) next();
@@ -62,7 +64,7 @@ export function attachWebRoot(app: express.Express, webRoot: string): void {
   });
 }
 
-export function attachWebSocket(server: http.Server, token: string) {
+export function attachWebSocket(server: http.Server, token: string, webRtcEnabled = false) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 4 * 1024 * 1024 });
   wss.on('error', (error) => {
     const message = error instanceof Error ? error.message : String(error);
@@ -80,7 +82,7 @@ export function attachWebSocket(server: http.Server, token: string) {
       socket.destroy();
       return;
     }
-    if (pathname !== '/ws') {
+    if (pathname !== '/ws' && !(webRtcEnabled && pathname === '/ws/webrtc')) {
       socket.destroy();
       return;
     }
@@ -91,7 +93,8 @@ export function attachWebSocket(server: http.Server, token: string) {
       return;
     }
     wss.handleUpgrade(request, socket, head, (ws) => {
-      serveSocket(ws, { token });
+      if (pathname === '/ws/webrtc') serveWebRtcSignal(ws, token);
+      else serveSocket(ws, { token });
     });
   });
   return wss;
@@ -101,10 +104,11 @@ export function listen(port: number, host = '127.0.0.1', webRoot = '') {
   const token = normalizeGatewayToken(process.env.RUSTDESK_GATEWAY_TOKEN);
   const problem = productionTokenProblem(process.env.NODE_ENV, token);
   if (problem) throw new Error(problem);
-  const app = createApp(token);
+  const webRtcEnabled = process.env.RUSTDESK_ENABLE_WEBRTC === 'true';
+  const app = createApp(token, webRtcEnabled);
   if (webRoot) attachWebRoot(app, webRoot);
   const server = app.listen(port, host);
-  attachWebSocket(server, token);
+  attachWebSocket(server, token, webRtcEnabled);
   return server;
 }
 

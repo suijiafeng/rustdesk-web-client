@@ -40,6 +40,34 @@ export {
   decodeRdv1Frame,
   encodeRdv1Frame,
   hasRoomForHeader,
+  vp8KeyframeSize,
   type CodecIdValue,
   type Rdv1Frame,
 } from './codec/rdv1.ts';
+
+export { decodeBase64, encodeBase64, decodeEndpoint, encodeEndpoint, FragmentReader,
+  FRAGMENT_PAYLOAD, MAX_CANDIDATES, MAX_MESSAGE_BYTES, sdpFingerprint, validateCandidate } from './webrtc.ts';
+
+export {
+  MOUSE_TYPE_MOVE,
+  MOUSE_TYPE_DOWN,
+  MOUSE_TYPE_UP,
+  MOUSE_TYPE_WHEEL,
+  MOUSE_BUTTON_LEFT,
+  MOUSE_BUTTON_RIGHT,
+  MOUSE_BUTTON_WHEEL,
+  type CodecCaps,
+  type ClientMessage,
+  selectCodecs,
+  hasAnyCodec,
+  packMouseMask,
+  normalizeChatText,
+  controlKeyEnum,
+  resolvePreferCodecEnum,
+  buildSupportedDecoding,
+  buildLoginOptions,
+  buildVideoReceivedMessage,
+  buildRefreshVideoMessage,
+  toHostMessage,
+  humanizeError,
+} from './control.ts';

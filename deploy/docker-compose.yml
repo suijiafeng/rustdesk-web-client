@@ -18,6 +18,7 @@ services:
       WEB_ROOT: /app/web
       NODE_OPTIONS: "--dns-result-order=ipv4first"
       RUSTDESK_GATEWAY_TOKEN: "${RUSTDESK_GATEWAY_TOKEN:?Set RUSTDESK_GATEWAY_TOKEN in deploy/.env.docker}"
+      RUSTDESK_ENABLE_WEBRTC: "${RUSTDESK_ENABLE_WEBRTC:-false}"
       RUSTDESK_ALLOWED_ORIGINS: "${RUSTDESK_ALLOWED_ORIGINS:-}"
     mem_limit: 512m
     cpus: 1.0

@@ -1,5 +1,6 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
+import type { PeerMessage } from '@rustdesk-web/shared';
 import { exportDiagnostics, type DiagnosticSnapshot } from '../lib/diagnostics.ts';
 import { t, type Locale } from '../lib/i18n.ts';
 
@@ -17,13 +18,17 @@ interface DiagnosticsPanelProps {
   open: boolean;
   snapshot: DiagnosticSnapshot;
   linkQuality: LinkQuality | null;
+  route?: PeerMessage['route'];
+  encrypted: boolean;
   onCopy: (text: string) => void;
 }
 
-export function DiagnosticsPanel({ locale, open, snapshot, linkQuality, onCopy }: DiagnosticsPanelProps) {
+export function DiagnosticsPanel({ locale, open, snapshot, linkQuality, route, encrypted, onCopy }: DiagnosticsPanelProps) {
   if (!open) return null;
   const base = exportDiagnostics({ ...snapshot, now: Date.now() });
   const report = {
+    route: route ?? null,
+    encrypted,
     durationMs: base.durationMs,
     framesPerSecond: base.framesPerSecond,
     received: base.received,
@@ -37,6 +42,11 @@ export function DiagnosticsPanel({ locale, open, snapshot, linkQuality, onCopy }
     linkHealth: linkQuality?.linkHealth ?? null,
   };
   const text = JSON.stringify(report);
+  const routeLabel = route === 'webrtc-direct' ? 'routeWebRtcDirect'
+    : route === 'webrtc-relay' ? 'routeWebRtcRelay'
+    : route === 'webrtc' ? 'routeWebRtcUnknown'
+    : route === 'direct' ? 'routeDirect'
+    : route === 'relay' ? 'routeRelay' : 'routeUnknown';
   return (
     <aside
       data-testid="diagnostics"
@@ -52,6 +62,7 @@ export function DiagnosticsPanel({ locale, open, snapshot, linkQuality, onCopy }
         fontSize: 12,
       }}
     >
+      <div>{t(locale, routeLabel)} · {t(locale, encrypted ? 'linkEncrypted' : 'linkPlain')}</div>
       <div>{t(locale, 'diagDuration')} {report.durationMs} ms</div>
       <div>{t(locale, 'diagFrames')} {report.samplingFps ?? report.framesPerSecond}</div>
       <div>{t(locale, 'diagBitrate')} {report.bitrateBps ?? 0} bit/s</div>

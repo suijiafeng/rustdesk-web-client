@@ -102,7 +102,7 @@ export function wsUrl(location: { protocol: string; host: string }): string {
   return `${scheme}//${location.host}/ws`;
 }
 
-export function buildConnectMessage(fields: ConnectFields): ClientMessage {
+export function buildConnectMessage(fields: ConnectFields): Extract<ClientMessage, { type: 'connect' }> {
   if (fields.mode === 'id') {
     return {
       type: 'connect',

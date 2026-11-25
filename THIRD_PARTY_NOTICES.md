@@ -11,6 +11,7 @@ The web client and gateway are AGPL-3.0-only. The packages below are direct depe
 | ws | 8.23.0 | MIT |
 | tweetnacl | 1.0.3 | Unlicense |
 | @noble/hashes | 2.4.0 | MIT |
+| fzstd | 0.1.1 | MIT |
 | protobufjs | 8.8.1 | BSD-3-Clause |
 | vite | 8.3.8 | MIT |
 | typescript | 7.0.2 | Apache-2.0 |

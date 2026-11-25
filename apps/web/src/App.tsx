@@ -354,6 +354,8 @@ export function App() {
         }}
         onToggleDiagnostics={() => setDiagnosticsOpen((current) => !current)}
         remotePlatform={session.peer?.platform ?? ''}
+        connectionRoute={session.peer?.route}
+        connectionEncrypted={session.peer?.encrypted === true}
         clipboardFallback={clipboardFallback}
         clipboardPermitted={session.peer?.clipboardAllowed === true}
         clipboardDisabled={displayPrefs.disableClipboard}
