@@ -1,6 +1,6 @@
 import { decodeClipboard } from '../../../server/clipboard';
 import { Buffer } from 'buffer';
-import { type ClientMessage, type CodecCaps, buildRefreshVideoMessage, buildVideoReceivedMessage, humanizeError, toHostMessage } from '../../../server/control';
+import { type ClientMessage, type CodecCaps, buildRefreshVideoMessage, buildVideoReceivedMessage, decodingPreferenceChanged, humanizeError, toHostMessage } from '../../../server/control';
 import { decodeMessage, encodeMessage } from '../../../server/protos';
 import { CODEC_AV1, CODEC_H264, CODEC_H265, CODEC_VP8, CODEC_VP9, encodeRdv1Frame, vp8KeyframeSize } from '../../../server/video';
 import { CursorShapes } from './cursor';
@@ -128,6 +128,7 @@ function extractEncodedFrames(
 export function createNativeSession(
   conn: NativeConnection, sessionCodecs: CodecCaps,
   onData: (data: string | ArrayBuffer) => void, onClose: () => void,
+  preferredCodec?: string,
 ) {
   let state: 'live' | 'closed' = 'live';
   const hostConn = conn;
@@ -402,6 +403,7 @@ export function createNativeSession(
         if (audioRequested && audioFormat) sendJson({ type: 'audioFormat', ...audioFormat });
       }
       let hostMsg;
+      let refreshVideo = false;
       if (parsed.type === 'resolution') {
         const { display, width, height } = parsed;
         if (display !== resolutionDisplay || !sizes.some(size => size.width === width && size.height === height)) {
@@ -414,6 +416,10 @@ export function createNativeSession(
         hostMsg = { misc: modern
           ? { change_display_resolution: { display, resolution } }
           : { change_resolution: resolution } };
+      } else if (parsed.type === 'quality') {
+        refreshVideo = Boolean(sessionCodecs && decodingPreferenceChanged(sessionCodecs, preferredCodec, parsed.codec));
+        if (refreshVideo) preferredCodec = parsed.codec;
+        hostMsg = toHostMessage(refreshVideo ? parsed : { ...parsed, codec: undefined }, sessionCodecs);
       } else {
         hostMsg = toHostMessage(parsed, sessionCodecs);
       }
@@ -425,7 +431,7 @@ export function createNativeSession(
             cleanup(false);
           }
         });
-        if (parsed.type === 'quality') {
+        if (refreshVideo) {
           void activeHost.stream
             .sendRaw(encodeMessage(buildRefreshVideoMessage()))
             .catch(fail);

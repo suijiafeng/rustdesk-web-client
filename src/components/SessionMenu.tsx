@@ -24,6 +24,8 @@ export interface SessionStats {
   height: number;
   fps: number;
   rxFps: number;
+  renderFps: number;
+  decodeQueueSize: number;
   delayMs: number;
   bitrate: number;
   decoded: number;

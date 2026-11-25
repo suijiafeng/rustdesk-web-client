@@ -187,7 +187,7 @@ export function resolvePreferCodecEnum(
   codecs: CodecCaps,
   preferCodec?: string,
 ): number {
-  const pref = (preferCodec ?? 'auto').toLowerCase();
+  const pref = (typeof preferCodec === 'string' ? preferCodec.toLowerCase() : 'auto');
   if (pref === 'h264' && codecs.h264) return PreferCodecValues.H264;
   if (pref === 'h265' && codecs.h265) return PreferCodecValues.H265;
   if (pref === 'vp8' && codecs.vp8) return PreferCodecValues.VP8;
@@ -207,7 +207,7 @@ export function buildSupportedDecoding(
   codecs: CodecCaps,
   preferCodec?: string,
 ): Record<string, unknown> {
-  const pref = (preferCodec ?? 'auto').toLowerCase();
+  const pref = (typeof preferCodec === 'string' ? preferCodec.toLowerCase() : 'auto');
   const explicitAv1 = pref === 'av1' && codecs.av1;
 
   return {
@@ -220,6 +220,17 @@ export function buildSupportedDecoding(
     prefer: resolvePreferCodecEnum(codecs, pref),
     prefer_chroma: ChromaValues.I420,
   };
+}
+
+export function decodingPreferenceChanged(
+  codecs: CodecCaps,
+  previous: string | undefined,
+  next: string | undefined,
+): boolean {
+  if (typeof next !== 'string' || !next) return false;
+  const before = buildSupportedDecoding(codecs, previous);
+  const after = buildSupportedDecoding(codecs, next);
+  return before.prefer !== after.prefer || before.ability_av1 !== after.ability_av1;
 }
 
 export function buildLoginOptions(

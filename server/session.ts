@@ -5,6 +5,7 @@ import {
   type ClientMessage,
   type CodecCaps,
   buildRefreshVideoMessage,
+  decodingPreferenceChanged,
   buildVideoReceivedMessage,
   hasAnyCodec,
   humanizeError,
@@ -15,8 +16,10 @@ import { CursorShapes } from './cursor.ts';
 import { decodeMessage, encodeMessage } from './protos.ts';
 import { type ConnectedHost, connectDirect, connectViaId } from './rustdeskClient.ts';
 import { targetHostAllowed } from './security.ts';
+import { GatewayVideoBuffer } from './videoBuffer.ts';
 import {
   CODEC_AV1,
+  HEADER_LEN,
   CODEC_H264,
   CODEC_H265,
   CODEC_VP8,
@@ -142,6 +145,9 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
   let sizes: { width: number; height: number }[] = [];
   let hostConn: ConnectedHost | null = null;
   let sessionCodecs: CodecCaps | undefined;
+  let preferredCodec: string | undefined;
+  const videoBuffer = new GatewayVideoBuffer();
+  let recoveryTimer: ReturnType<typeof setTimeout> | undefined;
   let privacyImpl = '';
   let audioRequested = false;
   let audioAllowed = true;
@@ -196,6 +202,7 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
     if (state === 'closed') return;
     state = 'closed';
     clearInterval(heartbeat);
+    clearTimeout(recoveryTimer);
     if (hostConn) {
       hostConn.stream.close();
       hostConn = null;
@@ -203,6 +210,24 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
     if (sendClosedStatus) {
       sendJson({ type: 'status', state: 'closed', detail: 'disconnected' });
     }
+  };
+
+  const scheduleVideoRecovery = (conn: ConnectedHost) => {
+    if (recoveryTimer || !videoBuffer.needsRefresh) return;
+    recoveryTimer = setTimeout(() => {
+      recoveryTimer = undefined;
+      if (state !== 'live' || hostConn !== conn || !videoBuffer.needsRefresh) return;
+      if (videoBuffer.shouldRequestRefresh(ws.bufferedAmount, performance.now())) {
+        void conn.stream.sendRaw(encodeMessage(buildRefreshVideoMessage())).catch((err) => {
+          if (state === 'live' && hostConn === conn) {
+            sendJson({ type: 'status', state: 'error', detail: humanizeError(err) });
+            cleanup(false);
+          }
+        });
+      }
+      scheduleVideoRecovery(conn);
+    }, 250);
+    recoveryTimer.unref?.();
   };
 
   // Initial hello message per spec §4.3
@@ -380,6 +405,10 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
                   currentSize = parsedSize;
                 }
               }
+              if (!videoBuffer.shouldForward(display, isKey, payload.byteLength + HEADER_LEN, ws.bufferedAmount)) {
+                scheduleVideoRecovery(conn);
+                continue;
+              }
               const pts = BigInt(f.pts ?? 0);
               const packet = encodeRdv1Frame({
                 codec: extracted.codec,
@@ -431,6 +460,13 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
         seq,
         clientTs,
         serverTs: Date.now(),
+        ...(state === 'live' && {
+          gatewayVideo: {
+            queuedBytes: ws.bufferedAmount,
+            droppedFrames: videoBuffer.droppedFrames,
+            recovering: videoBuffer.recovering,
+          },
+        }),
       });
       return;
     }
@@ -520,6 +556,7 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
           conn.stream.close();
           return;
         }
+        preferredCodec = parsed.codec;
         hostConn = conn;
         state = 'live';
         void startHostPump(conn);
@@ -585,6 +622,7 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
         if (audioRequested && audioFormat) sendJson({ type: 'audioFormat', ...audioFormat });
       }
       let hostMsg;
+      let refreshVideo = false;
       if (parsed.type === 'resolution') {
         const { display, width, height } = parsed;
         if (display !== resolutionDisplay || !sizes.some(size => size.width === width && size.height === height)) {
@@ -597,6 +635,10 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
         hostMsg = { misc: modern
           ? { change_display_resolution: { display, resolution } }
           : { change_resolution: resolution } };
+      } else if (parsed.type === 'quality') {
+        refreshVideo = Boolean(sessionCodecs && decodingPreferenceChanged(sessionCodecs, preferredCodec, parsed.codec));
+        if (refreshVideo) preferredCodec = parsed.codec;
+        hostMsg = toHostMessage(refreshVideo ? parsed : { ...parsed, codec: undefined }, sessionCodecs);
       } else {
         hostMsg = toHostMessage(parsed, sessionCodecs);
       }
@@ -608,7 +650,7 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
             cleanup(false);
           }
         });
-        if (parsed.type === 'quality') {
+        if (refreshVideo) {
           void activeHost.stream
             .sendRaw(encodeMessage(buildRefreshVideoMessage()))
             .catch(() => {});

@@ -1,7 +1,7 @@
 import { X } from 'lucide-react';
 import type { DiagnosticsSummary } from '../lib/diagnostics';
 import { t, type Locale } from '../lib/i18n';
-import { formatBitrate } from '../lib/protocol';
+import { formatBitrate, type GatewayVideoStats } from '../lib/protocol';
 import type { SessionStats } from './SessionMenu';
 
 interface DiagnosticOverlayProps {
@@ -12,6 +12,8 @@ interface DiagnosticOverlayProps {
   browserDirect?: boolean;
   encryptionLabel: string;
   hostRttMs: number;
+  targetFps: number;
+  gatewayVideo?: GatewayVideoStats;
   onClose: () => void;
 }
 
@@ -21,14 +23,19 @@ function formatMs(value: number | null): string {
 }
 
 export function DiagnosticOverlay({
-  locale, stats, summary, routeLabel, browserDirect, encryptionLabel, hostRttMs, onClose,
+  locale, stats, summary, routeLabel, browserDirect, encryptionLabel, hostRttMs, targetFps, gatewayVideo, onClose,
 }: DiagnosticOverlayProps) {
   const rows = [
     ['statSize', stats.width && stats.height ? `${stats.width} × ${stats.height}` : '—'],
     ['statCodec', stats.codec],
-    ['statFps', `${stats.fps} FPS`],
-    ['statBitrate', formatBitrate(stats.bitrate)],
+    ['diagReceiveFps', `${stats.rxFps} FPS`],
+    ['diagRenderFps', `${stats.renderFps} FPS`],
+    ['diagFpsLimit', `${targetFps} FPS`],
+    ['diagVideoBitrate', formatBitrate(stats.bitrate)],
+    ['diagDecodeQueue', stats.decodeQueueSize],
+    ['diagLocalDrops', stats.dropped],
     [browserDirect ? 'browserPeer' : 'browserGateway', formatMs(summary.currentRttMs)],
+    ['diagRttVariation', formatMs(summary.jitterMs)],
     ['reportedRtt', formatMs(hostRttMs > 0 ? hostRttMs : null)],
   ] as const;
 
@@ -56,6 +63,20 @@ export function DiagnosticOverlay({
             <dd className="font-mono-tabular">{value}</dd>
           </div>
         ))}
+        {gatewayVideo && <>
+          <div>
+            <dt>{t(locale, 'diagGatewayQueue')}</dt>
+            <dd className="font-mono-tabular">{Math.ceil(gatewayVideo.queuedBytes / 1024)} KiB</dd>
+          </div>
+          <div>
+            <dt>{t(locale, 'diagGatewayDrops')}</dt>
+            <dd className="font-mono-tabular">{gatewayVideo.droppedFrames}</dd>
+          </div>
+          {gatewayVideo.recovering && <div>
+            <dt>{t(locale, 'diagVideoRecovery')}</dt>
+            <dd>{t(locale, 'diagWaitingForKey')}</dd>
+          </div>}
+        </>}
       </dl>
     </aside>
   );

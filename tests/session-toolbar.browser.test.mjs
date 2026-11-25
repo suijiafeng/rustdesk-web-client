@@ -71,6 +71,10 @@ window.WebSocket = class extends EventTarget {
   send(data) {
     const message = JSON.parse(data);
     window.sent.push(message);
+    if (message.type === 'ping') setTimeout(() => this.onmessage?.({ data: JSON.stringify({
+      type: 'pong', seq: message.seq, clientTs: message.clientTs, serverTs: Date.now(),
+      gatewayVideo: { queuedBytes: 131072, droppedFrames: 42, recovering: true },
+    }) }), 10);
     if (message.type === 'connect') setTimeout(() => {
       for (const reply of [
         { type: 'peer', platform: new URLSearchParams(location.search).get('platform') ?? 'Windows',
@@ -82,9 +86,10 @@ window.WebSocket = class extends EventTarget {
   }
   close() { this.readyState = 3; }
 };`;
-async function connect(platform = 'Windows') {
+async function connect(platform = 'Windows', diagnostics = false) {
   const url = new URL(appUrl);
   url.searchParams.set('platform', platform);
+  if (diagnostics) url.searchParams.set('diag', '1');
   await cdp('Page.navigate', { url: url.href });
   await until('window.sent && ' + select('peer-id'));
   await evaluate(select('connect') + '.click()');
@@ -187,7 +192,10 @@ try {
   await until(select('stage') + '.dataset.remoteActive === "true"');
   console.log('Windows: Win and Alt labels, Ctrl+Alt+Del, and desktop menu input isolation verified.');
 
-  await connect('Mac OS');
+  await connect('Mac OS', true);
+  const diagnostics = select('diagnostic-overlay');
+  await until(`${diagnostics}?.textContent.includes('128 KiB')`);
+  assert.ok(await evaluate(`${diagnostics}.textContent.includes('42')`));
   await openDesktopToolbar();
   assert.equal(await evaluate(select('toolbar-cad') + ' === null'), true);
   await evaluate(select('toolbar-keyboard') + '.click()');

@@ -54,7 +54,7 @@ export class RemoteSocket {
         this.mode = 'webrtc';
         this.gateway.close();
         this.session = createNativeSession(conn, selectCodecs(message.codecs),
-          value => this.onmessage?.(new MessageEvent('message', { data: value })), () => this.close());
+          value => this.onmessage?.(new MessageEvent('message', { data: value })), () => this.close(), message.codec);
         this.session.start();
       })().catch(async error => {
         if (abort.signal.aborted || this.mode === 'closed') return;

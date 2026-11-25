@@ -62,6 +62,12 @@ export interface CursorShape {
   rgba: string;
 }
 
+export interface GatewayVideoStats {
+  queuedBytes: number;
+  droppedFrames: number;
+  recovering: boolean;
+}
+
 export type ServerMessage =
   | { type: 'permissions'; privacyAllowed: boolean; clipboardAllowed: boolean }
   | { type: 'privacyResult'; enabled?: boolean; failed: boolean }
@@ -90,7 +96,7 @@ export type ServerMessage =
   | { type: 'cursorShape'; shape: CursorShape | null }
   | { type: 'error'; message: string }
   | { type: 'rtt'; ms: number }
-  | { type: 'pong'; seq: number; clientTs: number; serverTs: number };
+  | { type: 'pong'; seq: number; clientTs: number; serverTs: number; gatewayVideo?: GatewayVideoStats };
 
 export interface CodecSupport {
   vp8: boolean;

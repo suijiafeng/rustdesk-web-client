@@ -136,6 +136,8 @@ const EMPTY_STATS: SessionStats = {
   height: 0,
   fps: 0,
   rxFps: 0,
+  renderFps: 0,
+  decodeQueueSize: 0,
   delayMs: 0,
   bitrate: 0,
   decoded: 0,
@@ -385,6 +387,7 @@ export default function App() {
   const [stats, setStats] = useState<SessionStats>(EMPTY_STATS);
   const [decoderError, setDecoderError] = useState(initialWebCodecs.ok ? '' : initialWebCodecs.reason);
   const [rtt, setRtt] = useState(0);
+  const [gatewayVideo, setGatewayVideo] = useState<Extract<ServerMessage, { type: 'pong' }>['gatewayVideo']>();
   const [quality, setQuality] = useState<QualityLevel>(() =>
     resolveQualityLevel(displayPrefs.qualityPreset, displayPrefs.customBitrate),
   );
@@ -846,7 +849,7 @@ export default function App() {
 
   // Raw WebSocket ping-pong probing when Diagnostic Overlay is active during a session
   useEffect(() => {
-    if (!diagnosticsOpen || (phase !== 'live' && phase !== 'connecting')) {
+    if (!diagnosticsOpen || phase !== 'live') {
       return;
     }
 
@@ -1011,6 +1014,7 @@ export default function App() {
     const acc = statAccRef.current;
     const decoded = decMetrics ? decMetrics.renderedCount : acc.decoded;
     const dropped = decMetrics ? decMetrics.droppedCount : acc.dropped;
+    const decodeQueueSize = decMetrics?.decodeQueueSize ?? 0;
     setStats((prev) => {
       const nextWidth = acc.width > 0 ? acc.width : prev.width;
       const nextHeight = acc.height > 0 ? acc.height : prev.height;
@@ -1021,6 +1025,8 @@ export default function App() {
         prev.height === nextHeight &&
         prev.fps === rates.fps &&
         prev.rxFps === rates.rxFps &&
+        prev.renderFps === rates.renderFps &&
+        prev.decodeQueueSize === decodeQueueSize &&
         prev.bitrate === rates.bitrate &&
         prev.delayMs === acc.lastDelayMs &&
         prev.decoded === decoded &&
@@ -1035,6 +1041,8 @@ export default function App() {
         height: nextHeight,
         fps: rates.fps,
         rxFps: rates.rxFps,
+        renderFps: rates.renderFps,
+        decodeQueueSize,
         delayMs: acc.lastDelayMs,
         bitrate: rates.bitrate,
         decoded,
@@ -1201,6 +1209,9 @@ export default function App() {
       lastInputPointRef.current = null;
       placeCursor(sizeRef.current.width / 2, sizeRef.current.height / 2);
       setStats(EMPTY_STATS);
+      setQuality(initialQuality);
+      setTargetFps(initialFps);
+      setGatewayVideo(undefined);
       setRtt(0);
       resetDiagnostics();
       setDecoderError('');
@@ -1473,6 +1484,7 @@ export default function App() {
             break;
 
           case 'pong': {
+            setGatewayVideo(msg.gatewayVideo);
             const now = performance.now();
             diagStateRef.current = recordPongReceived(diagStateRef.current, msg.seq, now);
             setDiagSummary(computeDiagnosticsSummary(diagStateRef.current, now, PING_TIMEOUT_MS));
@@ -2888,6 +2900,8 @@ export default function App() {
           browserDirect={peer?.route?.startsWith('webrtc')}
           encryptionLabel={t(locale, peer?.encrypted ? 'linkEncrypted' : 'linkPlain')}
           hostRttMs={rtt}
+          targetFps={targetFps}
+          gatewayVideo={gatewayVideo}
           onClose={() => setDiagnosticsOpen(false)}
         />
       )}
