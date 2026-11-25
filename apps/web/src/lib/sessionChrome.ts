@@ -1,6 +1,17 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
-/** Top session controls hide while the mobile soft keyboard is open, until the menu button reopens them. */
-export function sessionToolbarVisible(narrow: boolean, keyboardOpen: boolean, reopened: boolean): boolean {
-  return !narrow || !keyboardOpen || reopened;
+export type SessionChrome = 'desktop' | 'dock' | 'keyboard';
+
+/** Desktop keeps the top toolbar. A touch or narrow layout uses the bottom dock, hidden while the soft keyboard is open. */
+export function sessionChromeMode(input: {
+  width: number;
+  coarsePointer: boolean;
+  keyboardOpen: boolean;
+  viewportNarrow: boolean;
+}): SessionChrome {
+  const touchLayout = input.width > 0
+    ? input.coarsePointer || input.width <= 768
+    : input.coarsePointer || input.viewportNarrow;
+  if (!touchLayout) return 'desktop';
+  return input.keyboardOpen ? 'keyboard' : 'dock';
 }

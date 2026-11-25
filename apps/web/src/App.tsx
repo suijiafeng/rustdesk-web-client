@@ -290,6 +290,7 @@ export function App() {
         onCopyDiagnostics={(text) => {
           void navigator.clipboard?.writeText(text);
         }}
+        onToggleDiagnostics={() => setDiagnosticsOpen((current) => !current)}
         locale={locale}
       />
     );

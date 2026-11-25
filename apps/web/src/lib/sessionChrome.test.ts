@@ -2,11 +2,13 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sessionToolbarVisible } from './sessionChrome.ts';
+import { sessionChromeMode } from './sessionChrome.ts';
 
-test('mobile session toolbar collapses while the soft keyboard is open', () => {
-  assert.equal(sessionToolbarVisible(true, true, false), false);
-  assert.equal(sessionToolbarVisible(true, true, true), true);
-  assert.equal(sessionToolbarVisible(true, false, false), true);
-  assert.equal(sessionToolbarVisible(false, true, false), true);
+test('a narrow or touch session uses the bottom dock and hides it while the soft keyboard is open', () => {
+  assert.equal(sessionChromeMode({ width: 390, coarsePointer: true, keyboardOpen: false, viewportNarrow: true }), 'dock');
+  assert.equal(sessionChromeMode({ width: 390, coarsePointer: true, keyboardOpen: true, viewportNarrow: true }), 'keyboard');
+  assert.equal(sessionChromeMode({ width: 1200, coarsePointer: true, keyboardOpen: false, viewportNarrow: false }), 'dock');
+  assert.equal(sessionChromeMode({ width: 1440, coarsePointer: false, keyboardOpen: true, viewportNarrow: false }), 'desktop');
+  assert.equal(sessionChromeMode({ width: 0, coarsePointer: false, keyboardOpen: false, viewportNarrow: true }), 'dock');
+  assert.equal(sessionChromeMode({ width: 0, coarsePointer: false, keyboardOpen: false, viewportNarrow: false }), 'desktop');
 });

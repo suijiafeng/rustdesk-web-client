@@ -13,12 +13,12 @@ import {
   gesturePointerUpOrCancel,
   type TouchGestureEffect,
 } from '../lib/gestures.ts';
-import { applyTouchEffects, isNarrowViewport } from '../lib/touchInput.ts';
-import { MobileChrome } from './MobileChrome.tsx';
+import { applyTouchEffects } from '../lib/touchInput.ts';
+import { MobileSessionDock } from './MobileSessionDock.tsx';
 import { SoftKeyboardBar } from './SoftKeyboardBar.tsx';
 import { useKeyboardViewport } from '../hooks/useKeyboardViewport.ts';
 import { t, type Locale } from '../lib/i18n.ts';
-import { sessionToolbarVisible } from '../lib/sessionChrome.ts';
+import { sessionChromeMode } from '../lib/sessionChrome.ts';
 import { DiagnosticsPanel } from './DiagnosticsPanel.tsx';
 import { offsetPointerMessages } from '../lib/displays.ts';
 import { isImeEvent } from '../lib/keys.ts';
@@ -84,6 +84,7 @@ interface RemoteScreenProps {
     linkHealth: 'waiting' | 'good' | 'fair' | 'poor';
   };
   onCopyDiagnostics: (text: string) => void;
+  onToggleDiagnostics: () => void;
   locale?: Locale;
 }
 
@@ -128,6 +129,7 @@ export function RemoteScreen({
   decodeError,
   linkQuality,
   onCopyDiagnostics,
+  onToggleDiagnostics,
   locale = 'en',
 }: RemoteScreenProps) {
   const stageRef = useRef<HTMLDivElement>(null);
@@ -145,10 +147,9 @@ export function RemoteScreen({
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ panX: 0, panY: 0 });
   const [touchMode, setTouchMode] = useState(true);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [chromeOpen, setChromeOpen] = useState(true);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
-  const [portrait, setPortrait] = useState(true);
+  const [coarsePointer, setCoarsePointer] = useState(() => window.matchMedia('(pointer: coarse)').matches);
+  const [viewportNarrow, setViewportNarrow] = useState(() => window.matchMedia('(max-width: 768px)').matches);
 
   const viewOnlyRef = useRef(viewOnly);
   const swapRef = useRef(swapMouseButtons);
@@ -230,11 +231,19 @@ export function RemoteScreen({
   }, []);
 
   useEffect(() => {
-    const media = window.matchMedia('(orientation: portrait)');
-    const apply = () => setPortrait(media.matches);
+    const coarse = window.matchMedia('(pointer: coarse)');
+    const narrow = window.matchMedia('(max-width: 768px)');
+    const apply = () => {
+      setCoarsePointer(coarse.matches);
+      setViewportNarrow(narrow.matches);
+    };
     apply();
-    media.addEventListener('change', apply);
-    return () => media.removeEventListener('change', apply);
+    coarse.addEventListener('change', apply);
+    narrow.addEventListener('change', apply);
+    return () => {
+      coarse.removeEventListener('change', apply);
+      narrow.removeEventListener('change', apply);
+    };
   }, []);
 
   const showCursor = showRemoteCursor && !cursorEmbedded && cursor !== null && frameWidth > 0 && frameHeight > 0;
@@ -568,7 +577,12 @@ export function RemoteScreen({
   };
 
   const cursorScreen = showCursor && cursor ? mapFromRemote(cursor.x, cursor.y, transform) : null;
-  const showSessionChrome = sessionToolbarVisible(isNarrowViewport(box.width), keyboardOpen, chromeOpen);
+  const chrome = sessionChromeMode({
+    width: box.width,
+    coarsePointer,
+    keyboardOpen,
+    viewportNarrow,
+  });
 
   return (
     <div
@@ -663,7 +677,7 @@ export function RemoteScreen({
         }}
         style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 1, height: 1 }}
       />
-      {showSessionChrome ? (
+      {chrome !== 'keyboard' ? (
         <DiagnosticsPanel
           locale={locale}
           open={diagnosticsOpen}
@@ -672,76 +686,69 @@ export function RemoteScreen({
           onCopy={onCopyDiagnostics}
         />
       ) : null}
-      {isNarrowViewport(box.width) ? (
-        <MobileChrome
+      {chrome === 'dock' ? (
+        <MobileSessionDock
           locale={locale}
-          viewportWidth={box.width}
-          viewportHeight={box.height}
-          portrait={portrait}
-          open={menuOpen}
-          keyboardOpen={keyboardOpen}
           touchMode={touchMode}
-          onToggleOpen={() => {
-            if (keyboardOpen && !chromeOpen) {
-              setChromeOpen(true);
-              return;
-            }
-            setMenuOpen((current) => !current);
-          }}
+          displays={displays}
+          currentDisplay={currentDisplay}
+          quality={quality}
+          audioEnabled={audioEnabled}
+          audioIssue={audioIssue}
+          volume={volume}
+          viewOnly={viewOnly}
+          privacyAllowed={privacyAllowed}
+          diagnosticsOpen={diagnosticsOpen}
           onToggleKeyboard={() => {
-            setKeyboardOpen((current) => {
-              const next = !current;
-              if (next) {
-                setChromeOpen(false);
-                setMenuOpen(false);
-                keyboardLayout.begin();
-              } else {
-                setChromeOpen(true);
-              }
-              return next;
-            });
+            setKeyboardOpen(true);
+            keyboardLayout.begin();
           }}
           onToggleTouchMode={() => setTouchMode((current) => !current)}
+          onSwitchDisplay={onSwitchDisplay}
+          onQuality={onQuality}
+          onToggleAudio={onToggleAudio}
+          onVolume={onVolume}
+          onToggleViewOnly={onToggleViewOnly}
+          onFullscreen={() => toggleFullscreen(stageRef.current)}
+          onDisconnect={onDisconnect}
+          onToggleDiagnostics={onToggleDiagnostics}
         />
       ) : null}
-      {keyboardOpen && isNarrowViewport(box.width) ? (
+      {chrome === 'keyboard' ? (
         <SoftKeyboardBar
           locale={locale}
           viewOnly={viewOnly}
           onSend={onKeyboard}
-          onHide={() => {
-            setKeyboardOpen(false);
-            setChromeOpen(true);
-          }}
+          onHide={() => setKeyboardOpen(false)}
         />
       ) : null}
-      {showSessionChrome ? (
-      <SessionToolbar
-        locale={locale}
-        displays={displays}
-        currentDisplay={currentDisplay}
-        quality={quality}
-        viewOnly={viewOnly}
-        privacyAllowed={privacyAllowed}
-        onSwitchDisplay={onSwitchDisplay}
-        onQuality={onQuality}
-        onToggleViewOnly={onToggleViewOnly}
-        audioEnabled={audioEnabled}
-        audioIssue={audioIssue}
-        volume={volume}
-        onToggleAudio={onToggleAudio}
-        onVolume={onVolume}
-      />
+      {chrome === 'desktop' ? (
+        <SessionToolbar
+          locale={locale}
+          displays={displays}
+          currentDisplay={currentDisplay}
+          quality={quality}
+          viewOnly={viewOnly}
+          privacyAllowed={privacyAllowed}
+          onSwitchDisplay={onSwitchDisplay}
+          onQuality={onQuality}
+          onToggleViewOnly={onToggleViewOnly}
+          audioEnabled={audioEnabled}
+          audioIssue={audioIssue}
+          volume={volume}
+          onToggleAudio={onToggleAudio}
+          onVolume={onVolume}
+        />
       ) : null}
-      {showSessionChrome ? (
-      <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 8, zIndex: 3 }}>
-        <button type="button" onClick={() => toggleFullscreen(stageRef.current)} style={{ cursor: 'pointer' }}>
-          {t(locale, 'sessionFullscreen')}
-        </button>
-        <button type="button" onClick={onDisconnect} style={{ cursor: 'pointer' }}>
-          {t(locale, 'disconnect')}
-        </button>
-      </div>
+      {chrome === 'desktop' ? (
+        <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 8, zIndex: 3 }}>
+          <button type="button" onClick={() => toggleFullscreen(stageRef.current)} style={{ cursor: 'pointer' }}>
+            {t(locale, 'sessionFullscreen')}
+          </button>
+          <button type="button" onClick={onDisconnect} style={{ cursor: 'pointer' }}>
+            {t(locale, 'disconnect')}
+          </button>
+        </div>
       ) : null}
     </div>
   );
