@@ -1,0 +1,45 @@
+name: Bug
+description: A defect in the web client or gateway
+title: "bug: "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: Do not include passwords, tokens, host keys, or screenshots of a real desktop.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What went wrong
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: What you clicked or sent, and what the gateway logged with secrets removed.
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system of the browser
+    validations:
+      required: true
+  - type: input
+    id: host
+    attributes:
+      label: Controlled RustDesk version, if a host was involved
+      placeholder: unknown, or the version string with no hostname
+  - type: input
+    id: commit
+    attributes:
+      label: Commit
+      placeholder: git rev-parse --short HEAD
+    validations:
+      required: true
