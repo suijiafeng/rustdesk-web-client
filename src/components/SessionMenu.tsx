@@ -238,9 +238,6 @@ function DesktopSessionMenu({
                 <label className="session-setting-row"><Clipboard /><span>{t(locale, 'clipSync')}</span>
                   <input className="ui-switch" type="checkbox" role="switch" checked={clipboardSync} disabled={!clipboardAllowed} onChange={onToggleClipboardSync} />
                 </label>
-                {peer?.privacyAllowed && <label className="session-setting-row"><Shield /><span>{t(locale, 'privacyMode')}</span>
-                  <input className="ui-switch" type="checkbox" role="switch" checked={privacyEnabled} disabled={privacyPending || viewOnly} onChange={onTogglePrivacy} />
-                </label>}
               </div>
               <div className="session-group">
                 {peer?.restartAllowed && <RestartAction locale={locale} className="session-setting-row" onConfirm={onRestart} />}
@@ -257,6 +254,9 @@ function DesktopSessionMenu({
                   <Monitor size={18} />{d.name || t(locale, 'screens')+' '+(d.index+1)}</button>)}
               </div>}
               <div className="session-group">
+                {peer?.privacyAllowed && <label className="session-setting-row"><Shield /><span>{t(locale, 'privacyMode')}</span>
+                  <input className="ui-switch" type="checkbox" role="switch" checked={privacyEnabled} disabled={privacyPending || viewOnly} onChange={onTogglePrivacy} />
+                </label>}
                 {sizes.length > 0 && <label className="session-setting-row"><Monitor /><span>{t(locale, 'remoteResolution')}</span>
                   <AdaptiveSelect label={t(locale, 'remoteResolution')} testId="resolution-select" disabled={viewOnly} value={String(resolutionIndex)}
                     options={[...(resolutionIndex < 0 ? [{ value: '-1', label: `${stats.width} × ${stats.height}`, disabled: true }] : []), ...sizes.map((s,i) => ({ value: String(i), label: `${s.width} × ${s.height}` }))]}

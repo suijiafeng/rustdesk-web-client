@@ -40,6 +40,8 @@ async function until(expression) {
 }
 const select = name => `document.querySelector('[data-testid="${name}"]')`;
 const list = "document.querySelector('[role=listbox]')";
+const hasPrivacySwitch = `Array.from(${select('session-menu')}.querySelectorAll('[role="switch"]'))
+  .some(input => /Privacy mode|隐私模式/.test(input.closest('label').textContent))`;
 async function touch(type, touchPoints = []) {
   await cdp('Input.dispatchTouchEvent', { type, touchPoints });
 }
@@ -78,7 +80,7 @@ window.WebSocket = class extends EventTarget {
     if (message.type === 'connect') setTimeout(() => {
       for (const reply of [
         { type: 'peer', platform: new URLSearchParams(location.search).get('platform') ?? 'Windows',
-          hostname: 'Test host', currentDisplay: 0, displays: [] },
+          hostname: 'Test host', currentDisplay: 0, displays: [], privacyAllowed: true },
         { type: 'status', state: 'live' },
         { type: 'resolutions', display: 0, sizes: Array.from({length: 12}, (_, i) => ({width: 800+i*80, height: 600+i*50})) },
       ]) this.onmessage?.({ data: JSON.stringify(reply) });
@@ -125,7 +127,10 @@ try {
   await until(select('mobile-dock-expand'));
   console.log('Expanded toolbar: an outside tap collapses the toolbar and reaches the gateway.');
   await tapElement(select('mobile-dock-expand'));
+  await tapElement(select('dock-menu'));
+  assert.equal(await evaluate(hasPrivacySwitch), false);
   await tapElement(select('dock-display'));
+  assert.equal(await evaluate(hasPrivacySwitch), true);
   const fps = select('fps-select');
   await tapElement(fps);
   await until(list);
@@ -210,6 +215,10 @@ try {
   await evaluate(select('soft-hide') + '.click()');
   await evaluate(select('toolbar-open-menu') + '.click()');
   await until(select('session-backdrop'));
+  assert.equal(await evaluate(hasPrivacySwitch), false);
+  await evaluate(select('menu-tab-display') + '.click()');
+  assert.equal(await evaluate(hasPrivacySwitch), true);
+  await evaluate(select('menu-tab-control') + '.click()');
   assert.equal(await evaluate(reverseScroll + '.textContent'), otherPreference);
   await evaluate(reverseScroll + '.click()');
   await until(list);
