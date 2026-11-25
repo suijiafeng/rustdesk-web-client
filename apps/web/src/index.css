@@ -507,6 +507,10 @@ button:focus-visible {
   --remote-toolbar-height: 48px;
 }
 
+.stage[data-keyboard-avoiding='true'] .softbar {
+  bottom: 0;
+}
+
 .softbar {
   position: absolute;
   z-index: 4;
@@ -1187,6 +1191,31 @@ button:focus-visible {
 
 .rd-peer-list-row:hover {
   background: var(--rd-hover-bg);
+}
+
+.rd-peer-name {
+  min-width: 9rem;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .rd-peer-extra {
+    width: 0;
+    min-width: 0;
+    padding: 0;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .rd-device-card:hover .rd-peer-extra,
+  .rd-device-card:focus-within .rd-peer-extra,
+  .rd-peer-list-row:hover .rd-peer-extra,
+  .rd-peer-list-row:focus-within .rd-peer-extra {
+    width: 2.25rem;
+    min-width: 2.25rem;
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 /* Identical card styling across BOTH Mobile & PC */

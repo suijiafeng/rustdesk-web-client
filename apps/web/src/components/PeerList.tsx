@@ -83,7 +83,7 @@ export function PeerList({
                     {/mac/i.test(device.platform) ? <Laptop size={19} /> : <Monitor size={19} />}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="text-[14px] font-semibold text-[var(--ink)] truncate">
+                    <div className="rd-peer-name text-[14px] font-semibold text-[var(--ink)] truncate" title={title}>
                       {title}
                     </div>
                     <div className="text-xs font-mono-tabular font-medium text-[var(--rd-id-ink)] truncate mt-0.5">
@@ -113,8 +113,9 @@ export function PeerList({
                   </button>
                   <button
                     type="button"
-                    className="w-8 h-8 inline-flex items-center justify-center rounded-lg border-0 bg-transparent text-[var(--ink-soft)] hover:bg-[var(--rd-hover-bg)]"
+                    className="rd-peer-extra w-8 h-8 inline-flex items-center justify-center rounded-lg border-0 bg-transparent text-[var(--ink-soft)] hover:bg-[var(--rd-hover-bg)]"
                     aria-label={`Rename ${title}`}
+                    title={`Rename ${title}`}
                     onClick={() => {
                       const alias = window.prompt('Device name', title);
                       if (alias) onRename(device.key, alias);
@@ -124,7 +125,7 @@ export function PeerList({
                   </button>
                   <button
                     type="button"
-                    className="w-8 h-8 inline-flex items-center justify-center rounded-lg border-0 bg-transparent text-[var(--ink-soft)] hover:bg-[var(--bad-bg)] hover:text-[var(--bad)]"
+                    className="rd-peer-extra w-8 h-8 inline-flex items-center justify-center rounded-lg border-0 bg-transparent text-[var(--ink-soft)] hover:bg-[var(--bad-bg)] hover:text-[var(--bad)]"
                     aria-label={`${t(locale, 'removeDevice')} ${title}`}
                     data-tooltip={t(locale, 'removeDevice')}
                     data-tooltip-pos="top-end"
@@ -170,8 +171,8 @@ export function PeerList({
                 {/mac/i.test(device.platform) ? <Laptop size={18} /> : <Monitor size={18} />}
               </div>
 
-              <div className="min-w-0 flex-1 sm:grid sm:grid-cols-[minmax(0,1fr)_172px_136px] sm:items-center sm:gap-4">
-                <div className="text-[14px] font-semibold text-[var(--ink)] truncate">{title}</div>
+              <div className="min-w-0 flex-1 sm:grid sm:grid-cols-[minmax(9rem,1.4fr)_minmax(0,11rem)_minmax(0,8.5rem)] sm:items-center sm:gap-4">
+                <div className="rd-peer-name text-[14px] font-semibold text-[var(--ink)] truncate" title={title}>{title}</div>
                 <div className="text-xs font-mono-tabular font-medium text-[var(--rd-id-ink)] truncate mt-0.5 sm:mt-0">
                   {primaryId}
                 </div>
@@ -202,8 +203,9 @@ export function PeerList({
               </button>
               <button
                 type="button"
-                className="w-9 h-9 inline-flex items-center justify-center rounded-lg border-0 bg-transparent text-[var(--ink-soft)] hover:bg-[var(--rd-hover-bg)]"
+                className="rd-peer-extra w-9 h-9 inline-flex items-center justify-center rounded-lg border-0 bg-transparent text-[var(--ink-soft)] hover:bg-[var(--rd-hover-bg)]"
                 aria-label={`Rename ${title}`}
+                title={`Rename ${title}`}
                 onClick={() => {
                   const alias = window.prompt('Device name', title);
                   if (alias) onRename(device.key, alias);
@@ -213,7 +215,7 @@ export function PeerList({
               </button>
               <button
                 type="button"
-                className="w-9 h-9 inline-flex items-center justify-center rounded-lg border-0 bg-transparent text-[var(--ink-soft)] hover:bg-[var(--bad-bg)] hover:text-[var(--bad)]"
+                className="rd-peer-extra w-9 h-9 inline-flex items-center justify-center rounded-lg border-0 bg-transparent text-[var(--ink-soft)] hover:bg-[var(--bad-bg)] hover:text-[var(--bad)]"
                 aria-label={`${t(locale, 'removeDevice')} ${title}`}
                 data-tooltip={t(locale, 'removeDevice')}
                 data-tooltip-pos="top-end"
