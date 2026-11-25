@@ -306,6 +306,8 @@ export function App() {
           if (classifyRemoteOs(session.peer?.platform ?? '') !== 'windows') return;
           togglePrivacy();
         }}
+        resolutions={session.resolutions?.display === session.currentDisplay ? session.resolutions.sizes : []}
+        onResolution={(width, height) => sendInput([{ type: 'resolution', display: session.currentDisplay, width, height }])}
         locale={locale}
       />
     );

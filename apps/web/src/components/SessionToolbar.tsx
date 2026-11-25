@@ -29,6 +29,10 @@ interface SessionToolbarProps {
   privacyPending: boolean;
   privacyFailed: boolean;
   onTogglePrivacy: () => void;
+  resolutions: readonly { width: number; height: number }[];
+  frameWidth: number;
+  frameHeight: number;
+  onResolution: (width: number, height: number) => void;
 }
 
 const QUALITIES: QualityLevel[] = ['low', 'balanced', 'best'];
@@ -57,6 +61,10 @@ export function SessionToolbar({
   privacyPending,
   privacyFailed,
   onTogglePrivacy,
+  resolutions,
+  frameWidth,
+  frameHeight,
+  onResolution,
 }: SessionToolbarProps) {
   const features = remoteFeatures(classifyRemoteOs(remotePlatform));
   return (
@@ -80,6 +88,28 @@ export function SessionToolbar({
           {display.name || `${t(locale, 'displayFallback')} ${index + 1}`}
         </button>
       ))}
+      {features.resolutionChange && resolutions.length > 0 ? (
+        <label className="rd-session-field">
+          <span>{t(locale, 'remoteResolution')}</span>
+          <select
+            aria-label={t(locale, 'remoteResolution')}
+            value={`${frameWidth}x${frameHeight}`}
+            onChange={(event) => {
+              const [width, height] = event.target.value.split('x').map(Number);
+              if (width > 0 && height > 0) onResolution(width, height);
+            }}
+          >
+            {resolutions.some((size) => size.width === frameWidth && size.height === frameHeight) ? null : (
+              <option value={`${frameWidth}x${frameHeight}`}>{frameWidth} × {frameHeight}</option>
+            )}
+            {resolutions.map((size) => (
+              <option key={`${size.width}x${size.height}`} value={`${size.width}x${size.height}`}>
+                {size.width} × {size.height}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
       <span className="rd-session-sep" aria-hidden="true" />
       <label className="rd-session-field">
         <SlidersHorizontal size={15} />

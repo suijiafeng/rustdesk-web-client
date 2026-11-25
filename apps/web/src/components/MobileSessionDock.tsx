@@ -78,6 +78,10 @@ interface MobileSessionDockProps {
   privacyPending: boolean;
   privacyFailed: boolean;
   onTogglePrivacy: () => void;
+  resolutions: readonly { width: number; height: number }[];
+  frameWidth: number;
+  frameHeight: number;
+  onResolution: (width: number, height: number) => void;
 }
 
 export function MobileSessionDock({
@@ -109,6 +113,10 @@ export function MobileSessionDock({
   privacyPending,
   privacyFailed,
   onTogglePrivacy,
+  resolutions,
+  frameWidth,
+  frameHeight,
+  onResolution,
 }: MobileSessionDockProps) {
   const features = remoteFeatures(classifyRemoteOs(remotePlatform));
   const [menuOpen, setMenuOpen] = useState(false);
@@ -149,6 +157,28 @@ export function MobileSessionDock({
                 {display.name || `${label('displayFallback')} ${index + 1}`}
               </button>
             ))}
+            {features.resolutionChange && resolutions.length > 0 ? (
+              <label className="tool-row">
+                <span>{label('remoteResolution')}</span>
+                <select
+                  aria-label={label('remoteResolution')}
+                  value={`${frameWidth}x${frameHeight}`}
+                  onChange={(event) => {
+                    const [width, height] = event.target.value.split('x').map(Number);
+                    if (width > 0 && height > 0) onResolution(width, height);
+                  }}
+                >
+                  {resolutions.some((size) => size.width === frameWidth && size.height === frameHeight) ? null : (
+                    <option value={`${frameWidth}x${frameHeight}`}>{frameWidth} × {frameHeight}</option>
+                  )}
+                  {resolutions.map((size) => (
+                    <option key={`${size.width}x${size.height}`} value={`${size.width}x${size.height}`}>
+                      {size.width} × {size.height}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
           </div>
         ) : null}
         {active === 'gestures' ? (
