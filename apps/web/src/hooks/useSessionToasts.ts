@@ -14,7 +14,7 @@ const restartStatusLabels = {
 
 interface SessionToastOptions {
   locale: Locale;
-  audioIssue: string;
+  audioIssue: { message: string } | null;
   privacyFailed: boolean;
   privacyAllowed: boolean | null;
   restartNotice: RestartNotice;
@@ -32,7 +32,7 @@ export function useSessionToasts({ locale, audioIssue, privacyFailed, privacyAll
   });
 
   useEffect(() => {
-    if (audioIssue) notifyAudioIssue(audioIssue);
+    if (audioIssue) notifyAudioIssue(audioIssue.message);
   }, [audioIssue]);
 
   useEffect(() => {

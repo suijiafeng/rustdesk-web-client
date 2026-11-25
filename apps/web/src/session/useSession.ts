@@ -62,7 +62,12 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
   const [session, setSession] = useState<SessionSnapshot>(initialSession);
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
   const [decoderError, setDecoderError] = useState('');
-  const [audio, setAudio] = useState({ enabled: false, denied: false, volume: 1, issue: '' });
+  const [audio, setAudio] = useState({
+    enabled: false,
+    denied: false,
+    volume: 1,
+    issue: null as { message: string } | null,
+  });
   const [stats, setStats] = useState({ startedAt: 0, frames: 0, bytes: 0, rttMs: null as number | null });
   const [quality, setQuality] = useState({
     fps: 0,
@@ -201,20 +206,24 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
   const startAudio = useCallback(() => {
     const status = webAudioStatus();
     if (!status.ok) {
-      setAudio((current) => ({ ...current, enabled: false, issue: status.reason }));
+      setAudio((current) => ({ ...current, enabled: false, issue: { message: status.reason } }));
       return;
     }
     if (!audioRef.current) {
       audioRef.current = new RemoteAudio(() => {
-        setAudio((current) => ({ ...current, enabled: false, issue: 'Audio playback failed.' }));
+        setAudio((current) => ({ ...current, enabled: false, issue: { message: 'Audio playback failed.' } }));
       });
       audioRef.current.setVolume(audio.volume);
     }
     void audioRef.current.resume().then(() => {
       sendInput([{ type: 'audio', enabled: true }]);
-      setAudio((current) => ({ ...current, enabled: true, denied: false, issue: '' }));
+      setAudio((current) => ({ ...current, enabled: true, denied: false, issue: null }));
     }).catch(() => {
-      setAudio((current) => ({ ...current, enabled: false, issue: 'The browser blocked audio until a user gesture.' }));
+      setAudio((current) => ({
+        ...current,
+        enabled: false,
+        issue: { message: 'The browser blocked audio until a user gesture.' },
+      }));
     });
   }, [audio.volume, sendInput]);
 
@@ -243,7 +252,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     if (lock.length > 0) sendInput(lock);
     releaseHeldInput();
     closeAudio();
-    setAudio({ enabled: false, denied: false, volume: 1, issue: '' });
+    setAudio({ enabled: false, denied: false, volume: 1, issue: null });
     setStats({ startedAt: 0, frames: 0, bytes: 0, rttMs: null });
     frameStatsRef.current = createFrameStats();
     linkRef.current = createDiagnosticsState();
@@ -338,7 +347,7 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
     const eventGeneration = ++generation.current;
     releaseDecoder();
     closeAudio();
-    setAudio({ enabled: false, denied: false, volume: 1, issue: '' });
+    setAudio({ enabled: false, denied: false, volume: 1, issue: null });
     setDecoderError('');
     twoFactorMeta.current = { started: 0, attempts: 0 };
     setTwoFactor(null);
@@ -455,7 +464,12 @@ export function useSession({ readInput, onPasswordRejected }: UseSessionOptions)
       }
       if (parsed.type === 'audioDenied') {
         closeAudio();
-        setAudio((current) => ({ ...current, enabled: false, denied: true, issue: 'The host refused audio.' }));
+        setAudio((current) => ({
+          ...current,
+          enabled: false,
+          denied: true,
+          issue: { message: 'The host refused audio.' },
+        }));
         return;
       }
       if (parsed.type === 'clipboard') {
