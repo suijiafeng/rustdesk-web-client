@@ -1,5 +1,7 @@
 # RustDesk 网页客户端
 
+参考交互的独立运行候选见 [reference-client/](reference-client/README.md)。候选与根目录现有入口互不替换。
+
 这是 [RustDesk](https://github.com/rustdesk/rustdesk) 的非官方浏览器客户端，与 RustDesk 作者没有隶属、背书或维护关系。
 
 网页把操作交给本仓库的 Node.js 网关。网关建立 RustDesk 会话，并把画面经 WebSocket 交给浏览器。浏览器使用 WebCodecs 解码，再把指针、键盘和触控发回同一条连接。

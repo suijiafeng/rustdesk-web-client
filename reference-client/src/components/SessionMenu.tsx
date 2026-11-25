@@ -1,0 +1,298 @@
+import { RestartAction } from './RestartAction';
+import { AdaptiveSelect } from './AdaptiveSelect';
+import { MobileSessionPanel, type MobilePanel } from './MobileSessionPanel';
+import React, { useState } from 'react';
+import {
+  Activity,
+  Clipboard, Shield, LockKeyhole, Volume2, Gauge, Film, Focus, Hand, MousePointer2,
+  Power,
+  Sliders,
+  Monitor,
+  X,
+} from 'lucide-react';
+import { formatConnectionError } from '../lib/errors';
+import { statusLabel, t, type Locale } from '../lib/i18n';
+import { type PeerMessage, type QualityLevel } from '../lib/protocol';
+import type { ConnectionPhase } from './RustDeskShell';
+
+import type { PreferredCodec } from '../lib/displayPrefs';
+import type { StreamActivityState } from '../lib/stats';
+
+export interface SessionStats {
+  codec: string;
+  width: number;
+  height: number;
+  fps: number;
+  rxFps: number;
+  delayMs: number;
+  bitrate: number;
+  decoded: number;
+  dropped: number;
+  streamState: StreamActivityState;
+}
+
+type MenuTab = 'control' | 'display';
+
+export interface SessionMenuProps {
+  clipboardSync: boolean;
+  clipboardAllowed: boolean;
+  onToggleClipboardSync: () => void;
+  onNotify: (text: string, error?: boolean) => void;
+  locale: Locale;
+  audioEnabled: boolean;
+  onToggleAudio: () => void;
+  mobileLayout: boolean;
+  followWindow: boolean;
+  onToggleFollowWindow: () => void;
+  phase: ConnectionPhase;
+  peer: PeerMessage | null;
+  decoderError: string;
+  display: number;
+  touchMode: boolean;
+  viewOnly: boolean;
+  sizes: { width: number; height: number }[];
+  onResolution: (width: number, height: number) => void;
+  diagnosticsOpen: boolean;
+  stats: SessionStats;
+  rtt: number;
+  quality: QualityLevel;
+  targetFps: number;
+  preferredCodec: PreferredCodec;
+  privacyEnabled: boolean;
+  privacyPending: boolean;
+  onTogglePrivacy: () => void;
+  onClose: () => void;
+  onOpenConnection: () => void;
+  onRestart: () => void;
+  onDisconnect: () => void;
+  onToggleDiagnostics: () => void;
+  onToggleTouchMode: () => void;
+  onSwitchDisplay: (index: number) => void;
+  onQuickKey: (name: 'Esc' | 'Tab' | 'Ctrl+C' | 'Ctrl+V' | 'Ctrl+Alt+Del' | 'Lock') => void;
+  onChangeQuality: (quality: QualityLevel, fps: number, codec?: PreferredCodec) => void;
+}
+
+export function SessionMenu(props: SessionMenuProps & { mobilePanel: MobilePanel }) {
+  if (props.mobileLayout) return <MobileSessionPanel key={props.mobilePanel} {...props} />;
+  return <DesktopSessionMenu {...props} />;
+}
+
+function DesktopSessionMenu({
+  clipboardSync, clipboardAllowed, onToggleClipboardSync,
+  privacyEnabled, privacyPending, onTogglePrivacy, onNotify,
+  locale,
+  audioEnabled,
+  onToggleAudio,
+  mobileLayout,
+  followWindow,
+  onToggleFollowWindow,
+  phase,
+  peer,
+  decoderError,
+  display,
+  touchMode,
+  viewOnly,
+  sizes, onResolution,
+  diagnosticsOpen,
+  stats,
+  rtt,
+  quality,
+  targetFps,
+  preferredCodec,
+  onClose,
+  onOpenConnection,
+  onRestart,
+  onDisconnect,
+  onToggleDiagnostics,
+  onToggleTouchMode,
+  onSwitchDisplay,
+  onQuickKey,
+  onChangeQuality,
+}: SessionMenuProps) {
+  const [activeTab, setActiveTab] = useState<MenuTab>('control');
+
+  const displays = peer?.displays ?? [];
+  const hasMultipleDisplays = displays.length > 1;
+  const resolutionIndex = sizes.findIndex(s => s.width === stats.width && s.height === stats.height);
+  const hostTitle = peer?.hostname || peer?.username || 'Host';
+  const platformLabel = peer?.platform || 'remote';
+  const linkLabel = peer?.encrypted ? t(locale, 'linkEncrypted') : t(locale, 'linkPlain');
+  const displayRtt = rtt || stats.delayMs;
+
+  const tabs: Array<{ id: MenuTab; label: string; icon: React.ReactNode }> = [
+    { id: 'control', label: t(locale, 'menuTabControl'), icon: <Sliders size={14} /> },
+    { id: 'display', label: t(locale, 'menuTabDisplay'), icon: <Monitor size={14} /> },
+  ];
+
+  return (
+    <div
+      className="scrim"
+      data-testid="session-backdrop"
+      onPointerDown={(e) => {
+        e.stopPropagation();
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div
+        className="sheet sheet-menu"
+        data-testid="session-menu"
+        role="dialog"
+        aria-label={t(locale, 'session')}
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        <div
+          className="sm:hidden w-10 h-1 rounded-full bg-[var(--line)] mx-auto mb-2.5"
+          aria-hidden="true"
+        />
+
+        {/* Header */}
+        <div className="flex items-center justify-between gap-2 pb-3 border-b border-[var(--rd-divider)]">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-semibold text-[var(--ink)] m-0 truncate">
+                {hostTitle}
+              </h2>
+              <span className={`rd-status ${phase}`} data-testid="status">
+                {statusLabel(locale, phase)}
+              </span>
+            </div>
+            <p className="text-xs text-[var(--ink-soft)] m-0 mt-0.5 truncate" data-testid="detail">
+              {platformLabel} · {linkLabel}
+              {displayRtt > 0 ? ` · ${displayRtt} ms` : ''}
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              className={`rd-btn${diagnosticsOpen ? ' active' : ''}`}
+              aria-label={t(locale, 'diagTitle')}
+              title={t(locale, 'diagTitle')}
+              onClick={onToggleDiagnostics}
+            >
+              <Activity size={16} />
+            </button>
+            <button
+              type="button"
+              className="rd-btn"
+              style={{ minWidth: 36, minHeight: 36, padding: 6 }}
+              data-testid="session-close"
+              aria-label={t(locale, 'close')}
+              data-tooltip={t(locale, 'close')}
+              data-tooltip-pos="bottom-end"
+              onClick={onClose}
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+
+        {/* Session tabs */}
+        <div
+          className="rd-session-tabs"
+          role="tablist"
+          aria-label={t(locale, 'session')}
+        >
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              data-testid={`menu-tab-${tab.id}`}
+              className={`rd-session-tab${activeTab === tab.id ? ' active' : ''}`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.icon}
+              <span>{tab.label}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="session-menu-body" key={activeTab}>
+          {activeTab === 'control' && (
+            <div role="tabpanel">
+              <div className="session-group session-mode-switch" role="group" aria-label={t(locale, 'input')}>
+                <button type="button" aria-pressed={touchMode} onClick={() => {
+                  if (!touchMode) { onToggleTouchMode(); onNotify(t(locale, 'touch')); }
+                }}><Hand size={18} />{t(locale, 'touch')}</button>
+                <button type="button" aria-pressed={!touchMode} onClick={() => {
+                  if (touchMode) { onToggleTouchMode(); onNotify(t(locale, 'mouse')); }
+                }}><MousePointer2 size={18} />{t(locale, 'mouse')}</button>
+              </div>
+              <div className="session-group">
+                <label className="session-setting-row"><Volume2 /><span>{t(locale, 'remoteAudio')}</span>
+                  <input className="ui-switch" type="checkbox" role="switch" checked={audioEnabled} onChange={onToggleAudio} />
+                </label>
+                <label className="session-setting-row"><Clipboard /><span>{t(locale, 'clipSync')}</span>
+                  <input className="ui-switch" type="checkbox" role="switch" checked={clipboardSync} disabled={!clipboardAllowed} onChange={onToggleClipboardSync} />
+                </label>
+                {peer?.privacyAllowed && <label className="session-setting-row"><Shield /><span>{t(locale, 'privacyMode')}</span>
+                  <input className="ui-switch" type="checkbox" role="switch" checked={privacyEnabled} disabled={privacyPending || viewOnly} onChange={onTogglePrivacy} />
+                </label>}
+              </div>
+              <div className="session-group">
+                {peer?.restartAllowed && <RestartAction locale={locale} className="session-setting-row" onConfirm={onRestart} />}
+                <button type="button" className="session-setting-row" onClick={() => onQuickKey('Lock')}><LockKeyhole /><span>{t(locale, 'lockScreen')}</span></button>
+                <button type="button" className="session-setting-row destructive" data-testid="disconnect" onClick={onDisconnect}><Power /><span>{t(locale, 'disconnectRemote')}</span></button>
+              </div>
+            </div>
+          )}
+          {activeTab === 'display' && (
+            <div role="tabpanel">
+              {hasMultipleDisplays && <div className="session-group session-mode-switch" role="group" aria-label={t(locale, 'displays')}>
+                {displays.map(d => <button key={d.index} type="button" aria-pressed={d.index === display} disabled={d.online === false}
+                  onClick={() => { onSwitchDisplay(d.index); onNotify(t(locale, 'requestSent')+' · '+(d.name || t(locale, 'screens')+' '+(d.index+1))); }}>
+                  <Monitor size={18} />{d.name || t(locale, 'screens')+' '+(d.index+1)}</button>)}
+              </div>}
+              <div className="session-group">
+                {sizes.length > 0 && <label className="session-setting-row"><Monitor /><span>{t(locale, 'remoteResolution')}</span>
+                  <AdaptiveSelect label={t(locale, 'remoteResolution')} testId="resolution-select" disabled={viewOnly} value={String(resolutionIndex)}
+                    options={[...(resolutionIndex < 0 ? [{ value: '-1', label: `${stats.width} × ${stats.height}`, disabled: true }] : []), ...sizes.map((s,i) => ({ value: String(i), label: `${s.width} × ${s.height}` }))]}
+                    onChange={value => { const size = sizes[Number(value)]; if (size) { onResolution(size.width, size.height); onNotify(t(locale, 'requestSent')+' · '+size.width+' × '+size.height); } }} />
+                </label>}
+                <label className="session-setting-row"><Sliders /><span>{t(locale, 'qualityAndFps')}</span>
+                  <AdaptiveSelect label={t(locale, 'qualityAndFps')} testId="quality-select" value={quality}
+                    options={[{ value: 'low', label: t(locale, 'qualityLow') }, { value: 'balanced', label: t(locale, 'qualityBalanced') }, { value: 'best', label: t(locale, 'qualityBest') }]}
+                    onChange={value => { onChangeQuality(value as QualityLevel, targetFps); onNotify(t(locale, 'requestSent')+' · '+t(locale, value === 'low' ? 'qualityLow' : value === 'best' ? 'qualityBest' : 'qualityBalanced')); }} />
+                </label>
+                <label className="session-setting-row"><Gauge /><span>{t(locale, 'targetFps')}</span>
+                  <AdaptiveSelect label={t(locale, 'targetFps')} testId="fps-select" value={String(targetFps)}
+                    options={[...new Set([15,30,60,targetFps])].sort((a,b) => a-b).map(n => ({ value: String(n), label: `${n} FPS` }))}
+                    onChange={value => { onChangeQuality(quality, Number(value), preferredCodec); onNotify(t(locale, 'requestSent')+' · '+value+' FPS'); }} />
+                </label>
+                <label className="session-setting-row"><Film /><span>{t(locale, 'sessionCodecLabel')}</span>
+                  <AdaptiveSelect label={t(locale, 'sessionCodecLabel')} testId="codec-select" value={preferredCodec}
+                    options={['auto','h264','vp8','vp9','av1'].map(value => ({ value, label: value === 'auto' ? t(locale, 'codecAuto') : value === 'h264' ? 'H.264' : value.toUpperCase() }))}
+                    onChange={value => { onChangeQuality(quality, targetFps, value as PreferredCodec); onNotify(t(locale, 'requestSent')+' · '+(value === 'auto' ? t(locale, 'codecAuto') : value === 'h264' ? 'H.264' : value.toUpperCase())); }} />
+                </label>
+              </div>
+              {hasMultipleDisplays && <div className="session-group">
+                <label className="session-setting-row"><Focus /><span>{t(locale, 'followWindow')}</span>
+                  <input className="ui-switch" type="checkbox" role="switch" checked={followWindow} onChange={() => { onToggleFollowWindow(); onNotify(t(locale, 'followWindow')+' · '+t(locale, followWindow ? 'optionOff' : 'optionOn')); }} />
+                </label>
+              </div>}
+            </div>
+          )}
+
+          {decoderError && (
+            <div
+              className="mt-3 rounded-lg border border-[var(--rd-err-border)] bg-[var(--bad-bg)] px-3 py-2 text-xs text-[var(--bad)] leading-relaxed"
+              data-testid="decoder-error"
+              role="alert"
+            >
+              {formatConnectionError(locale, decoderError).message}
+            </div>
+          )}
+
+        </div>
+        <div className="session-menu-footer">
+          <button type="button" className="session-setting-row" onClick={onOpenConnection}>
+            <Monitor /><span>{t(locale, 'connectionManage')}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

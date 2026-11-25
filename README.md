@@ -1,5 +1,7 @@
 # RustDesk Web Client
 
+A separately runnable import of the reference implementation is available in [reference-client/](reference-client/README.md). The existing root commands and deployment are unchanged.
+
 Unofficial browser client for [RustDesk](https://github.com/rustdesk/rustdesk). It is not affiliated with, endorsed by, or maintained by the RustDesk authors.
 
 The page talks to a Node.js gateway. The gateway opens the RustDesk session and forwards video to the browser. The browser decodes with WebCodecs and sends pointer, keyboard, and touch input back through the same WebSocket.
