@@ -273,6 +273,17 @@ function DisplaySection({
             <span className="rd-radio-dot" aria-hidden="true" />
             <span>{t(locale, 'viewStyleFit')}</span>
           </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={displayPrefs.viewStyle === 'stretch'}
+            className={`rd-radio-row${displayPrefs.viewStyle === 'stretch' ? ' active' : ''}`}
+            data-testid="settings-view-stretch"
+            onClick={() => onUpdateDisplayPrefs({ viewStyle: 'stretch' })}
+          >
+            <span className="rd-radio-dot" aria-hidden="true" />
+            <span>{t(locale, 'viewStyleStretch')}</span>
+          </button>
         </div>
       </section>
 
@@ -405,6 +416,24 @@ function DisplaySection({
             <span>{t(locale, 'optViewOnly')}</span>
           </label>
 
+          <label className="rd-check-row">
+            <input
+              type="checkbox"
+              data-testid="settings-opt-follow-cursor"
+              checked={displayPrefs.followRemoteCursor}
+              onChange={(event) => onUpdateDisplayPrefs({ followRemoteCursor: event.target.checked })}
+            />
+            <span>{t(locale, 'followRemoteCursorLabel')}</span>
+          </label>
+          <label className="rd-check-row">
+            <input
+              type="checkbox"
+              data-testid="settings-opt-auto-keyboard"
+              checked={displayPrefs.autoKeyboard}
+              onChange={(event) => onUpdateDisplayPrefs({ autoKeyboard: event.target.checked })}
+            />
+            <span>{t(locale, 'autoKeyboard')}</span>
+          </label>
           <label className="rd-check-row">
             <input
               type="checkbox"

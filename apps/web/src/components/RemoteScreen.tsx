@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import type { ClientMessage, CursorShape, DisplayInfo, QualityLevel } from '@rustdesk-web/shared';
 import { MousePointer2 } from 'lucide-react';
-import { clampPan, computePinchStep, computeViewTransform, mapFromRemote, type ViewMode, type ViewTransform } from '../lib/mapping.ts';
+import { clampPan, computePinchStep, computeViewTransform, mapFromRemote, panToKeepVisible, type ViewMode, type ViewTransform } from '../lib/mapping.ts';
+import type { DefaultViewStyle, ScrollStyle } from '../lib/displayPrefs.ts';
 import {
   LONG_PRESS_MS,
   createTouchGestureState,
@@ -104,6 +105,10 @@ interface RemoteScreenProps {
   restartAllowed: boolean;
   restartNotice: null | 'requested' | 'waiting' | 'failed' | 'ended';
   onRestart: () => void;
+  viewStyle: DefaultViewStyle;
+  scrollStyle: ScrollStyle;
+  followRemoteCursor: boolean;
+  autoKeyboard: boolean;
   locale?: Locale;
 }
 
@@ -164,6 +169,10 @@ export function RemoteScreen({
   restartAllowed,
   restartNotice,
   onRestart,
+  viewStyle,
+  scrollStyle,
+  followRemoteCursor,
+  autoKeyboard,
   locale = 'en',
 }: RemoteScreenProps) {
   const stageRef = useRef<HTMLDivElement>(null);
@@ -177,7 +186,7 @@ export function RemoteScreen({
   const moveFrameRef = useRef<number | null>(null);
   const wheelAccumRef = useRef({ x: 0, y: 0 });
   const [box, setBox] = useState({ width: 0, height: 0 });
-  const [viewMode, setViewMode] = useState<ViewMode>('fit');
+  const [viewMode, setViewMode] = useState<ViewMode>(viewStyle === 'stretch' ? 'stretch' : viewStyle === 'original' ? 'original' : 'fit');
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ panX: 0, panY: 0 });
   const [touchMode, setTouchMode] = useState(true);
@@ -213,9 +222,14 @@ export function RemoteScreen({
   const localOsRef = useRef(classifyLocalOs(navigator.userAgent, navigator.platform));
   const remotePlatformRef = useRef(remotePlatform);
   remotePlatformRef.current = remotePlatform;
+  const scrollStyleRef = useRef(scrollStyle);
+  scrollStyleRef.current = scrollStyle;
   useEffect(() => {
     if (clipboardFallback) setClipboardOpen(true);
   }, [clipboardFallback]);
+  useEffect(() => {
+    setViewMode(viewStyle === 'stretch' ? 'stretch' : viewStyle === 'original' ? 'original' : 'fit');
+  }, [viewStyle]);
   const sendKeys = useCallback((messages: ClientMessage[]) => {
     const adapted = adaptKeyMessages(messages, localOsRef.current, classifyRemoteOs(remotePlatform));
     if (adapted.length > 0) onKeyboard(adapted);
@@ -356,6 +370,7 @@ export function RemoteScreen({
     const stage = stageRef.current;
     if (!stage) return;
     const onWheel = (event: WheelEvent) => {
+      if (scrollStyleRef.current === 'scrollbar') return;
       if (event.target instanceof Element && event.target.closest('button')) return;
       event.preventDefault();
       if (event.ctrlKey || event.altKey || event.metaKey) return;
@@ -629,12 +644,27 @@ export function RemoteScreen({
   };
 
   const cursorScreen = showCursor && cursor ? mapFromRemote(cursor.x, cursor.y, transform) : null;
+  useEffect(() => {
+    if (!followRemoteCursor || !cursorScreen || viewMode === 'fit' || viewMode === 'stretch') return;
+    setPan((current) => {
+      const next = panToKeepVisible(box.width, box.height, cursorScreen.x, cursorScreen.y, current.panX, current.panY);
+      if (next.panX === current.panX && next.panY === current.panY) return current;
+      return next;
+    });
+  }, [followRemoteCursor, cursorScreen, viewMode, box.width, box.height]);
   const chrome = sessionChromeMode({
     width: box.width,
     coarsePointer,
     keyboardOpen,
     viewportNarrow,
   });
+  const autoKeyboardArmed = useRef(false);
+  useEffect(() => {
+    if (!autoKeyboard || chrome !== 'dock' || autoKeyboardArmed.current) return;
+    autoKeyboardArmed.current = true;
+    setKeyboardOpen(true);
+    keyboardLayout.begin();
+  }, [autoKeyboard, chrome, keyboardLayout]);
 
   return (
     <div
@@ -656,7 +686,8 @@ export function RemoteScreen({
         width: keyboardLayout.viewport?.width,
         height: keyboardLayout.viewport?.height,
         background: '#101418',
-        touchAction: 'none',
+        touchAction: scrollStyle === 'scrollbar' ? 'pan-x pan-y' : 'none',
+        overflow: scrollStyle === 'scrollbar' ? 'auto' : 'hidden',
         cursor: showCursor ? 'none' : 'default',
       }}
     >
@@ -667,8 +698,8 @@ export function RemoteScreen({
           position: 'absolute',
           left: transform.panX,
           top: transform.panY,
-          width: frameWidth > 0 ? frameWidth * transform.scale : undefined,
-          height: frameHeight > 0 ? frameHeight * transform.scale : undefined,
+          width: frameWidth > 0 ? frameWidth * (transform.scaleX ?? transform.scale) : undefined,
+          height: frameHeight > 0 ? frameHeight * (transform.scaleY ?? transform.scale) : undefined,
           background: '#101418',
         }}
       />

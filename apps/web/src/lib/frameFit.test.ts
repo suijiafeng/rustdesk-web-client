@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { fitContain } from './frameFit.ts';
+import { fitContain, fitStretch } from './frameFit.ts';
 
 test('fitContain letterboxes a wide frame and pillarboxes a tall one', () => {
   const wide = fitContain(800, 400, 1920, 1080);
@@ -13,4 +13,12 @@ test('fitContain letterboxes a wide frame and pillarboxes a tall one', () => {
   const tall = fitContain(400, 800, 1080, 1920);
   assert.ok(Math.abs(tall.width / tall.height - 1080 / 1920) < 0.001);
   assert.equal(fitContain(0, 100, 100, 100).width, 0);
+});
+
+test('fitStretch fills both axes', () => {
+  const stretched = fitStretch(800, 400, 1920, 1080);
+  assert.equal(stretched.width, 800);
+  assert.equal(stretched.height, 400);
+  assert.ok(Math.abs(stretched.scaleX - 800 / 1920) < 0.0001);
+  assert.equal(fitStretch(0, 10, 10, 10).scaleY, 0);
 });

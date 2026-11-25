@@ -2,7 +2,7 @@
 
 import type { CodecSupport, QualityLevel } from '@rustdesk-web/shared';
 
-export type DefaultViewStyle = 'original' | 'fit';
+export type DefaultViewStyle = 'original' | 'fit' | 'stretch';
 export type ScrollStyle = 'auto' | 'scrollbar';
 export type ImageQualityPreset = 'best' | 'balanced' | 'low' | 'custom';
 export type PreferredCodec = 'auto' | 'vp8' | 'vp9' | 'h264' | 'h265' | 'av1';
@@ -58,7 +58,7 @@ export function normalizeDisplayPrefs(raw: unknown): DisplayPrefs {
     return { ...DEFAULT_DISPLAY_PREFS };
   }
   const obj = raw as Record<string, unknown>;
-  const viewStyle: DefaultViewStyle = obj.viewStyle === 'original' ? 'original' : 'fit';
+  const viewStyle: DefaultViewStyle = obj.viewStyle === 'original' || obj.viewStyle === 'stretch' ? obj.viewStyle : 'fit';
   const scrollStyle: ScrollStyle = obj.scrollStyle === 'scrollbar' ? 'scrollbar' : 'auto';
   const qualityPreset: ImageQualityPreset =
     obj.qualityPreset === 'best' ||

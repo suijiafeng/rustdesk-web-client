@@ -314,6 +314,10 @@ export function App() {
         onRestart={() => {
           if (window.confirm(t(locale, 'confirmRestart'))) requestRestart();
         }}
+        viewStyle={displayPrefs.viewStyle}
+        scrollStyle={displayPrefs.scrollStyle}
+        followRemoteCursor={displayPrefs.followRemoteCursor}
+        autoKeyboard={displayPrefs.autoKeyboard}
         locale={locale}
       />
     );

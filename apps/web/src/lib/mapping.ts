@@ -1,11 +1,21 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
-export type ViewMode = 'fit' | 'original' | 'custom';
+export type ViewMode = 'fit' | 'original' | 'custom' | 'stretch';
 
 export interface ViewTransform {
   scale: number;
+  scaleX?: number;
+  scaleY?: number;
   panX: number;
   panY: number;
+}
+
+function scaleX(transform: ViewTransform): number {
+  return transform.scaleX ?? transform.scale;
+}
+
+function scaleY(transform: ViewTransform): number {
+  return transform.scaleY ?? transform.scale;
 }
 
 export interface Point {
@@ -126,9 +136,9 @@ export function mapToRemote(
   remoteH: number,
   transform: ViewTransform,
 ): Point | null {
-  if (remoteW <= 0 || remoteH <= 0 || transform.scale <= 0) return null;
-  const x = (localX - transform.panX) / transform.scale;
-  const y = (localY - transform.panY) / transform.scale;
+  if (remoteW <= 0 || remoteH <= 0 || scaleX(transform) <= 0 || scaleY(transform) <= 0) return null;
+  const x = (localX - transform.panX) / scaleX(transform);
+  const y = (localY - transform.panY) / scaleY(transform);
   if (x < 0 || y < 0 || x > remoteW || y > remoteH) return null;
   return {
     x: Math.min(remoteW - 1, Math.max(0, Math.floor(x))),
@@ -143,9 +153,9 @@ export function mapToRemoteClamped(
   remoteH: number,
   transform: ViewTransform,
 ): Point | null {
-  if (remoteW <= 0 || remoteH <= 0 || transform.scale <= 0) return null;
-  const x = (localX - transform.panX) / transform.scale;
-  const y = (localY - transform.panY) / transform.scale;
+  if (remoteW <= 0 || remoteH <= 0 || scaleX(transform) <= 0 || scaleY(transform) <= 0) return null;
+  const x = (localX - transform.panX) / scaleX(transform);
+  const y = (localY - transform.panY) / scaleY(transform);
   return {
     x: Math.min(remoteW - 1, Math.max(0, Math.floor(x))),
     y: Math.min(remoteH - 1, Math.max(0, Math.floor(y))),
@@ -158,9 +168,27 @@ export function mapFromRemote(
   transform: ViewTransform,
 ): Point {
   return {
-    x: transform.panX + (remoteX + 0.5) * transform.scale,
-    y: transform.panY + (remoteY + 0.5) * transform.scale,
+    x: transform.panX + (remoteX + 0.5) * scaleX(transform),
+    y: transform.panY + (remoteY + 0.5) * scaleY(transform),
   };
+}
+
+export function panToKeepVisible(
+  boxW: number,
+  boxH: number,
+  screenX: number,
+  screenY: number,
+  panX: number,
+  panY: number,
+  margin = 24,
+): { panX: number; panY: number } {
+  let nextX = panX;
+  let nextY = panY;
+  if (screenX < margin) nextX += margin - screenX;
+  else if (screenX > boxW - margin) nextX -= screenX - (boxW - margin);
+  if (screenY < margin) nextY += margin - screenY;
+  else if (screenY > boxH - margin) nextY -= screenY - (boxH - margin);
+  return { panX: nextX, panY: nextY };
 }
 
 /**
@@ -177,6 +205,11 @@ export function computeViewTransform(
   pan: { panX: number; panY: number },
   panOptions?: PanClampOptions,
 ): ViewTransform {
+  if (viewMode === 'stretch' && boxW > 0 && boxH > 0 && remoteW > 0 && remoteH > 0) {
+    const stretchedX = boxW / remoteW;
+    const stretchedY = boxH / remoteH;
+    return { scale: stretchedX, scaleX: stretchedX, scaleY: stretchedY, panX: 0, panY: 0 };
+  }
   const fit = fitScale(boxW, boxH, remoteW, remoteH);
   const { minScale, maxScale } = computeScaleBounds(fit);
 
