@@ -7,3 +7,15 @@ export interface HealthResponse {
   ok: true;
   service: typeof GATEWAY_SERVICE;
 }
+
+export { messageType } from './messages.ts';
+export type {
+  ClientMessage,
+  CodecSupport,
+  CursorShape,
+  DisplayInfo,
+  PeerEncodingInfo,
+  PeerMessage,
+  QualityLevel,
+  ServerMessage,
+} from './messages.ts';
