@@ -3,7 +3,18 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import type { ClientMessage, CursorShape, DisplayInfo, QualityLevel } from '@rustdesk-web/shared';
 import { MousePointer2 } from 'lucide-react';
-import { computeViewTransform, mapFromRemote, type ViewTransform } from '../lib/mapping.ts';
+import { clampPan, computePinchStep, computeViewTransform, mapFromRemote, type ViewMode, type ViewTransform } from '../lib/mapping.ts';
+import {
+  LONG_PRESS_MS,
+  createTouchGestureState,
+  gestureLongPressTimeout,
+  gesturePointerDown,
+  gesturePointerMove,
+  gesturePointerUpOrCancel,
+  type TouchGestureEffect,
+} from '../lib/gestures.ts';
+import { applyTouchEffects, isNarrowViewport } from '../lib/touchInput.ts';
+import { MobileChrome } from './MobileChrome.tsx';
 import { offsetPointerMessages } from '../lib/displays.ts';
 import { isImeEvent } from '../lib/keys.ts';
 import { SessionToolbar } from './SessionToolbar.tsx';
@@ -106,6 +117,13 @@ export function RemoteScreen({
   const moveFrameRef = useRef<number | null>(null);
   const wheelAccumRef = useRef({ x: 0, y: 0 });
   const [box, setBox] = useState({ width: 0, height: 0 });
+  const [viewMode, setViewMode] = useState<ViewMode>('fit');
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ panX: 0, panY: 0 });
+  const [touchMode, setTouchMode] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [portrait, setPortrait] = useState(true);
 
   const viewOnlyRef = useRef(viewOnly);
   const swapRef = useRef(swapMouseButtons);
@@ -117,6 +135,13 @@ export function RemoteScreen({
   const onHeldRef = useRef(onHeldRelease);
   const onArmKeysRef = useRef(onArmKeys);
   const originRef = useRef(displayOrigin);
+  const boxRef = useRef(box);
+  const gestureRef = useRef(createTouchGestureState());
+  const longTimerRef = useRef<number | null>(null);
+  const touchCursorRef = useRef({ x: 0, y: 0 });
+  const touchModeRef = useRef(touchMode);
+  boxRef.current = box;
+  touchModeRef.current = touchMode;
   viewOnlyRef.current = viewOnly;
   swapRef.current = swapMouseButtons;
   reverseRef.current = reverseMouseWheel;
@@ -138,9 +163,10 @@ export function RemoteScreen({
     onHeldRef.current(offsetPointerMessages([message], originRef.current)[0] ?? null);
   };
 
-  const transform = computeViewTransform(box.width, box.height, frameWidth, frameHeight, 'fit', 1, {
-    panX: 0,
-    panY: 0,
+  const transform = computeViewTransform(box.width, box.height, frameWidth, frameHeight, viewMode, zoom, pan, {
+    allowEdgePan: true,
+    edgePadding: 48,
+    bottomInset: keyboardOpen ? 112 : 0,
   });
   transformRef.current = transform;
 
@@ -152,6 +178,14 @@ export function RemoteScreen({
     const observer = new ResizeObserver(measure);
     observer.observe(stage);
     return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const media = window.matchMedia('(orientation: portrait)');
+    const apply = () => setPortrait(media.matches);
+    apply();
+    media.addEventListener('change', apply);
+    return () => media.removeEventListener('change', apply);
   }, []);
 
   const showCursor = showRemoteCursor && !cursorEmbedded && cursor !== null && frameWidth > 0 && frameHeight > 0;
@@ -304,6 +338,72 @@ export function RemoteScreen({
     };
   }, []);
 
+  const clearLongPress = () => {
+    if (longTimerRef.current !== null) window.clearTimeout(longTimerRef.current);
+    longTimerRef.current = null;
+  };
+
+  const runTouch = (effects: TouchGestureEffect[]) => {
+    const outcome = applyTouchEffects(
+      effects,
+      touchCursorRef.current,
+      (x, y, clamp) => remotePoint(x, y, frameRef.current.width, frameRef.current.height, transformRef.current, clamp),
+      viewOnlyRef.current,
+      transformRef.current.scale,
+      reverseRef.current,
+    );
+    touchCursorRef.current = outcome.cursor;
+    if (outcome.cancelLongPress) clearLongPress();
+    if (outcome.armLongPress) {
+      clearLongPress();
+      const armed = effects.find((effect) => effect.type === 'arm-long-press');
+      if (armed && armed.type === 'arm-long-press') {
+        const pointerId = armed.pointerId;
+        longTimerRef.current = window.setTimeout(() => {
+          longTimerRef.current = null;
+          const next = gestureLongPressTimeout(gestureRef.current, pointerId);
+          gestureRef.current = next.state;
+          runTouch(next.effects);
+        }, LONG_PRESS_MS);
+      }
+    }
+    if (outcome.messages.length > 0) sendPointer(outcome.messages);
+    if (outcome.pan) {
+      const panStep = outcome.pan;
+      setViewMode((mode) => (mode === 'fit' ? 'custom' : mode));
+      setPan((current) => clampPan(
+        boxRef.current.width,
+        boxRef.current.height,
+        frameRef.current.width,
+        frameRef.current.height,
+        transformRef.current.scale,
+        current.panX + panStep.dx,
+        current.panY + panStep.dy,
+        { allowEdgePan: true, edgePadding: 48, bottomInset: keyboardOpen ? 112 : 0 },
+      ));
+    }
+    if (outcome.pinch) {
+      const pinch = outcome.pinch;
+      const step = computePinchStep(
+        boxRef.current.width,
+        boxRef.current.height,
+        frameRef.current.width,
+        frameRef.current.height,
+        transformRef.current,
+        pinch.prevMidX,
+        pinch.prevMidY,
+        pinch.prevDist,
+        pinch.nextMidX,
+        pinch.nextMidY,
+        pinch.nextDist,
+        { allowEdgePan: true, edgePadding: 48, bottomInset: keyboardOpen ? 112 : 0 },
+      );
+      setViewMode(step.viewMode);
+      setZoom(step.zoom);
+      setPan(step.pan);
+    }
+  };
+
   const localPoint = (clientX: number, clientY: number) => {
     const stage = stageRef.current;
     if (!stage) return null;
@@ -312,6 +412,26 @@ export function RemoteScreen({
   };
 
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'touch') {
+      if (event.target instanceof Element && event.target.closest('button, input, select, label')) return;
+      event.preventDefault();
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      } catch {
+        // The pointer can already be gone.
+      }
+      const local = localPoint(event.clientX, event.clientY);
+      if (!local) return;
+      const next = gesturePointerDown(gestureRef.current, event.pointerId, local.x, local.y, {
+        mode: touchModeRef.current ? 'touch' : 'mouse',
+        hand: false,
+        now: Date.now(),
+        isPrimary: event.isPrimary,
+      });
+      gestureRef.current = next.state;
+      runTouch(next.effects);
+      return;
+    }
     if (event.target instanceof Element && event.target.closest('button')) return;
     if (viewOnlyRef.current) return;
     const local = localPoint(event.clientX, event.clientY);
@@ -335,6 +455,18 @@ export function RemoteScreen({
   };
 
   const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'touch') {
+      if (!gestureRef.current.pointers.has(event.pointerId)) return;
+      const local = localPoint(event.clientX, event.clientY);
+      if (!local) return;
+      const next = gesturePointerMove(gestureRef.current, event.pointerId, local.x, local.y, {
+        mode: touchModeRef.current ? 'touch' : 'mouse',
+        now: Date.now(),
+      });
+      gestureRef.current = next.state;
+      runTouch(next.effects);
+      return;
+    }
     if (viewOnlyRef.current) return;
     const local = localPoint(event.clientX, event.clientY);
     if (!local) return;
@@ -355,6 +487,22 @@ export function RemoteScreen({
   };
 
   const onPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'touch') {
+      if (!gestureRef.current.pointers.has(event.pointerId)) return;
+      const local = localPoint(event.clientX, event.clientY);
+      if (!local) return;
+      const next = gesturePointerUpOrCancel(
+        gestureRef.current,
+        event.pointerId,
+        local.x,
+        local.y,
+        event.type === 'pointercancel' || event.type === 'lostpointercapture' ? 'cancel' : 'up',
+        { now: Date.now() },
+      );
+      gestureRef.current = next.state;
+      runTouch(next.effects);
+      return;
+    }
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     const local = localPoint(event.clientX, event.clientY);
@@ -459,6 +607,24 @@ export function RemoteScreen({
         }}
         style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 1, height: 1 }}
       />
+      {isNarrowViewport(box.width) ? (
+        <MobileChrome
+          viewportWidth={box.width}
+          viewportHeight={box.height}
+          portrait={portrait}
+          open={menuOpen}
+          keyboardOpen={keyboardOpen}
+          touchMode={touchMode}
+          viewOnly={viewOnly}
+          onToggleOpen={() => setMenuOpen((current) => !current)}
+          onToggleKeyboard={() => {
+            setMenuOpen(true);
+            setKeyboardOpen((current) => !current);
+          }}
+          onToggleTouchMode={() => setTouchMode((current) => !current)}
+          onSend={onKeyboard}
+        />
+      ) : null}
       <SessionToolbar
         displays={displays}
         currentDisplay={currentDisplay}
