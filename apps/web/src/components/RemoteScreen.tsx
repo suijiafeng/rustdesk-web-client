@@ -16,6 +16,7 @@ import {
   type TouchGestureEffect,
 } from '../lib/gestures.ts';
 import { applyTouchEffects } from '../lib/touchInput.ts';
+import { decodeCursorPixels, isTextCursorTap } from '../lib/cursor.ts';
 import { MobileSessionDock } from './MobileSessionDock.tsx';
 import { SoftKeyboardBar } from './SoftKeyboardBar.tsx';
 import { useKeyboardViewport } from '../hooks/useKeyboardViewport.ts';
@@ -187,7 +188,6 @@ export function RemoteScreen({
   const captureRef = useRef<HTMLInputElement>(null);
   const softKeyboardInputRef = useRef<HTMLInputElement>(null);
   const restartDialogRef = useRef<HTMLDialogElement>(null);
-  const autoKeyboardArmed = useRef(false);
   const cursorCanvasRef = useRef<HTMLCanvasElement>(null);
   const trackedKeysRef = useRef<TrackedKey[]>([]);
   const composingRef = useRef(false);
@@ -291,7 +291,6 @@ export function RemoteScreen({
     },
   });
   const openSoftKeyboard = () => {
-    autoKeyboardArmed.current = true;
     keyboardLayout.begin();
     // Mobile browsers need the input mounted and focused within the same user gesture.
     flushSync(() => setKeyboardOpen(true));
@@ -340,13 +339,8 @@ export function RemoteScreen({
   useEffect(() => {
     const canvas = cursorCanvasRef.current;
     if (!canvas || !cursorShape || !showCursor) return;
-    let bytes: Uint8ClampedArray;
-    try {
-      bytes = Uint8ClampedArray.from(atob(cursorShape.rgba), (char) => char.charCodeAt(0));
-    } catch {
-      return;
-    }
-    if (bytes.length !== cursorShape.width * cursorShape.height * 4) return;
+    const bytes = decodeCursorPixels(cursorShape);
+    if (!bytes) return;
     const image = new ImageData(cursorShape.width, cursorShape.height);
     image.data.set(bytes);
     canvas.getContext('2d')?.putImageData(image, 0, 0);
@@ -650,10 +644,14 @@ export function RemoteScreen({
       );
       gestureRef.current = next.state;
       runTouch(next.effects);
-      if (autoKeyboard && chrome === 'dock' && !autoKeyboardArmed.current
-        && next.effects.some((effect) => effect.type === 'tap-click')) {
-        openSoftKeyboard();
-      }
+      const tap = next.effects.find((effect) => effect.type === 'tap-click');
+      if (!tap || viewOnlyRef.current) return;
+      const point = remotePoint(tap.x, tap.y, frameWidth, frameHeight, transformRef.current, false);
+      if (!point) return;
+      anchorRef.current = point;
+
+      if (autoKeyboard && chrome === 'dock' && !swapMouseButtons && !cursorEmbedded
+        && cursor && cursorShape && isTextCursorTap(point, cursor, cursorShape)) openSoftKeyboard();
       return;
     }
     const drag = dragRef.current;
