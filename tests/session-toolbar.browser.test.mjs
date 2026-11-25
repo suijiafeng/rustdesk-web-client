@@ -194,16 +194,35 @@ try {
   await until(select('soft-mod-win'));
   assert.equal(await evaluate(select('soft-mod-win') + '.textContent'), 'Command');
   assert.equal(await evaluate(select('soft-mod-alt') + '.textContent'), 'Option');
-  assert.equal(await evaluate(`${select('soft-key-strip')}.querySelectorAll('button[aria-label^="F"]').length`), 12);
-  await evaluate(`${select('soft-key-strip')}.querySelector('button[aria-label="F12"]').click()`);
   await evaluate(select('soft-mod-win') + '.click()');
   await cdp('Input.insertText', { text: 'c' });
   const keys = await evaluate("window.sent.filter(event => event.type === 'key')");
   assert.deepEqual(keys.map(key => [key.action, key.control ?? key.chr]), [
-    ['down', 'F12'], ['up', 'F12'],
     ['down', 'Meta'], ['down', 'c'], ['up', 'c'], ['up', 'Meta'],
   ]);
-  console.log('macOS: Command and Option labels, F12 and Command+C events verified.');
+  console.log('macOS: Command and Option labels and Command+C events verified.');
+
+  const keyEvents = "window.sent.filter(event => event.type === 'key')";
+  await evaluate(select('soft-chord-toggle') + '.click()');
+  assert.equal(await evaluate(select('soft-chord-send') + '.disabled'), true);
+  assert.equal(await evaluate(`${select('soft-key-strip')}.querySelector('button[aria-label="Page Down"]') === null`), true);
+  await evaluate(`${select('soft-key-strip')}.querySelector('button[aria-label="Tab"]').click()`);
+  await evaluate(select('soft-mod-win') + '.click()');
+  await evaluate(select('soft-mod-alt') + '.click()');
+  await evaluate(select('soft-mod-alt') + '.click()');
+  await cdp('Input.insertText', { text: 'x' });
+  assert.match(await evaluate(select('soft-chord-preview') + '.textContent'), /Tab.*Command.*X/);
+  assert.equal(await evaluate(keyEvents + '.length'), keys.length);
+  await evaluate(select('soft-chord-send') + '.click()');
+  const combination = (await evaluate(keyEvents)).slice(keys.length);
+  assert.deepEqual(combination.map(key => [key.action, key.control ?? key.chr]), [
+    ['down', 'Meta'], ['down', 'Tab'], ['down', 'x'],
+    ['up', 'x'], ['up', 'Tab'], ['up', 'Meta'],
+  ]);
+  assert.equal(await evaluate(select('soft-chord-send') + '.disabled'), true);
+  await evaluate(select('soft-chord-toggle') + '.click()');
+  assert.equal(await evaluate(select('soft-chord-preview') + ' === null'), true);
+  console.log('Key combos: selection and removal stay local until sending, then keys are released in reverse order.');
 } finally {
   socket.close();
   const closed = await fetch(`${debuggerUrl}/json/close/${tab.id}`);

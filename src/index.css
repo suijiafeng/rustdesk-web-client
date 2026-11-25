@@ -572,6 +572,20 @@ button:focus-visible {
   color: #8bcaff;
 }
 
+.soft-chord-preview {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  flex: 0 0 auto;
+  max-width: 65%;
+  padding: 4px;
+  overflow: hidden;
+  background: var(--remote-toolbar-surface);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
 .soft-key-divider {
   width: 1px;
   height: 20px;

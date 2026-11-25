@@ -7,6 +7,7 @@ import {
   controlFromKeyOrCode,
   diffTextInput,
   isImeEvent,
+  isModifier,
   remoteKeyboardProfile,
   type SoftChordPart,
 } from '../lib/keys';
@@ -32,6 +33,9 @@ const STICKY_MODIFIERS = [
 const EXTRA_KEYS: ReadonlyArray<{ label: string; control: string; aria?: string }> = [
   { label: 'Esc', control: 'Escape' },
   { label: 'Tab', control: 'Tab' },
+  { label: 'Space', control: 'Space' },
+  { label: 'Enter', control: 'Enter' },
+  { label: 'Backspace', control: 'Backspace' },
   { label: '←', control: 'ArrowLeft', aria: 'Left arrow' },
   { label: '↑', control: 'ArrowUp', aria: 'Up arrow' },
   { label: '↓', control: 'ArrowDown', aria: 'Down arrow' },
@@ -41,11 +45,11 @@ const EXTRA_KEYS: ReadonlyArray<{ label: string; control: string; aria?: string 
   { label: 'Page Up', control: 'PageUp' },
   { label: 'Page Down', control: 'PageDown' },
   { label: 'Del', control: 'Delete' },
-  ...Array.from({ length: 12 }, (_, index) => {
-    const key = `F${index + 1}`;
-    return { label: key, control: key };
-  }),
 ] as const;
+
+const COMBO_KEYS = EXTRA_KEYS.filter(({ control }) =>
+  !['Home', 'End', 'PageUp', 'PageDown'].includes(control),
+);
 
 export function SoftKeyboardBar({
   locale,
@@ -61,6 +65,9 @@ export function SoftKeyboardBar({
   const composingRef = useRef(false);
   const lastSentRef = useRef('');
   const [latched, setLatched] = useState<string[]>([]);
+  const [chord, setChord] = useState<SoftChordPart[] | null>(null);
+  const modifierLabel = (control: string, label: string) =>
+    control === 'Meta' ? metaLabel : control === 'Alt' ? altLabel : label;
 
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -98,15 +105,47 @@ export function SoftKeyboardBar({
     }
   };
 
+  const toggleChordPart = (part: SoftChordPart) => {
+    setChord(current => {
+      if (!current) return current;
+      const sameKey = (key: SoftChordPart) => key.control === part.control && key.chr === part.chr;
+      return current.some(sameKey) ? current.filter(key => !sameKey(key)) : [...current, part];
+    });
+  };
+
+  const collectChordText = (text: string) => {
+    for (const key of text) {
+      if (key === ' ') toggleChordPart({ control: 'Space' });
+      else if (/^[a-z0-9]$/i.test(key)) toggleChordPart({ chr: key.toLowerCase() });
+    }
+  };
+
+  const toggleChord = () => {
+    setChord(chord ? null : latched.map(control => ({ control })));
+    setLatched([]);
+    resetLocalDraft();
+    inputRef.current?.focus({ preventScroll: true });
+  };
+
+  const sendSelectedChord = () => {
+    if (!chord?.length) return;
+    const modifiers = chord.filter(key => key.control && isModifier(key.control));
+    const otherKeys = chord.filter(key => !key.control || !isModifier(key.control));
+    onSendChord([...modifiers, ...otherKeys]);
+    setChord([]);
+    inputRef.current?.focus({ preventScroll: true });
+  };
+
   const toggleModifier = (control: string) => {
-    setLatched((prev) =>
-      prev.includes(control) ? prev.filter((m) => m !== control) : [...prev, control],
-    );
+    if (chord) toggleChordPart({ control });
+    else setLatched(prev => prev.includes(control) ? prev.filter(m => m !== control) : [...prev, control]);
     inputRef.current?.focus({ preventScroll: true });
   };
 
   const tapExtraKey = (control: string) => {
-    if (latched.length > 0) {
+    if (chord) {
+      toggleChordPart({ control });
+    } else if (latched.length > 0) {
       onSendChord(buildSoftKeyChord(latched, { control }));
       setLatched([]);
     } else {
@@ -119,6 +158,12 @@ export function SoftKeyboardBar({
   const syncInputValue = (el: HTMLInputElement) => {
     const nextVal = el.value;
     const prevVal = lastSentRef.current;
+
+    if (chord) {
+      collectChordText(nextVal);
+      resetLocalDraft();
+      return;
+    }
 
     if (latched.length > 0) {
       const diff = diffTextInput(prevVal, nextVal);
@@ -167,6 +212,13 @@ export function SoftKeyboardBar({
     }
 
     const control = controlFromKeyOrCode(e.code, e.key);
+    if (chord && control) {
+      e.preventDefault();
+      if (!e.repeat && (isModifier(control) || COMBO_KEYS.some(key => key.control === control))) {
+        toggleChordPart({ control });
+      }
+      return;
+    }
     if (!control || control === 'Space') return;
 
     // When the local buffer has text and no modifiers are latched, let native Backspace
@@ -189,6 +241,7 @@ export function SoftKeyboardBar({
   };
 
   const handleKeyUp = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (chord) return;
     if (
       composingRef.current ||
       isImeEvent({
@@ -240,8 +293,14 @@ export function SoftKeyboardBar({
         role="toolbar"
         aria-label={t(locale, 'specialKeysAria')}
       >
+        {chord && <output className="soft-chord-preview" data-testid="soft-chord-preview" aria-live="polite">
+          {chord.length ? chord.map(key => key.control
+            ? modifierLabel(key.control, STICKY_MODIFIERS.find(mod => mod.control === key.control)?.label
+                ?? EXTRA_KEYS.find(item => item.control === key.control)?.label ?? key.control)
+            : key.chr?.toUpperCase()).join(' + ') : t(locale, 'softChordSelect')}
+        </output>}
         {STICKY_MODIFIERS.map((mod) => {
-          const isActive = latched.includes(mod.control);
+          const isActive = chord ? chord.some(key => key.control === mod.control) : latched.includes(mod.control);
           return (
             <button
               key={mod.control}
@@ -251,17 +310,18 @@ export function SoftKeyboardBar({
               className={`soft-key-btn${isActive ? ' active' : ''}`}
               onClick={() => toggleModifier(mod.control)}
             >
-              {mod.control === 'Meta' ? metaLabel : mod.control === 'Alt' ? altLabel : mod.label}
+              {modifierLabel(mod.control, mod.label)}
             </button>
           );
         })}
         <span className="soft-key-divider" aria-hidden="true" />
-        {EXTRA_KEYS.map((item) => (
+        {(chord ? COMBO_KEYS : EXTRA_KEYS).map((item) => (
           <button
             key={item.control}
             type="button"
             aria-label={item.aria ?? item.label}
-            className="soft-key-btn"
+            aria-pressed={chord ? chord.some(key => key.control === item.control) : undefined}
+            className={chord?.some(key => key.control === item.control) ? 'soft-key-btn active' : 'soft-key-btn'}
             onClick={() => tapExtraKey(item.control)}
           >
             {item.label}
@@ -269,6 +329,14 @@ export function SoftKeyboardBar({
         ))}
       </div>
 
+      <button type="button" className="soft-key-btn" data-testid="soft-chord-toggle"
+        aria-pressed={chord !== null} onClick={toggleChord}>
+        {t(locale, chord ? 'cancel' : 'softChord')}
+      </button>
+      {chord && <button type="button" className="soft-key-btn" data-testid="soft-chord-send"
+        disabled={!chord.length} onClick={sendSelectedChord}>
+        {t(locale, 'send')}
+      </button>}
       <button
         type="button"
         className="soft-key-btn"
@@ -295,9 +363,13 @@ export function SoftKeyboardBar({
         onCompositionEnd={handleCompositionEnd}
         onInput={handleInput}
         onPaste={e => {
-          if (!onPasteText) return;
           const text = e.clipboardData.getData('text/plain');
           if (!text) return;
+          if (chord) {
+            e.preventDefault();
+            return;
+          }
+          if (!onPasteText) return;
           e.preventDefault();
           onPasteText(text);
           onSendText(text);
