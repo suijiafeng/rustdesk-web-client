@@ -1,0 +1,24 @@
+{
+  "name": "rustdesk-web-client",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Unofficial RustDesk-compatible web client",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "packageManager": "yarn@1.22.22",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "yarn typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
+  }
+}
