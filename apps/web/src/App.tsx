@@ -7,6 +7,7 @@ import {
   loadSavedDevices,
   persistSavedDevices,
   removeDevice,
+  renameDevice,
   toggleFavoriteDevice,
   type SavedDevice,
 } from './lib/devices.ts';
@@ -331,6 +332,7 @@ export function App() {
       }}
       onToggleFavorite={(key) => setDevices((current) => toggleFavoriteDevice(current, key))}
       onRemoveDevice={(key) => setDevices((current) => removeDevice(current, key))}
+      onRenameDevice={(key, alias) => setDevices((current) => renameDevice(current, key, alias))}
       onToggleTouchMode={() => undefined}
       onToggleDiagnostics={() => undefined}
       onConnect={onConnect}

@@ -1,7 +1,9 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
+import { useState } from 'react';
 import { Server, X } from 'lucide-react';
 import { t, type Locale } from '../../lib/i18n';
+import { connectionSettingsError, DEFAULT_CONNECTION_SETTINGS } from '../../lib/serverSettings.ts';
 
 export type ServerField = 'idServer' | 'relayServer' | 'serverKey' | 'gatewayToken';
 
@@ -34,6 +36,7 @@ export function IdServerModal({
   onClearError,
   onClose,
 }: IdServerModalProps) {
+  const [settingsError, setSettingsError] = useState('');
   return (
     <div
       className="rd-password-scrim"
@@ -48,6 +51,12 @@ export function IdServerModal({
         data-testid="id-server-modal"
         onSubmit={(e) => {
           e.preventDefault();
+          const error = connectionSettingsError({ idServer, relayServer, serverKey, forceRelay });
+          if (error) {
+            setSettingsError(error);
+            return;
+          }
+          setSettingsError('');
           onClose();
         }}
       >
@@ -71,6 +80,7 @@ export function IdServerModal({
         </div>
 
         <div className="flex flex-col gap-3">
+          {settingsError ? <p className="text-sm text-[var(--bad)] m-0">{settingsError}</p> : null}
           <label className="flex flex-col gap-1 text-xs font-medium text-[var(--ink-soft)]">
             <span>{t(locale, 'idServer')}</span>
             <input
@@ -144,6 +154,20 @@ export function IdServerModal({
         </div>
 
         <div className="flex items-center justify-end gap-2 mt-4">
+          <button
+            type="button"
+            className="rd-btn"
+            style={{ minHeight: 42 }}
+            onClick={() => {
+              onChangeField('idServer', DEFAULT_CONNECTION_SETTINGS.idServer);
+              onChangeField('relayServer', DEFAULT_CONNECTION_SETTINGS.relayServer);
+              onChangeField('serverKey', DEFAULT_CONNECTION_SETTINGS.serverKey);
+              onChangeForceRelay(DEFAULT_CONNECTION_SETTINGS.forceRelay);
+              setSettingsError('');
+            }}
+          >
+            {t(locale, 'reset')}
+          </button>
           <button
             type="button"
             className="rd-btn"

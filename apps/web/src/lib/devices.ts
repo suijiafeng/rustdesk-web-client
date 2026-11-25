@@ -82,19 +82,49 @@ export function removeDevice(list: SavedDevice[], key: string): SavedDevice[] {
   return list.filter((item) => item.key !== key);
 }
 
+export function renameDevice(list: SavedDevice[], key: string, alias: string): SavedDevice[] {
+  const name = alias.trim().slice(0, 80);
+  if (!name) return list;
+  return list.map((item) => (item.key === key ? { ...item, hostname: name } : item));
+}
+
+function sanitizeDevice(item: unknown): SavedDevice | null {
+  if (!item || typeof item !== 'object') return null;
+  const record = item as Record<string, unknown>;
+  if (typeof record.key !== 'string') return null;
+  if (record.mode !== 'id' && record.mode !== 'direct') return null;
+  return {
+    key: record.key,
+    mode: record.mode,
+    peerId: typeof record.peerId === 'string' ? record.peerId : undefined,
+    idServer: typeof record.idServer === 'string' ? record.idServer : undefined,
+    relayServer: typeof record.relayServer === 'string' ? record.relayServer : undefined,
+    serverKey: typeof record.serverKey === 'string' ? record.serverKey : undefined,
+    forceRelay: typeof record.forceRelay === 'boolean' ? record.forceRelay : undefined,
+    host: typeof record.host === 'string' ? record.host : undefined,
+    port: typeof record.port === 'string' ? record.port : undefined,
+    hostname: typeof record.hostname === 'string' ? record.hostname : '',
+    platform: typeof record.platform === 'string' ? record.platform : '',
+    favorite: record.favorite === true,
+    lastConnectedAt: typeof record.lastConnectedAt === 'number' ? record.lastConnectedAt : 0,
+  };
+}
+
+/** Reads a versioned store and the original unversioned array. Passwords and tokens are dropped. */
+export function parseDeviceStore(raw: unknown): SavedDevice[] {
+  const list = Array.isArray(raw)
+    ? raw
+    : raw && typeof raw === 'object' && (raw as { version?: unknown }).version === 1 && Array.isArray((raw as { devices?: unknown }).devices)
+      ? (raw as { devices: unknown[] }).devices
+      : [];
+  return list.map(sanitizeDevice).filter((item): item is SavedDevice => item !== null);
+}
+
 export function loadSavedDevices(): SavedDevice[] {
   try {
     const raw = window.localStorage.getItem(DEVICES_STORAGE_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (item): item is SavedDevice =>
-        item &&
-        typeof item === 'object' &&
-        typeof item.key === 'string' &&
-        (item.mode === 'id' || item.mode === 'direct'),
-    );
+    return parseDeviceStore(JSON.parse(raw));
   } catch {
     return [];
   }
@@ -102,7 +132,7 @@ export function loadSavedDevices(): SavedDevice[] {
 
 export function persistSavedDevices(list: SavedDevice[]): void {
   try {
-    window.localStorage.setItem(DEVICES_STORAGE_KEY, JSON.stringify(list));
+    window.localStorage.setItem(DEVICES_STORAGE_KEY, JSON.stringify({ version: 1, devices: parseDeviceStore(list) }));
   } catch {
     // Ignore storage quota or private-mode errors
   }

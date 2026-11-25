@@ -89,6 +89,7 @@ interface RustDeskShellProps {
   onSelectDevice: (device: SavedDevice) => void;
   onToggleFavorite: (key: string) => void;
   onRemoveDevice: (key: string) => void;
+  onRenameDevice: (key: string, alias: string) => void;
   onToggleTouchMode: () => void;
   onToggleDiagnostics: () => void;
   onConnect: (req?: ConnectRequest) => void;
@@ -135,6 +136,7 @@ export function RustDeskShell({
   onSelectDevice,
   onToggleFavorite,
   onRemoveDevice,
+  onRenameDevice,
   onToggleTouchMode,
   onToggleDiagnostics,
   onConnect,
@@ -775,6 +777,7 @@ export function RustDeskShell({
               onSelect={handleDeviceRowTap}
               onToggleFavorite={onToggleFavorite}
               onRemove={onRemoveDevice}
+              onRename={onRenameDevice}
             />
           </section>
         </div>

@@ -13,6 +13,7 @@ interface PeerListProps {
   onSelect: (device: SavedDevice) => void;
   onToggleFavorite: (key: string) => void;
   onRemove: (key: string) => void;
+  onRename: (key: string, alias: string) => void;
 }
 
 function formatPrimaryId(device: SavedDevice): string {
@@ -30,6 +31,7 @@ export function PeerList({
   onSelect,
   onToggleFavorite,
   onRemove,
+  onRename,
 }: PeerListProps) {
   if (devices.length === 0) {
     return (
@@ -111,6 +113,17 @@ export function PeerList({
                   </button>
                   <button
                     type="button"
+                    className="w-8 h-8 inline-flex items-center justify-center rounded-lg border-0 bg-transparent text-[var(--ink-soft)] hover:bg-[var(--rd-hover-bg)]"
+                    aria-label={`Rename ${title}`}
+                    onClick={() => {
+                      const alias = window.prompt('Device name', title);
+                      if (alias) onRename(device.key, alias);
+                    }}
+                  >
+                    <span className="text-xs">Aa</span>
+                  </button>
+                  <button
+                    type="button"
                     className="w-8 h-8 inline-flex items-center justify-center rounded-lg border-0 bg-transparent text-[var(--ink-soft)] hover:bg-[var(--bad-bg)] hover:text-[var(--bad)]"
                     aria-label={`${t(locale, 'removeDevice')} ${title}`}
                     data-tooltip={t(locale, 'removeDevice')}
@@ -186,6 +199,17 @@ export function PeerList({
                   size={16}
                   className={device.favorite ? 'text-[#f59e0b] fill-[#f59e0b]' : ''}
                 />
+              </button>
+              <button
+                type="button"
+                className="w-9 h-9 inline-flex items-center justify-center rounded-lg border-0 bg-transparent text-[var(--ink-soft)] hover:bg-[var(--rd-hover-bg)]"
+                aria-label={`Rename ${title}`}
+                onClick={() => {
+                  const alias = window.prompt('Device name', title);
+                  if (alias) onRename(device.key, alias);
+                }}
+              >
+                <span className="text-xs">Aa</span>
               </button>
               <button
                 type="button"
