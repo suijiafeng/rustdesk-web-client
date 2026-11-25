@@ -20,7 +20,13 @@ interface CursorData {
   height?: number;
   hotx?: number;
   hoty?: number;
-  colors?: Uint8Array;
+  colors?: Uint8Array | number[];
+}
+
+function cursorBytes(colors: Uint8Array | number[] | undefined): Uint8Array | null {
+  if (colors instanceof Uint8Array) return colors.byteLength ? colors : null;
+  if (Array.isArray(colors) && colors.length > 0) return Uint8Array.from(colors);
+  return null;
 }
 
 export class CursorShapes {
@@ -32,11 +38,12 @@ export class CursorShapes {
   }
 
   decode(data: CursorData): CursorShape | null {
-    const { id = '0', width = 0, height = 0, hotx = 0, hoty = 0, colors } = data;
+    const { id = '0', width = 0, height = 0, hotx = 0, hoty = 0, colors: rawColors } = data;
+    const colors = cursorBytes(rawColors);
     this.remove(id);
     if (
       width < 1 || width > MAX_CURSOR_SIDE || height < 1 || height > MAX_CURSOR_SIDE ||
-      !colors?.byteLength || typeof zlib.zstdDecompressSync !== 'function'
+      !colors || typeof zlib.zstdDecompressSync !== 'function'
     ) {
       return null;
     }
