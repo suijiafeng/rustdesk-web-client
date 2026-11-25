@@ -13,6 +13,7 @@ import {
   toHostMessage,
 } from '../control/index.ts';
 import { CursorShapes } from '../media/cursor.ts';
+import { targetHostAllowed } from '../security.ts';
 import { decodeMessage, encodeMessage } from '@rustdesk-web/protocol';
 import { type ConnectedHost, connectDirect, connectViaId } from '../connection/rustdeskClient.ts';
 import {
@@ -484,6 +485,18 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
         return;
       }
       sessionCodecs = codecs;
+
+      const target = parsed.mode === 'id' ? parsed.idServer ?? '' : parsed.host ?? '';
+      if (!targetHostAllowed(target)) {
+        sendJson({
+          type: 'status',
+          state: 'error',
+          detail: 'That target address is not allowed.',
+        });
+        cleanup(false);
+        ws.close();
+        return;
+      }
 
       state = 'connecting';
       sendJson({ type: 'status', state: 'connecting', detail: 'dialing the host' });

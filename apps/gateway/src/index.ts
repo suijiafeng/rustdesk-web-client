@@ -7,6 +7,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
+import { originAllowed, productionTokenProblem } from './security.ts';
 import { serveSocket } from './session/index.ts';
 
 export function normalizeGatewayToken(raw: string | undefined): string {
@@ -55,6 +56,12 @@ export function attachWebSocket(server: http.Server, token: string) {
       socket.destroy();
       return;
     }
+    const origin = typeof request.headers.origin === 'string' ? request.headers.origin : '';
+    const allowlist = process.env.RUSTDESK_ALLOWED_ORIGINS ?? '';
+    if (!originAllowed(origin, request.headers.host ?? '', allowlist)) {
+      socket.destroy();
+      return;
+    }
     wss.handleUpgrade(request, socket, head, (ws) => {
       serveSocket(ws, { token });
     });
@@ -64,6 +71,8 @@ export function attachWebSocket(server: http.Server, token: string) {
 
 export function listen(port: number, host = '127.0.0.1') {
   const token = normalizeGatewayToken(process.env.RUSTDESK_GATEWAY_TOKEN);
+  const problem = productionTokenProblem(process.env.NODE_ENV, token);
+  if (problem) throw new Error(problem);
   const server = createApp(token).listen(port, host);
   attachWebSocket(server, token);
   return server;
