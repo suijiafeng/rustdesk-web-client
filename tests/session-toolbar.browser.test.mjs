@@ -160,11 +160,15 @@ try {
   assert.equal(dragActions.at(-1), 'up');
 
   const fingers = [75, 115, 155].map((x, id) => ({ x, y: 320, id }));
-  const beforeScroll = (await sent()).length;
-  await touch('touchStart', fingers);
-  await touch('touchMove', fingers.map(point => ({ ...point, y: 380 })));
-  await touch('touchEnd');
-  assert.ok((await sent()).slice(beforeScroll).some(e => e.action === 'wheel'));
+  const threeFingerScroll = async () => {
+    const beforeScroll = (await sent()).length;
+    await touch('touchStart', fingers);
+    await touch('touchMove', fingers.map(point => ({ ...point, y: 380 })));
+    await touch('touchEnd');
+    return (await sent()).slice(beforeScroll).find(e => e.action === 'wheel');
+  };
+  const originalScroll = await threeFingerScroll();
+  assert.ok(originalScroll?.y);
   assert.equal(await evaluate('Boolean(' + select('session-menu') + ')'), true);
   console.log('Display panel: outside taps dismiss it, while drags and three-finger scrolling leave it open.');
   await tapElement(select('dock-display'));
@@ -174,6 +178,25 @@ try {
   await tap(180, 355);
   assert.deepEqual((await sent()).slice(-3).map(e => e.action), ['move', 'down', 'up']);
   console.log('Collapsed toolbar: remote tap still works.');
+
+  const reverseScroll = select('session-reverse-scroll');
+  await tapElement(select('mobile-dock-expand'));
+  await tapElement(select('dock-gestures'));
+  const originalPreference = await evaluate(reverseScroll + '.textContent');
+  await tapElement(reverseScroll);
+  await until(list);
+  const alternatives = await evaluate(`Array.from(${list}.children, option => option.textContent)`);
+  assert.ok(
+    JSON.stringify(alternatives) === JSON.stringify(['自然', '反转']) ||
+    JSON.stringify(alternatives) === JSON.stringify(['Natural', 'Reverse']),
+  );
+  const otherDirection = `${list}.querySelector('[aria-selected="false"]')`;
+  const otherPreference = await evaluate(otherDirection + '.textContent');
+  await tapElement(otherDirection);
+  assert.equal(await evaluate(reverseScroll + '.textContent'), otherPreference);
+  await tapElement(select('dock-gestures'));
+  const reversedScroll = await threeFingerScroll();
+  assert.equal(reversedScroll?.y, -originalScroll.y);
 
   await cdp('Emulation.setTouchEmulationEnabled', { enabled: false });
   await cdp('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
@@ -187,6 +210,12 @@ try {
   await evaluate(select('soft-hide') + '.click()');
   await evaluate(select('toolbar-open-menu') + '.click()');
   await until(select('session-backdrop'));
+  assert.equal(await evaluate(reverseScroll + '.textContent'), otherPreference);
+  await evaluate(reverseScroll + '.click()');
+  await until(list);
+  await evaluate(otherDirection + '.click()');
+  assert.equal(await evaluate(reverseScroll + '.textContent'), originalPreference);
+  console.log('Scroll direction: three-finger wheel output reverses, and the preference survives reconnecting.');
   assert.equal(await evaluate(select('stage') + '.dataset.remoteActive'), 'false');
   await evaluate(select('session-close') + '.click()');
   await until(select('stage') + '.dataset.remoteActive === "true"');

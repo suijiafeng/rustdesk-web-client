@@ -1,9 +1,10 @@
 import { RestartAction } from './RestartAction';
 import { AdaptiveSelect } from './AdaptiveSelect';
+import { ScrollDirectionSelect } from './ScrollDirectionSelect';
 import { MobileSessionPanel, type MobilePanel } from './MobileSessionPanel';
 import React, { useState } from 'react';
 import {
-  Activity,
+  Activity, ArrowDownUp,
   Clipboard, Shield, LockKeyhole, Volume2, Gauge, Film, Focus, Hand, MousePointer2,
   Power,
   Sliders,
@@ -69,6 +70,8 @@ export interface SessionMenuProps {
   onDisconnect: () => void;
   onToggleDiagnostics: () => void;
   onToggleTouchMode: () => void;
+  reverseScroll: boolean;
+  onReverseScrollChange: (reverse: boolean) => void;
   onSwitchDisplay: (index: number) => void;
   onQuickKey: (name: 'Esc' | 'Tab' | 'Ctrl+C' | 'Ctrl+V' | 'Ctrl+Alt+Del' | 'Lock') => void;
   onChangeQuality: (quality: QualityLevel, fps: number, codec?: PreferredCodec) => void;
@@ -107,6 +110,7 @@ function DesktopSessionMenu({
   onDisconnect,
   onToggleDiagnostics,
   onToggleTouchMode,
+  reverseScroll, onReverseScrollChange,
   onSwitchDisplay,
   onQuickKey,
   onChangeQuality,
@@ -224,6 +228,10 @@ function DesktopSessionMenu({
                 }}><MousePointer2 size={18} />{t(locale, 'mouse')}</button>
               </div>
               <div className="session-group">
+                <label className="session-setting-row"><ArrowDownUp /><span>{t(locale, 'scrollDirection')}</span>
+                  <ScrollDirectionSelect locale={locale} tone="remote" testId="session-reverse-scroll"
+                  reverse={reverseScroll} onChange={onReverseScrollChange} />
+                </label>
                 <label className="session-setting-row"><Volume2 /><span>{t(locale, 'remoteAudio')}</span>
                   <input className="ui-switch" type="checkbox" role="switch" checked={audioEnabled} onChange={onToggleAudio} />
                 </label>

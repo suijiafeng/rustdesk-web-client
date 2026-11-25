@@ -3044,6 +3044,8 @@ export default function App() {
             setMenuOpen(false);
           }}
           onToggleTouchMode={handleToggleTouchMode}
+          reverseScroll={displayPrefs.reverseMouseWheel}
+          onReverseScrollChange={reverseMouseWheel => handleUpdateDisplayPrefs({ reverseMouseWheel })}
           onSwitchDisplay={(idx) => {
             setDisplay(idx);
             send({ type: 'switchDisplay', display: idx });

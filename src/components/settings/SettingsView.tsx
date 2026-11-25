@@ -14,6 +14,7 @@ import type { DisplayPrefs, ImageQualityPreset, PreferredCodec } from '../../lib
 import { t, type Locale, type LocalePreference } from '../../lib/i18n';
 import type { ThemePreference } from '../../lib/theme';
 import { AdaptiveSelect } from '../AdaptiveSelect';
+import { ScrollDirectionSelect } from '../ScrollDirectionSelect';
 import { IdServerModal, type ServerField } from './IdServerModal';
 
 export type SettingsSection = 'general' | 'network' | 'display' | 'about';
@@ -324,13 +325,10 @@ function DisplaySection({
           </label>
 
           <label className="settings-option-row">
-            <input
-              type="checkbox" role="switch" className="ui-switch"
-              data-testid="settings-opt-reverse-wheel"
-              checked={displayPrefs.reverseMouseWheel}
-              onChange={(e) => onUpdateDisplayPrefs({ reverseMouseWheel: e.target.checked })}
-            />
-            <span>{t(locale, 'optReverseMouseWheel')}</span>
+            <span>{t(locale, 'scrollDirection')}</span>
+            <ScrollDirectionSelect locale={locale} testId="settings-opt-reverse-wheel"
+              reverse={displayPrefs.reverseMouseWheel}
+              onChange={reverseMouseWheel => onUpdateDisplayPrefs({ reverseMouseWheel })} />
           </label>
 
           <label className="settings-option-row">

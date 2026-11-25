@@ -1,7 +1,8 @@
 import React from 'react';
 import { RestartAction } from './RestartAction';
 import { AdaptiveSelect } from './AdaptiveSelect';
-import { Clipboard, Shield, Activity, Eye, Focus, LockKeyhole, LogOut, Monitor, SlidersHorizontal, Volume2, Gauge, Film } from 'lucide-react';
+import { ScrollDirectionSelect } from './ScrollDirectionSelect';
+import { ArrowDownUp, Clipboard, Shield, Activity, Eye, Focus, LockKeyhole, LogOut, Monitor, SlidersHorizontal, Volume2, Gauge, Film } from 'lucide-react';
 import { t, type I18nKey } from '../lib/i18n';
 import { formatConnectionError } from '../lib/errors';
 import type { SessionMenuProps } from './SessionMenu';
@@ -68,6 +69,10 @@ export function MobileSessionPanel(p: SessionMenuProps & { mobilePanel: MobilePa
         </div>
       </>}
       {p.mobilePanel === 'gestures' && <div className="tool-group">
+        <label className="tool-row"><ArrowDownUp /><span>{label('scrollDirection')}</span>
+          <ScrollDirectionSelect locale={p.locale} tone="remote" testId="session-reverse-scroll"
+            reverse={p.reverseScroll} onChange={p.onReverseScrollChange} />
+        </label>
         <h2 className="text-base font-semibold my-2">{label(p.touchMode ? 'touchModeGestures' : 'mouseModeGestures')}</h2>
         <dl data-testid="gesture-guide">{gestureRows[p.touchMode ? 'touch' : 'mouse'].map(([name, desc]) =>
           <div key={name}><dt>{label(name)}</dt><dd>{label(desc)}</dd></div>)}</dl>
