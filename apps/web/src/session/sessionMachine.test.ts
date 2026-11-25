@@ -1,0 +1,157 @@
+// Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
+
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import type { CodecSupport, PeerMessage } from '@rustdesk-web/shared';
+import {
+  CONNECT_TIMEOUT_MS,
+  buildConnectMessage,
+  initialSession,
+  isCurrentGeneration,
+  reduceSession,
+  wsUrl,
+  type SessionSnapshot,
+} from './sessionMachine.ts';
+
+const codecs: CodecSupport = {
+  vp8: true,
+  vp9: false,
+  h264: false,
+  h265: false,
+  av1: false,
+  reported: true,
+};
+
+const peer: PeerMessage = {
+  type: 'peer',
+  hostname: 'office',
+  platform: 'Windows',
+  username: 'ada',
+  version: '1.5.3',
+  currentDisplay: 0,
+  displays: [],
+  encrypted: true,
+};
+
+test('wsUrl follows the page protocol and host', () => {
+  assert.equal(wsUrl({ protocol: 'http:', host: '127.0.0.1:5173' }), 'ws://127.0.0.1:5173/ws');
+  assert.equal(wsUrl({ protocol: 'https:', host: 'desk.example' }), 'wss://desk.example/ws');
+});
+
+test('buildConnectMessage matches the gateway connect fields', () => {
+  const idMessage = buildConnectMessage({
+    mode: 'id',
+    peerId: '123456789',
+    idServer: 'id.example:21116',
+    relayServer: '',
+    serverKey: '',
+    forceRelay: false,
+    host: '',
+    port: 21118,
+    password: 'secret',
+    token: 'gateway',
+    codecs,
+    quality: 'balanced',
+    fps: 30,
+    codec: 'auto',
+  });
+  assert.equal(idMessage.type, 'connect');
+  if (idMessage.type !== 'connect') return;
+  assert.equal(idMessage.mode, 'id');
+  assert.equal(idMessage.peerId, '123456789');
+  assert.equal(idMessage.token, 'gateway');
+  assert.equal(idMessage.codecs?.vp8, true);
+
+  const direct = buildConnectMessage({
+    mode: 'direct',
+    peerId: '',
+    idServer: '',
+    relayServer: '',
+    serverKey: '',
+    forceRelay: false,
+    host: '127.0.0.1',
+    port: 21118,
+    password: '',
+    token: '',
+    codecs,
+    quality: 'low',
+    fps: 15,
+    codec: 'vp8',
+  });
+  if (direct.type !== 'connect') return;
+  assert.equal(direct.host, '127.0.0.1');
+  assert.equal(direct.port, 21118);
+});
+
+test('a new connect drops the previous peer and its permissions', () => {
+  const live: SessionSnapshot = { ...initialSession, phase: 'live', peer, authRequired: true };
+  const next = reduceSession(live, { type: 'connect-started' });
+  assert.equal(next.phase, 'connecting');
+  assert.equal(next.peer, null);
+  assert.equal(next.authRequired, true);
+  assert.equal(next.clearPassword, false);
+});
+
+test('status messages move connecting, live, auth failure, and close', () => {
+  let state = reduceSession(initialSession, { type: 'connect-started' });
+  state = reduceSession(state, { type: 'server', message: { type: 'status', state: 'connecting', detail: 'dialing the host' } });
+  assert.equal(state.phase, 'connecting');
+  assert.equal(state.detail, 'dialing the host');
+
+  state = reduceSession(state, { type: 'server', message: peer });
+  assert.equal(state.peer?.hostname, 'office');
+  state = reduceSession(state, { type: 'server', message: { type: 'status', state: 'live', detail: 'encrypted' } });
+  assert.equal(state.phase, 'live');
+  assert.equal(state.detail, 'encrypted');
+
+  state = reduceSession(state, {
+    type: 'server',
+    message: { type: 'permissions', privacyAllowed: false, clipboardAllowed: true },
+  });
+  assert.equal(state.peer?.privacyAllowed, false);
+  assert.equal(state.peer?.clipboardAllowed, true);
+
+  const rejected = reduceSession(state, {
+    type: 'server',
+    message: { type: 'status', state: 'error', detail: 'Wrong password' },
+  });
+  assert.equal(rejected.phase, 'error');
+  assert.equal(rejected.clearPassword, true);
+  assert.equal(rejected.peer, null);
+
+  const token = reduceSession(state, {
+    type: 'server',
+    message: { type: 'status', state: 'error', detail: 'gateway access token is missing' },
+  });
+  assert.equal(token.authRequired, true);
+  assert.equal(token.clearPassword, false);
+});
+
+test('timeout and socket loss do not leave a connecting session hanging', () => {
+  const connecting = reduceSession(initialSession, { type: 'connect-started' });
+  const timedOut = reduceSession(connecting, { type: 'timeout' });
+  assert.equal(timedOut.phase, 'error');
+  assert.match(timedOut.errorMessage, /timed out/i);
+  assert.equal(CONNECT_TIMEOUT_MS, 45_000);
+
+  const closed = reduceSession(connecting, { type: 'socket-close' });
+  assert.equal(closed.phase, 'error');
+  assert.match(closed.errorMessage, /closed/i);
+
+  const live = reduceSession(connecting, { type: 'server', message: { type: 'status', state: 'live', detail: 'direct' } });
+  const dropped = reduceSession(live, { type: 'socket-close' });
+  assert.equal(dropped.phase, 'idle');
+  assert.equal(dropped.peer, null);
+});
+
+test('disconnect clears the session and a stale generation is ignored', () => {
+  const live = reduceSession(
+    reduceSession(initialSession, { type: 'connect-started' }),
+    { type: 'server', message: { type: 'status', state: 'live', detail: 'direct' } },
+  );
+  const idle = reduceSession(live, { type: 'disconnect' });
+  assert.equal(idle.phase, 'idle');
+  assert.equal(idle.peer, null);
+  assert.equal(isCurrentGeneration(2, 2), true);
+  assert.equal(isCurrentGeneration(3, 2), false);
+});
