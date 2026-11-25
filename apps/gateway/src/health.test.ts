@@ -20,6 +20,12 @@ test('GET /api/health reports the gateway is up', async () => {
     assert.equal(response.status, 200);
     const body = (await response.json()) as HealthResponse;
     assert.deepEqual(body, { ok: true, service: GATEWAY_SERVICE, authRequired: false });
+    for (let i = 0; i < 20; i += 1) {
+      const again = await fetch(`http://127.0.0.1:${address.port}${HEALTH_PATH}`);
+      assert.equal(again.status, 200);
+      const repeated = (await again.json()) as HealthResponse;
+      assert.equal(repeated.ok, true);
+    }
   } finally {
     if (!server.listening) return;
     await new Promise<void>((resolve, reject) => {
