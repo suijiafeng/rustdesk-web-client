@@ -89,6 +89,7 @@ NODE_ENV=production yarn start
 | `RUSTDESK_CLIENT_IP_HEADER` | `x-forwarded-for` | 客户端地址头：`x-forwarded-for` 或显式信任的 `cf-connecting-ip` |
 | `RUSTDESK_ALLOW_PRIVATE_TARGETS` | 生产为 `false`，开发为 `true` | 允许连接局域网和回环目标 |
 | `RUSTDESK_ALLOWED_TARGET_PORTS` | 空 | 生产环境额外允许的 ID 和中继服务器 TCP 端口，用逗号分隔 |
+| `RUSTDESK_DEFAULT_FORCE_RELAY` | `false` | 网关的 ID 连接跳过 TCP 直连；与浏览器 WebRTC 和 IP 直连独立 |
 | `RUSTDESK_ENABLE_WEBRTC` | `false` | 设为 `true` 时启用可选 WebRTC 信令入口 |
 
 生产模式不会接受空令牌或占位令牌。网关令牌与 RustDesk 被控端密码是两个独立凭据。
@@ -100,6 +101,8 @@ NODE_ENV=production yarn start
 默认使用 TCP 对端地址。经反向代理部署时，将实际代理 IP 或 CIDR 网段填入 `RUSTDESK_TRUSTED_PROXIES`，例如通过回环地址连接网关的代理可填 `127.0.0.1,::1`。仅当 TCP 对端可信时才解析 `X-Forwarded-For`，从右向左跳过可信代理，采用第一个不可信地址。检查到格式错误的地址或整条链都可信时回退为 TCP 对端地址。代理必须追加实际连接来源或覆盖转发头，不能直接信任客户端提交的值。信任配置格式错误会阻止启动。
 
 Cloudflare 场景可继续使用默认的 `X-Forwarded-For` 信任链。如需直接使用 `CF-Connecting-IP`，设置 `RUSTDESK_CLIENT_IP_HEADER=cf-connecting-ip`，且只信任 Cloudflare 入口，或会校验 Cloudflare 来源并在每次请求中覆盖/清除该头的自有入口。仅透传该头的普通代理不满足这个条件。该头缺失或格式错误时使用 TCP 对端地址；不可信对端携带任何转发头都不能改变身份。
+
+网关的 ID 连接会竞速 TCP 直连与中继，让直连先尝试 350 毫秒；直连提前失败时立即启动中继。先完成对端握手的路径胜出，另一条路径被取消并关闭连接，然后仅在胜出的路径执行一次密码登录。确定网关应始终走中继时，可设置 `RUSTDESK_DEFAULT_FORCE_RELAY=true`。此设置不关闭浏览器 WebRTC。
 
 健康检查位于 `/api/health`：
 

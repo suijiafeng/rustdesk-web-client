@@ -300,6 +300,62 @@ async function connectRelayEndpoint(
   }
 }
 
+interface ReadyRoute {
+  stream: EncryptedFramedStream;
+  route: ConnectedHost['route'];
+  hash: HostHash;
+  encrypted: boolean;
+  permissions: { restart: boolean; privacy: boolean; clipboard: boolean };
+}
+
+/** Race handshakes, then authenticate exactly once on the winning connection. */
+async function raceRoutes(
+  direct: (signal: AbortSignal) => Promise<ReadyRoute>,
+  relay: (signal: AbortSignal) => Promise<ReadyRoute>,
+  signal?: AbortSignal,
+): Promise<ReadyRoute> {
+  signal?.throwIfAborted();
+  const directAbort = new AbortController();
+  const relayAbort = new AbortController();
+  const directSignal = signal ? AbortSignal.any([signal, directAbort.signal]) : directAbort.signal;
+  const relaySignal = signal ? AbortSignal.any([signal, relayAbort.signal]) : relayAbort.signal;
+  let startRelay!: () => void;
+  const relayReady = new Promise<void>((resolve) => { startRelay = resolve; });
+  const timer = setTimeout(startRelay, 350);
+  let winner: ReadyRoute | undefined;
+  try {
+    winner = await Promise.any([
+      direct(directSignal).catch((err) => {
+        // There is no benefit to the head start once direct has already failed.
+        startRelay();
+        throw err;
+      }),
+      (async () => {
+        await relayReady;
+        relaySignal.throwIfAborted();
+        return relay(relaySignal);
+      })(),
+    ]);
+    signal?.throwIfAborted();
+    return winner;
+  } catch (err) {
+    winner?.stream.close();
+    winner = undefined;
+    signal?.throwIfAborted();
+    if (err instanceof AggregateError) {
+      const reasons = err.errors.map((reason) => reason instanceof Error ? reason.message : String(reason));
+      throw new AggregateError(err.errors, `Direct connection failed: ${reasons[0]}; relay connection failed: ${reasons[1]}`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+    // Also wake a relay that was cancelled before its delayed start.
+    startRelay();
+    if (winner?.route !== 'direct') directAbort.abort();
+    if (winner?.route !== 'relay') relayAbort.abort();
+  }
+}
+
 export async function connectViaId(
   target: IdTarget,
   codecs: CodecCaps,
@@ -307,6 +363,7 @@ export async function connectViaId(
 ): Promise<ConnectedHost> {
   const peerId = target.peerId.replace(/\s+/g, '');
   const idServer = target.idServer.trim();
+  const forceRelay = target.forceRelay || process.env.RUSTDESK_DEFAULT_FORCE_RELAY?.trim().toLowerCase() === 'true';
   if (!peerId) throw new Error('peer id is empty');
   if (!idServer) throw new Error('id server is empty');
 
@@ -325,9 +382,9 @@ export async function connectViaId(
         punch_hole_request: {
           id: peerId,
           licence_key: target.key.trim(),
-          nat_type: target.forceRelay ? NatTypeValues.SYMMETRIC : NatTypeValues.UNKNOWN_NAT,
+          nat_type: forceRelay ? NatTypeValues.SYMMETRIC : NatTypeValues.UNKNOWN_NAT,
           conn_type: ConnTypeValues.DEFAULT_CONN,
-          force_relay: target.forceRelay,
+          force_relay: forceRelay,
           version: '1.5.3',
         },
       }),
@@ -364,67 +421,47 @@ export async function connectViaId(
         const signedPk = ph.pk ? new Uint8Array(ph.pk) : undefined;
         const signPk = peerSignKey(target.key, signedPk, peerId);
 
-        // Try direct TCP if forceRelay is false and address decoded cleanly;
-        // if NAT blocks direct TCP (standard Internet case), fall back automatically to hbbr relay.
-        if (!target.forceRelay) {
-          const decodedAddr = decodeAddrMangle(new Uint8Array(addrBytes));
-          if (decodedAddr) {
-            try {
-              peerStream = await EncryptedFramedStream.connect(
-                decodedAddr.host,
-                decodedAddr.port,
-                3_500,
-                { signal, peerConnection: true },
-              );
-              const permissions = { restart: true, privacy: true, clipboard: true };
-              const { hash, encrypted } = await readUntilHash(peerStream, signPk, peerId, permissions);
-              idSocket.close();
-              return await loginHost(
-                peerStream,
-                hash,
-                peerId,
-                target.password,
-                codecs,
-                encrypted,
-                'direct',
-                permissions,
-                target.quality,
-                target.fps,
-                target.preferCodec,
-              );
-            } catch {
-              if (peerStream) {
-                peerStream.close();
-                peerStream = null;
-              }
-            }
-          }
-        }
-
-        // Seamless automatic relay fallback via hbbs -> hbbr (mirrors desktop RustDesk client)
         idSocket.close();
-        const relay = await requestRelayViaRendezvous(
-          target,
-          idDial,
-          relayHint,
-          Boolean(signPk),
-          idServerSecured,
-          signal,
-        );
-        peerStream = relay.peerStream;
-        const finalSignPk =
-          signPk ?? peerSignKey(target.key, relay.pkBytes, peerId);
-        const permissions = { restart: true, privacy: true, clipboard: true };
-        const { hash, encrypted } = await readUntilHash(peerStream, finalSignPk, peerId, permissions);
+        const prepareRelay = async (attemptSignal?: AbortSignal): Promise<ReadyRoute> => {
+          const relay = await requestRelayViaRendezvous(
+            target, idDial, relayHint, Boolean(signPk), idServerSecured, attemptSignal,
+          );
+          try {
+            const finalSignPk = signPk ?? peerSignKey(target.key, relay.pkBytes, peerId);
+            const permissions = { restart: true, privacy: true, clipboard: true };
+            const handshake = await readUntilHash(relay.peerStream, finalSignPk, peerId, permissions);
+            attemptSignal?.throwIfAborted();
+            return { stream: relay.peerStream, route: 'relay', permissions, ...handshake };
+          } catch (err) {
+            relay.peerStream.close();
+            throw err;
+          }
+        };
+        const decodedAddr = forceRelay ? null : decodeAddrMangle(new Uint8Array(addrBytes));
+        const ready = decodedAddr ? await raceRoutes(async (attemptSignal) => {
+          const stream = await EncryptedFramedStream.connect(
+            decodedAddr.host, decodedAddr.port, 3_500, { signal: attemptSignal, peerConnection: true },
+          );
+          try {
+            const permissions = { restart: true, privacy: true, clipboard: true };
+            const handshake = await readUntilHash(stream, signPk, peerId, permissions);
+            attemptSignal.throwIfAborted();
+            return { stream, route: 'direct', permissions, ...handshake };
+          } catch (err) {
+            stream.close();
+            throw err;
+          }
+        }, prepareRelay, signal) : await prepareRelay(signal);
+        peerStream = ready.stream;
         return await loginHost(
           peerStream,
-          hash,
+          ready.hash,
           peerId,
           target.password,
           codecs,
-          encrypted,
-          'relay',
-          permissions,
+          ready.encrypted,
+          ready.route,
+          ready.permissions,
           target.quality,
           target.fps,
           target.preferCodec,

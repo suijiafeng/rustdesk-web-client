@@ -89,6 +89,7 @@ NODE_ENV=production yarn start
 | `RUSTDESK_CLIENT_IP_HEADER` | `x-forwarded-for` | Client address header: `x-forwarded-for` or explicitly trusted `cf-connecting-ip` |
 | `RUSTDESK_ALLOW_PRIVATE_TARGETS` | `false` in production, `true` in development | Allow TCP connections to LAN and loopback targets |
 | `RUSTDESK_ALLOWED_TARGET_PORTS` | empty | Comma-separated extra TCP ports for ID and relay servers in production |
+| `RUSTDESK_DEFAULT_FORCE_RELAY` | `false` | Skip direct TCP attempts for gateway ID connections; independent of browser WebRTC and direct-IP connections |
 | `RUSTDESK_ENABLE_WEBRTC` | `false` | Set to `true` to enable the optional WebRTC signaling path |
 
 In production, `RUSTDESK_GATEWAY_TOKEN` must be a real value rather than an empty or placeholder token. The gateway token and the RustDesk host password are separate credentials.
@@ -100,6 +101,8 @@ Both WebSocket endpoints share a limit of 128 connections per gateway instance, 
 By default, the source is the TCP peer address. Behind a reverse proxy, configure only its actual IP addresses or CIDR ranges in `RUSTDESK_TRUSTED_PROXIES` (for example, `127.0.0.1,::1` for a proxy connecting over loopback). The gateway reads `X-Forwarded-For` only from a trusted peer, scans from right to left, skips trusted proxies, and selects the first untrusted address. Invalid inspected addresses or chains with no untrusted address fall back to the TCP peer. The proxy must append the observed client address or overwrite the header; never trust arbitrary client-supplied values. Invalid trust configuration prevents startup.
 
 For Cloudflare, the default `X-Forwarded-For` mode can follow the same trusted chain. To use `CF-Connecting-IP` instead, set `RUSTDESK_CLIENT_IP_HEADER=cf-connecting-ip` and trust only Cloudflare ingress or your own ingress that validates the Cloudflare source and overwrites/removes this header on every request. A generic proxy that merely passes the header through is insufficient. Missing or invalid `CF-Connecting-IP` falls back to the TCP peer, and untrusted peers cannot override their identity with either header.
+
+For ID connections, the gateway races direct TCP against relay setup, giving direct TCP a 350 ms head start. A direct failure starts relay immediately. The first route to complete the peer handshake wins; the other route is canceled and its sockets are closed. Password login runs once on the winner. Set `RUSTDESK_DEFAULT_FORCE_RELAY=true` when the gateway should always use relay for ID connections. This does not disable browser WebRTC.
 
 The health endpoint is available at `/api/health`:
 
