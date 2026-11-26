@@ -1,53 +1,27 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
-  ArrowRight,
   Clock,
-  HelpCircle,
   LayoutGrid,
   List,
-  Loader2,
   MoreVertical,
   Search,
   Star,
   X,
 } from 'lucide-react';
-import { deviceKeyFor, formatPeerId, type SavedDevice } from '../lib/devices';
+import type { SavedDevice } from '../lib/devices';
 import type { DisplayPrefs } from '../lib/displayPrefs';
-import { statusLabel, t, type Locale, type LocalePreference } from '../lib/i18n';
-import { getSavedPassword, type SavedPasswordMap } from '../lib/passwords';
+import { t, type Locale, type LocalePreference } from '../lib/i18n';
+import type { SavedPasswordMap } from '../lib/passwords';
 import type { ThemePreference } from '../lib/theme';
+import type { ConnectionField, ConnectionMode, ConnectionPhase, ConnectRequest } from '../types';
+import { ConnectForm, ConnectPasswordPrompt, useConnectForm } from './ConnectForm';
 
-export interface ConnectRequest {
-  mode?: ConnectionMode;
-  peerId?: string;
-  idServer?: string;
-  relayServer?: string;
-  serverKey?: string;
-  forceRelay?: boolean;
-  host?: string;
-  port?: string;
-  password?: string;
-  gatewayToken?: string;
-  remember?: boolean;
-}
-import { ErrorBanner } from './ErrorBanner';
-import { PasswordModal } from './PasswordModal';
 import { PeerList } from './PeerList';
 import { SettingsView, type SettingsSection } from './settings/SettingsView';
 
-export type ConnectionMode = 'id' | 'direct';
-export type ConnectionPhase = 'idle' | 'connecting' | 'live' | 'error';
+export type { ConnectionField, ConnectionMode, ConnectionPhase, ConnectRequest } from '../types';
 
 type ListTab = 'recent' | 'favorites';
-
-export type ConnectionField =
-  | 'host'
-  | 'port'
-  | 'password'
-  | 'peerId'
-  | 'idServer'
-  | 'relayServer'
-  | 'serverKey';
 
 interface RustDeskShellProps {
   locale: Locale;
@@ -151,55 +125,8 @@ export function RustDeskShell({
   const [viewLayout, setViewLayout] = useState<'grid' | 'list'>(isDesktop ? 'grid' : 'list');
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [helpHover, setHelpHover] = useState(false);
-  const [helpPinned, setHelpPinned] = useState(false);
-  const helpVisible = helpHover || helpPinned;
-
-  const [heroInputError, setHeroInputError] = useState(false);
-  const [heroErrorShake, setHeroErrorShake] = useState(false);
-  const [rememberPassword, setRememberPassword] = useState(false);
-  const [promptGatewayToken, setPromptGatewayToken] = useState('');
-  const [passwordPromptOpen, setPasswordPromptOpen] = useState(false);
-  const [pendingMode, setPendingMode] = useState<ConnectionMode>(mode);
-
-  const peerInputRef = useRef<HTMLInputElement>(null);
-  const hostInputRef = useRef<HTMLInputElement>(null);
-  const helpAnchorRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!helpVisible) return;
-    const handlePointerDown = (ev: PointerEvent) => {
-      if (helpAnchorRef.current && !helpAnchorRef.current.contains(ev.target as Node)) {
-        setHelpPinned(false);
-        setHelpHover(false);
-      }
-    };
-    const handleKeyDown = (ev: KeyboardEvent) => {
-      if (ev.key === 'Escape') {
-        setHelpPinned(false);
-        setHelpHover(false);
-      }
-    };
-    document.addEventListener('pointerdown', handlePointerDown);
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown);
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [helpVisible]);
-
   const isLive = phase === 'live';
-  const isConnecting = phase === 'connecting';
-  const activeMode: ConnectionMode = directIpEnabled ? mode : 'id';
   const effectiveLayout = isDesktop ? viewLayout : 'list';
-
-  const formattedIdValue = useMemo(() => {
-    const clean = peerId.replace(/\s+/g, '');
-    if (/^\d+$/.test(clean) && clean.length > 3) {
-      return clean.replace(/(\d{3})(?=\d)/g, '$1 ');
-    }
-    return peerId;
-  }, [peerId]);
 
   const filteredDevices = useMemo(() => {
     const base = listTab === 'favorites' ? devices.filter((d) => d.favorite) : devices;
@@ -216,17 +143,6 @@ export function RustDeskShell({
     });
   }, [devices, listTab, searchQuery]);
 
-  const activeTargetLabel =
-    pendingMode === 'id'
-      ? formatPeerId(peerId)
-      : `${host.trim()}${port.trim() && port.trim() !== '21118' ? `:${port.trim()}` : ''}`;
-
-  const triggerHeroInputError = () => {
-    setHeroInputError(true);
-    setHeroErrorShake(false);
-    window.requestAnimationFrame(() => setHeroErrorShake(true));
-  };
-
   const openNetworkServerSetup = (highlightIdServer = false) => {
     setSettingsSection('network');
     setSettingsOpen(true);
@@ -234,99 +150,33 @@ export function RustDeskShell({
     setServerDialogOpen(true);
   };
 
-  const pendingDeviceKey = deviceKeyFor({
-    mode: pendingMode,
-    peerId,
+  const connectForm = useConnectForm({
+    locale,
+    mode,
+    directIpEnabled,
+    phase,
     host,
     port,
+    password,
+    peerId,
+    idServer,
+    relayServer,
+    serverKey,
+    forceRelay,
+    gatewayToken,
+    gatewayTokenNeedsInput,
+    detail,
+    decoderError,
+    savedPasswords,
+    onChangeMode,
+    onChangeField,
+    onClearSavedPassword,
+    onSelectDevice,
+    onConnect,
+    onDisconnect,
+    onDismissError,
+    openNetworkServerSetup,
   });
-
-  const handleHeroSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (activeMode === 'id') {
-      if (!peerId.replace(/\s+/g, '')) {
-        triggerHeroInputError();
-        peerInputRef.current?.focus();
-        return;
-      }
-      if (!idServer.trim()) {
-        openNetworkServerSetup(true);
-        return;
-      }
-    } else if (!host.trim()) {
-      triggerHeroInputError();
-      hostInputRef.current?.focus();
-      return;
-    }
-
-    setHeroInputError(false);
-    setHeroErrorShake(false);
-    setPendingMode(activeMode);
-
-    const key = deviceKeyFor({ mode: activeMode, peerId, host, port });
-    const saved = getSavedPassword(savedPasswords, key);
-    if (saved && !gatewayTokenNeedsInput && phase !== 'error') {
-      onChangeField('password', saved);
-      onConnect({ mode: activeMode, password: saved, remember: true });
-      return;
-    }
-
-    onChangeField('password', saved);
-    setRememberPassword(Boolean(saved));
-    setPromptGatewayToken(gatewayToken);
-    setPasswordPromptOpen(true);
-  };
-
-  const handleDeviceRowTap = (device: SavedDevice) => {
-    onSelectDevice(device);
-    setHeroInputError(false);
-    if (device.mode === 'id' && !(device.idServer?.trim() || idServer.trim())) {
-      openNetworkServerSetup(true);
-      return;
-    }
-    setPendingMode(device.mode);
-
-    const key = deviceKeyFor(device);
-    const saved = getSavedPassword(savedPasswords, key);
-    if (saved && !gatewayTokenNeedsInput) {
-      onChangeField('password', saved);
-      onConnect({
-        mode: device.mode,
-        peerId: device.peerId,
-        idServer: device.idServer || idServer,
-        relayServer: device.relayServer ?? relayServer,
-        serverKey: device.serverKey ?? serverKey,
-        forceRelay: device.forceRelay ?? forceRelay,
-        host: device.host,
-        port: device.port || '21118',
-        password: saved,
-        remember: true,
-      });
-      return;
-    }
-
-    onChangeField('password', saved);
-    setRememberPassword(Boolean(saved));
-    setPromptGatewayToken(gatewayToken);
-    setPasswordPromptOpen(true);
-  };
-
-  const handleConfirmPasswordConnect = (e: React.FormEvent) => {
-    e.preventDefault();
-    setPasswordPromptOpen(false);
-    onConnect({
-      mode: pendingMode,
-      password,
-      remember: rememberPassword,
-      gatewayToken: gatewayTokenNeedsInput ? promptGatewayToken : undefined,
-    });
-  };
-
-  const handleIdInputChange = (raw: string) => {
-    setHeroInputError(false);
-    const digitsOnly = raw.replace(/\s+/g, '');
-    onChangeField('peerId', /^\d*$/.test(digitsOnly) ? digitsOnly : raw);
-  };
 
   if (settingsOpen) {
     return (
@@ -415,261 +265,7 @@ export function RustDeskShell({
         </header>
 
       <main className="rd-mobile-scroll rd-mobile-home-body">
-        {/* Hero Remote ID / Direct IP Input Block */}
-        <section className="rd-hero-container">
-          <div className="flex items-center justify-between gap-2 mb-2.5">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <h2 className="text-[18px] font-medium text-[var(--ink)] m-0">
-                {t(locale, 'remoteDesktop')}
-              </h2>
-
-              <div
-                ref={helpAnchorRef}
-                className="relative inline-flex items-center"
-                onMouseEnter={() => {
-                  if (window.matchMedia?.('(hover: hover)').matches) {
-                    setHelpHover(true);
-                  }
-                }}
-                onMouseLeave={() => {
-                  if (window.matchMedia?.('(hover: hover)').matches) {
-                    setHelpHover(false);
-                  }
-                }}
-              >
-                <button
-                  type="button"
-                  className="inline-flex items-center justify-center w-8 h-8 rounded-full text-[var(--ink-soft)] hover:bg-[var(--rd-hover-bg)] border-0 bg-transparent"
-                  data-testid="remote-help-btn"
-                  aria-label={t(locale, 'helpButtonAria')}
-                  aria-expanded={helpVisible}
-                  aria-controls="remote-help-popover"
-                  onClick={() => {
-                    if (helpPinned) {
-                      setHelpPinned(false);
-                      setHelpHover(false);
-                    } else {
-                      setHelpPinned(true);
-                    }
-                  }}
-                >
-                  <HelpCircle size={17} />
-                </button>
-
-                {helpVisible && (
-                  <div
-                    id="remote-help-popover"
-                    className="rd-help-popover"
-                    data-testid="remote-help-popover"
-                    role="tooltip"
-                  >
-                    {t(locale, 'helpRemoteDesktop')}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {directIpEnabled && (
-              <div
-                className="rd-mode-switcher"
-                role="tablist"
-                aria-label={t(locale, 'connectionModeAria')}
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeMode === 'id'}
-                  data-testid="mode-id"
-                  className={`rd-mode-switcher-btn${activeMode === 'id' ? ' active' : ''}`}
-                  onClick={() => {
-                    setHeroInputError(false);
-                    onChangeMode('id');
-                  }}
-                >
-                  {t(locale, 'modeId')}
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeMode === 'direct'}
-                  data-testid="mode-direct"
-                  className={`rd-mode-switcher-btn${activeMode === 'direct' ? ' active' : ''}`}
-                  onClick={() => {
-                    setHeroInputError(false);
-                    onChangeMode('direct');
-                  }}
-                >
-                  {t(locale, 'modeDirect')}
-                </button>
-              </div>
-            )}
-          </div>
-
-          <form onSubmit={handleHeroSubmit} noValidate>
-            {activeMode === 'id' ? (
-              <div
-                className={`rd-hero-box${heroInputError ? ' has-error' : ''}${
-                  heroErrorShake ? ' rd-shake' : ''
-                }`}
-                data-testid="hero-input-box"
-                onAnimationEnd={() => setHeroErrorShake(false)}
-              >
-                <div className="flex-1 min-w-0 flex flex-col justify-center">
-                  <label
-                    htmlFor="rustdesk-peer-id"
-                    className={`transition-all leading-none ${
-                      peerId ? 'text-[11px] font-medium text-[var(--ink-soft)] mb-1' : 'sr-only'
-                    }`}
-                  >
-                    {t(locale, 'remoteIdLabel')}
-                  </label>
-                  <input
-                    ref={peerInputRef}
-                    id="rustdesk-peer-id"
-                    type="text"
-                    inputMode="numeric"
-                    data-testid="peer-id"
-                    aria-invalid={heroInputError || undefined}
-                    aria-describedby={heroInputError ? 'rustdesk-hero-error' : undefined}
-                    className={`rd-hero-input font-mono-tabular${peerId ? ' has-value' : ''}`}
-                    value={formattedIdValue}
-                    autoComplete="off"
-                    spellCheck={false}
-                    placeholder={t(locale, 'remoteIdLabel')}
-                    onChange={(e) => handleIdInputChange(e.target.value)}
-                  />
-                </div>
-
-                {peerId && (
-                  <button
-                    type="button"
-                    className="rd-hero-action-btn"
-                    aria-label={t(locale, 'clearInput')}
-                    data-tooltip={t(locale, 'clearInput')}
-                    data-tooltip-pos="top"
-                    onClick={() => {
-                      setHeroInputError(false);
-                      onChangeField('peerId', '');
-                    }}
-                  >
-                    <X size={20} />
-                  </button>
-                )}
-
-                <button
-                  type="submit"
-                  className="rd-hero-action-btn primary-arrow"
-                  data-testid="connect"
-                  aria-label={t(locale, 'connect')}
-                  data-tooltip={t(locale, 'connect')}
-                  data-tooltip-pos="top-end"
-                  disabled={isConnecting}
-                >
-                  <ArrowRight size={24} />
-                </button>
-              </div>
-            ) : (
-              <div
-                className={`rd-hero-box direct${heroInputError ? ' has-error' : ''}${
-                  heroErrorShake ? ' rd-shake' : ''
-                }`}
-                data-testid="hero-input-box"
-                onAnimationEnd={() => setHeroErrorShake(false)}
-              >
-                <div className="flex-1 min-w-0 flex items-center gap-2">
-                  <input
-                    ref={hostInputRef}
-                    type="text"
-                    data-testid="host"
-                    aria-invalid={heroInputError || undefined}
-                    aria-describedby={heroInputError ? 'rustdesk-hero-error' : undefined}
-                    className="rd-hero-input direct host-field font-mono-tabular"
-                    value={host}
-                    autoComplete="off"
-                    spellCheck={false}
-                    placeholder={t(locale, 'directTargetPlaceholder')}
-                    onChange={(e) => {
-                      setHeroInputError(false);
-                      onChangeField('host', e.target.value);
-                    }}
-                  />
-                  <span className="text-[var(--ink-soft)] font-mono-tabular shrink-0">:</span>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    data-testid="port"
-                    className="rd-hero-input direct port-field font-mono-tabular"
-                    value={port}
-                    aria-label={t(locale, 'directPortLabel')}
-                    placeholder="21118"
-                    onChange={(e) => onChangeField('port', e.target.value)}
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="rd-hero-action-btn primary-arrow"
-                  data-testid="connect"
-                  aria-label={t(locale, 'connect')}
-                  data-tooltip={t(locale, 'connect')}
-                  data-tooltip-pos="top-end"
-                  disabled={isConnecting}
-                >
-                  <ArrowRight size={24} />
-                </button>
-              </div>
-            )}
-
-            {heroInputError && (
-              <p
-                id="rustdesk-hero-error"
-                className="rd-hero-err-text"
-                data-testid="hero-input-error"
-                role="alert"
-              >
-                {activeMode === 'id' ? t(locale, 'errMissingPeerId') : t(locale, 'errMissingHost')}
-              </p>
-            )}
-          </form>
-
-          {(isConnecting || isLive) && (
-            <div className="mt-2.5 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className={`rd-status ${phase}`} data-testid="status">
-                  {isConnecting && <Loader2 size={12} className="animate-spin mr-1" />}
-                  {statusLabel(locale, phase)}
-                </span>
-                <p className="m-0 text-xs text-[var(--ink-soft)] truncate" data-testid="detail">
-                  {detail}
-                </p>
-              </div>
-              <button
-                type="button"
-                className={isLive ? 'rd-btn danger' : 'rd-btn'}
-                style={{ minHeight: 32, padding: '4px 10px', fontSize: 12 }}
-                data-testid={isLive ? 'disconnect' : 'cancel-connect'}
-                onClick={onDisconnect}
-              >
-                {isLive ? t(locale, 'disconnect') : t(locale, 'cancel')}
-              </button>
-            </div>
-          )}
-
-          {!isLive && !isConnecting && (phase === 'error' || decoderError) && (
-            <ErrorBanner
-              locale={locale}
-              rawError={decoderError || detail}
-              onDismiss={onDismissError}
-              onOpenNetworkSettings={
-                activeMode === 'id' ? () => openNetworkServerSetup(false) : undefined
-              }
-              onRetryPassword={() => {
-                setPendingMode(activeMode);
-                setPromptGatewayToken(gatewayToken);
-                setPasswordPromptOpen(true);
-              }}
-            />
-          )}
-        </section>
+        <ConnectForm model={connectForm} />
 
         <div className="rd-home-content">
           {/* Sub-Tab Bar */}
@@ -781,7 +377,7 @@ export function RustDeskShell({
               listTab={listTab}
               searchQuery={searchQuery}
               layout={effectiveLayout}
-              onSelect={handleDeviceRowTap}
+              onSelect={connectForm.handleDeviceRowTap}
               onToggleFavorite={onToggleFavorite}
               onRemove={onRemoveDevice}
             />
@@ -789,28 +385,7 @@ export function RustDeskShell({
         </div>
       </main>
 
-      {passwordPromptOpen && (
-        <PasswordModal
-          locale={locale}
-          targetLabel={activeTargetLabel}
-          password={password}
-          rememberPassword={rememberPassword}
-          hasSavedPassword={Boolean(getSavedPassword(savedPasswords, pendingDeviceKey))}
-          gatewayToken={promptGatewayToken}
-          authRequired={gatewayTokenNeedsInput}
-          isConnecting={isConnecting}
-          onChangePassword={(val) => onChangeField('password', val)}
-          onChangeRememberPassword={setRememberPassword}
-          onClearSavedPassword={() => {
-            onClearSavedPassword(pendingDeviceKey);
-            setRememberPassword(false);
-            onChangeField('password', '');
-          }}
-          onChangeGatewayToken={setPromptGatewayToken}
-          onSubmit={handleConfirmPasswordConnect}
-          onClose={() => setPasswordPromptOpen(false)}
-        />
-      )}
+      <ConnectPasswordPrompt model={connectForm} />
     </div>
   );
 }
