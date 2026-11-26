@@ -7,6 +7,7 @@ import type { Duplex } from 'node:stream';
 import { WebSocketServer } from 'ws';
 import { GatewayAdmissionLimiter } from './server/admission.ts';
 import { getRuntimeConfig } from './server/config.ts';
+import { createGatewayShutdown, installApiNotFound, serveProductionFiles } from './server/httpHosting.ts';
 import { serveWebRtcSignal } from './server/webrtcSignal.ts';
 import { originAllowed, redactLog } from './server/security.ts';
 import { serveSocket } from './server/session.ts';
@@ -26,6 +27,14 @@ async function startServer() {
   const config = getRuntimeConfig();
   const { host, port, gatewayToken, webRtcEnabled, requireOrigin, clientAddress, requestProtocol } = config;
   const app = express();
+  const httpServer = http.createServer(app);
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 4 * 1024 * 1024 });
+  const admissionLimiter = new GatewayAdmissionLimiter();
+  let closeFrontend: (() => Promise<void>) | undefined;
+  const shutdown = createGatewayShutdown(httpServer, wss, {
+    closeFrontend: () => closeFrontend?.() ?? Promise.resolve(),
+    onError: error => console.error(redactLog(`Shutdown error: ${error instanceof Error ? error.message : String(error)}`)),
+  });
 
   app.disable('x-powered-by');
   app.use((_req, res, next) => {
@@ -37,6 +46,12 @@ async function startServer() {
       'Content-Security-Policy',
       "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws: wss:; media-src 'self' blob:; worker-src 'self' blob:; frame-ancestors 'self'",
     );
+    if (shutdown.stopping) {
+      res.setHeader('Connection', 'close');
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(503).json({ error: 'Gateway shutting down' });
+      return;
+    }
     next();
   });
 
@@ -59,10 +74,6 @@ async function startServer() {
     });
   });
 
-  const httpServer = http.createServer(app);
-  const wss = new WebSocketServer({ noServer: true, maxPayload: 4 * 1024 * 1024 });
-  const admissionLimiter = new GatewayAdmissionLimiter();
-
   wss.on('error', (err) => {
     const message = err instanceof Error ? err.message : String(err);
     console.error(redactLog(`WebSocketServer error: ${message}`));
@@ -77,6 +88,10 @@ async function startServer() {
   });
 
   httpServer.on('upgrade', (request, socket, head) => {
+    if (shutdown.stopping) {
+      rejectUpgrade(socket, '503 Service Unavailable');
+      return;
+    }
     let pathname = '';
     try {
       const reqUrl = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
@@ -111,26 +126,31 @@ async function startServer() {
     }
     socket.once('close', admission.release);
     wss.handleUpgrade(request, socket, head, (ws) => {
-      if (pathname === '/ws/webrtc') serveWebRtcSignal(ws, gatewayToken, admission);
-      else serveSocket(ws, { token: gatewayToken, admission });
+      const cleanup = pathname === '/ws/webrtc' ? serveWebRtcSignal(ws, gatewayToken, admission)
+        : serveSocket(ws, { token: gatewayToken, admission });
+      shutdown.track(ws, cleanup);
     });
   });
 
+  installApiNotFound(app);
   if (!config.production) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true, hmr: false },
       appType: 'spa',
     });
+    closeFrontend = () => vite.close();
     app.use(vite.middlewares);
   } else {
     const distDir = path.resolve(__dirname, 'dist');
-    app.use(express.static(distDir));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.join(distDir, 'index.html'));
-    });
+    serveProductionFiles(app, distDir);
   }
 
+  const stop = () => {
+    void shutdown.close().then(() => process.exit(0));
+  };
+  process.on('SIGTERM', stop);
+  process.on('SIGINT', stop);
   httpServer.listen(port, host, () => {
     console.log(redactLog(`RustDesk Web Gateway listening on http://${host}:${port}`));
   });

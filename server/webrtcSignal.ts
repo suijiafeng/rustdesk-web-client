@@ -8,7 +8,7 @@ import { decodeRendezvous, encodeRendezvous } from './protos.ts';
 import { decodeEndpoint, MAX_CANDIDATES, sdpFingerprint, validateCandidate } from '../shared/webrtc.ts';
 
 // This endpoint only forwards signaling. Passwords, media and control stay in the browser.
-export function serveWebRtcSignal(ws: WebSocket, token: string, admission?: GatewayAdmission): void {
+export function serveWebRtcSignal(ws: WebSocket, token: string, admission?: GatewayAdmission): () => void {
   let state: 'waiting' | 'dialing' | 'ready' | 'closed' = 'waiting';
   const connection = new AbortController();
   let stream: EncryptedFramedStream | null = null;
@@ -114,4 +114,5 @@ export function serveWebRtcSignal(ws: WebSocket, token: string, admission?: Gate
       retries.add(retry);
     })().catch(fail);
   });
+  return close;
 }

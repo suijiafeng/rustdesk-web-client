@@ -7,7 +7,7 @@ import { createVideoFrameHandler } from './videoFrames.ts';
 
 export type { GatewayConfig } from './sessionState.ts';
 
-export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
+export function serveSocket(ws: WebSocket, config: GatewayConfig): () => void {
   const state: SessionState = {
     phase: 'awaiting-connect',
     resolutionDisplay: 0,
@@ -106,4 +106,5 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
   ws.on('error', () => {
     cleanup(false);
   });
+  return () => cleanup(false);
 }
