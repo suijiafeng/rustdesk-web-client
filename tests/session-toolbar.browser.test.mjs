@@ -4,8 +4,8 @@
 // node --test --test-timeout=30000 tests/session-toolbar.browser.test.mjs
 import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
-const debuggerUrl = 'http://127.0.0.1:9224';
-const appUrl = 'http://127.0.0.1:4175/';
+const debuggerUrl = process.env.CDP_URL || 'http://127.0.0.1:9224';
+const appUrl = process.env.APP_URL || 'http://127.0.0.1:4175/';
 const newTab = await fetch(`${debuggerUrl}/json/new?about:blank`, { method: 'PUT' });
 assert.ok(newTab.ok, 'Chrome must allow creating a test tab');
 const tab = await newTab.json();

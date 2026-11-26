@@ -37,7 +37,7 @@ export async function runBrowserFixture(fixturePath, {
   await once(server, 'listening');
   const profile = await mkdtemp(path.join(os.tmpdir(), 'rustdesk-csp-'));
   const chrome = spawn(chromePath, ['--headless', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
-    '--remote-debugging-port=0', `--user-data-dir=${profile}`, ...chromeArgs, 'about:blank'], { stdio: 'ignore' });
+    ...(process.env.CI ? ['--no-sandbox'] : []), '--remote-debugging-port=0', `--user-data-dir=${profile}`, ...chromeArgs, 'about:blank'], { stdio: 'ignore' });
   let launchError;
   chrome.on('error', error => { launchError = error; });
   let socket;
