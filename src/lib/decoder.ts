@@ -147,6 +147,8 @@ export class RemoteDecoder {
   private ctx: CanvasRenderingContext2D | null = null;
   private configured = false;
   private waitKey = true;
+  private recoveringFromBacklog = false;
+  private generation = 0;
   private waitingSinceMs: number | null = null;
   private lastRefreshMs = 0;
   private lastTimestampUs = 0;
@@ -201,12 +203,22 @@ export class RemoteDecoder {
     if (!this.configured || !this.decoder || this.decoder.state !== 'configured') return;
 
     const queueSize = this.decoder.decodeQueueSize;
-    if (queueSize > MAX_DECODE_QUEUE_SIZE && !packet.key) {
-      // Shed delta frames when decoder falls far behind and ask host for a fresh keyframe
-      this.droppedCount += 1;
-      this.markWaitingForKey(nowMs);
-      this.maybeRequestRefresh(nowMs, queueSize);
-      return;
+    if (queueSize > MAX_DECODE_QUEUE_SIZE) {
+      this.recoveringFromBacklog = true;
+      if (!packet.key) {
+        this.droppedCount += 1;
+        this.markWaitingForKey(nowMs);
+        this.maybeRequestRefresh(nowMs, queueSize);
+        return;
+      }
+    }
+
+    if (packet.key && this.recoveringFromBacklog) {
+      // The newest independent frame replaces stale queued work. Merely skipping
+      // delta frames leaves the old decoder draining seconds of obsolete video,
+      // and allowing every keyframe through makes the queue unbounded.
+      this.droppedCount += queueSize;
+      if (!this.configure(packet.codecName, packet.width, packet.height)) return;
     }
 
     if (this.waitKey && !packet.key) {
@@ -267,10 +279,16 @@ export class RemoteDecoder {
 
     this.closeDecoderOnly();
 
+    const generation = this.generation;
     try {
       this.decoder = new VideoDecoder({
-        output: (frame) => this.enqueue(frame),
-        error: (err) => this.fail(err.message || 'VideoDecoder error'),
+        output: (frame) => {
+          if (generation !== this.generation) { frame.close(); return; }
+          this.enqueue(frame);
+        },
+        error: (err) => {
+          if (generation === this.generation) this.fail(err.message || 'VideoDecoder error');
+        },
       });
       const cfg: VideoDecoderConfig = {
         codec: codecStr,
@@ -282,6 +300,7 @@ export class RemoteDecoder {
       }
       this.decoder.configure(cfg);
       this.configured = true;
+      this.recoveringFromBacklog = false;
       this.codec = codecName;
       this.width = width;
       this.height = height;
@@ -317,7 +336,9 @@ export class RemoteDecoder {
     }
     this.pending = frame;
     if (this.rafId === null) {
+      const generation = this.generation;
       this.rafId = requestAnimationFrame(() => {
+        if (generation !== this.generation) return;
         this.rafId = null;
         this.paint();
       });
@@ -360,6 +381,16 @@ export class RemoteDecoder {
   }
 
   private closeDecoderOnly(): void {
+    this.generation++;
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
+    if (this.pending) {
+      this.pending.close();
+      this.pending = null;
+      this.droppedCount++;
+    }
     if (this.decoder) {
       try {
         if (this.decoder.state !== 'closed') {
@@ -373,15 +404,8 @@ export class RemoteDecoder {
   }
 
   close(): void {
-    if (this.rafId !== null) {
-      cancelAnimationFrame(this.rafId);
-      this.rafId = null;
-    }
-    if (this.pending) {
-      this.pending.close();
-      this.pending = null;
-    }
     this.closeDecoderOnly();
+    this.recoveringFromBacklog = false;
     this.ctx = null;
     this.configured = false;
     this.waitKey = true;
