@@ -13,22 +13,18 @@ export function GeneralSettings({
   locale,
   localePreference,
   theme,
-  diagnosticsOpen,
   touchMode,
   onChangeTheme,
   onChangeLocale,
-  onToggleDiagnostics,
   onToggleTouchMode,
 }: Pick<
   SettingsViewProps,
   | 'locale'
   | 'localePreference'
   | 'theme'
-  | 'diagnosticsOpen'
   | 'touchMode'
   | 'onChangeTheme'
   | 'onChangeLocale'
-  | 'onToggleDiagnostics'
   | 'onToggleTouchMode'
 >) {
   return (
@@ -49,16 +45,6 @@ export function GeneralSettings({
       <section className="rd-settings-card">
         <h2 className="rd-settings-card-title">{t(locale, 'otherSectionTitle')}</h2>
         <div className="flex flex-col gap-1">
-          <label className="settings-option-row">
-            <input
-              type="checkbox" role="switch" className="ui-switch"
-              data-testid="settings-toggle-diagnostics"
-              checked={diagnosticsOpen}
-              onChange={onToggleDiagnostics}
-            />
-            <span>{t(locale, 'diagnosticsOverlayLabel')}</span>
-          </label>
-
           <label className="settings-option-row">
             <input
               type="checkbox" role="switch" className="ui-switch"

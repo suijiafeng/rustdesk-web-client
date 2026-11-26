@@ -71,11 +71,9 @@ export function SettingsView(props: SettingsViewProps) {
               locale={props.locale}
               localePreference={props.localePreference}
               theme={props.theme}
-              diagnosticsOpen={props.diagnosticsOpen}
               touchMode={props.touchMode}
               onChangeTheme={props.onChangeTheme}
               onChangeLocale={props.onChangeLocale}
-              onToggleDiagnostics={props.onToggleDiagnostics}
               onToggleTouchMode={props.onToggleTouchMode}
             />
           )}

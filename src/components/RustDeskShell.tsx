@@ -124,7 +124,6 @@ export function RustDeskShell({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general');
   const [serverDialogOpen, setServerDialogOpen] = useState(false);
-  const [idServerError, setIdServerError] = useState(false);
   const [connectAfterServerSetup, setConnectAfterServerSetup] = useState(false);
 
   const [listTab, setListTab] = useState<ListTab>('recent');
@@ -149,9 +148,8 @@ export function RustDeskShell({
     });
   }, [devices, listTab, searchQuery]);
 
-  const openNetworkServerSetup = (highlightIdServer = false) => {
-    setConnectAfterServerSetup(highlightIdServer);
-    setIdServerError(highlightIdServer);
+  const openNetworkServerSetup = (continueConnection = false) => {
+    setConnectAfterServerSetup(continueConnection);
     setServerDialogOpen(true);
   };
 
@@ -185,7 +183,6 @@ export function RustDeskShell({
 
   const closeServerDialog = () => {
     setServerDialogOpen(false);
-    setIdServerError(false);
     setConnectAfterServerSetup(false);
     connectForm.cancelServerSetup();
   };
@@ -196,15 +193,12 @@ export function RustDeskShell({
       relayServer={relayServer}
       serverKey={serverKey}
       forceRelay={forceRelay}
-      idServerError={idServerError}
       connectionSetup={connectAfterServerSetup}
       onChangeField={onChangeField}
       onChangeForceRelay={onChangeForceRelay}
-      onClearError={() => setIdServerError(false)}
       onClose={closeServerDialog}
       onSave={settings => {
         setServerDialogOpen(false);
-        setIdServerError(false);
         setConnectAfterServerSetup(false);
         if (connectAfterServerSetup) connectForm.continueAfterServerSetup(settings);
       }}

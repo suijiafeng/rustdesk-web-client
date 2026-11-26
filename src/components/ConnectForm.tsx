@@ -33,7 +33,7 @@ interface ConnectFormProps {
   onConnect: (req?: ConnectRequest) => void;
   onDisconnect: () => void;
   onDismissError: () => void;
-  openNetworkServerSetup: (highlightIdServer?: boolean) => void;
+  openNetworkServerSetup: (continueConnection?: boolean) => void;
 }
 
 // Keep this hook in the shell so opening settings preserves the connection form state.

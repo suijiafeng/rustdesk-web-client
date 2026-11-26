@@ -105,6 +105,7 @@ window.WebSocket = class extends EventTarget {
 try {
   await cdp('Page.enable');
   await cdp('Runtime.enable');
+  await cdp('Emulation.setFocusEmulationEnabled', { enabled: true });
   await cdp('Page.addScriptToEvaluateOnNewDocument', { source: mock });
   await cdp('Emulation.setDeviceMetricsOverride', { width: 1280, height: 850, deviceScaleFactor: 1, mobile: false });
   await cdp('Page.navigate', { url: appUrl });
@@ -113,6 +114,14 @@ try {
   assert.equal(await evaluate(select('settings-sidebar')), null, 'Missing setup must stay in the connection form');
   assert.equal(await evaluate(select('peer-id') + '.value.replace(/\\s/g, "")'), '123456789');
   assert.equal(await evaluate(requests + '.length'), 0);
+  assert.equal(await evaluate(select('id-server') + '.getAttribute("aria-invalid")'), null,
+    'First-time setup must explain what is needed without marking untouched input invalid');
+  assert.equal(await evaluate(serverDialog + '.querySelector("[role=alert]")'), null);
+  await evaluate(select('id-server') + '.focus()');
+  await until(`document.activeElement === ${select('id-server')}`);
+  await evaluate(select('relay-server') + '.focus()');
+  await until(select('id-server') + '.getAttribute("aria-invalid") === "true"');
+  assert.match(await evaluate(serverDialog + '.querySelector("[role=alert]").textContent'), /ID server|ID 服务器/);
   await checkFocusTrap(serverDialog, 'id-server-save');
   await fill('id-server', 'discarded.example.test:21116');
   await fill('server-key', 'discarded-key');
@@ -128,7 +137,14 @@ try {
   await click('connect');
   await until(serverDialog);
   assert.equal(await evaluate(select('id-server') + '.value'), '');
+  assert.equal(await evaluate(select('id-server') + '.getAttribute("aria-invalid")'), null,
+    'Reopening setup must reset the touched state');
+  await evaluate(serverDialog + '.requestSubmit()');
+  await until(select('id-server') + '.getAttribute("aria-invalid") === "true"');
+  assert.equal(await evaluate(`document.activeElement === ${select('id-server')}`), true);
+  assert.equal(await evaluate(requests + '.length'), 0);
   await fill('id-server', '  new-id.example.test:21116  ');
+  await until(select('id-server') + '.getAttribute("aria-invalid") === null');
   await fill('relay-server', 'new-relay.example.test:21117');
   await fill('server-key', 'not-a-public-key');
   await click('id-server-save');
@@ -190,6 +206,12 @@ try {
   assert.ok((await evaluate(select('error-technical-details') + '.textContent')).includes(rawDiagnostic));
   console.log('Unknown host errors: localized guidance is primary and raw details remain collapsed until expanded.');
   await click('mobile-open-settings');
+  await click('settings-tab-general');
+  assert.equal(await evaluate(select('settings-toggle-diagnostics')), null,
+    'Connection details should not have a duplicate switch in General settings');
+  await click('settings-tab-display');
+  assert.ok(await evaluate(`Boolean(${select('settings-opt-quality-monitor')})`),
+    'Display settings must retain the connection-details switch');
   await click('settings-tab-network');
   await click('open-id-server-dialog');
   await until(serverDialog);

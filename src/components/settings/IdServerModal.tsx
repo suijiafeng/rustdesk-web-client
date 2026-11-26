@@ -15,11 +15,9 @@ export interface ServerSettings {
 
 interface IdServerModalProps extends ServerSettings {
   locale: Locale;
-  idServerError: boolean;
   connectionSetup?: boolean;
   onChangeField: (field: ServerField, value: string) => void;
   onChangeForceRelay: (checked: boolean) => void;
-  onClearError: () => void;
   onClose: () => void;
   onSave?: (settings: ServerSettings) => void;
 }
@@ -30,16 +28,15 @@ export function IdServerModal({
   relayServer,
   serverKey,
   forceRelay,
-  idServerError,
   connectionSetup = false,
   onChangeField,
   onChangeForceRelay,
-  onClearError,
   onClose,
   onSave,
 }: IdServerModalProps) {
   const [draft, setDraft] = useState<ServerSettings>({ idServer, relayServer, serverKey, forceRelay });
   const [submitted, setSubmitted] = useState(false);
+  const [idTouched, setIdTouched] = useState(false);
   const [keyTouched, setKeyTouched] = useState(false);
   const idInput = useRef<HTMLInputElement>(null);
   const keyInput = useRef<HTMLInputElement>(null);
@@ -47,7 +44,7 @@ export function IdServerModal({
   const dialogRef = useDialogFocus(onClose);
   const keyInvalid = Boolean(draft.serverKey.trim()) && !isValidServerPublicKey(draft.serverKey);
   const showKeyError = (submitted || keyTouched) && keyInvalid;
-  const showIdError = idServerError || (submitted && connectionSetup && !draft.idServer.trim());
+  const showIdError = connectionSetup && (submitted || idTouched) && !draft.idServer.trim();
 
   return (
     <div
@@ -87,7 +84,6 @@ export function IdServerModal({
           onChangeField('relayServer', settings.relayServer);
           onChangeField('serverKey', settings.serverKey);
           onChangeForceRelay(settings.forceRelay);
-          onClearError();
           if (onSave) onSave(settings);
           else onClose();
         }}
@@ -126,10 +122,8 @@ export function IdServerModal({
               autoComplete="off"
               spellCheck={false}
               placeholder="hbbs.example.com:21116"
-              onChange={(e) => {
-                onClearError();
-                setDraft(previous => ({ ...previous, idServer: e.target.value }));
-              }}
+              onBlur={() => setIdTouched(true)}
+              onChange={(e) => setDraft(previous => ({ ...previous, idServer: e.target.value }))}
             />
             {showIdError && <span id={`${dialogId}-server-error`} role="alert" className="text-[var(--bad)]">
               {t(locale, 'idServerRequired')}
