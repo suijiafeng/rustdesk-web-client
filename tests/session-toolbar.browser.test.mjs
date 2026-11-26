@@ -270,9 +270,9 @@ try {
   const systemKeyboardTop = await evaluate(toolbarTop);
   const functionRow = select('soft-function-row');
   const operationRow = select('soft-operation-row');
-  assert.equal(await evaluate(`${operationRow}.getBoundingClientRect().top - ${functionRow}.getBoundingClientRect().bottom`), 4);
-  assert.equal(await css(functionRow, 'backgroundColor'), 'rgb(34, 37, 43)');
-  await until(`getComputedStyle(${select('soft-mod-ctrl')}).borderColor === 'rgb(100, 117, 138)'`);
+  assert.equal(await evaluate(`${operationRow}.getBoundingClientRect().top - ${functionRow}.getBoundingClientRect().bottom`), 2);
+  assert.equal(await css(functionRow, 'backgroundColor'), 'rgba(0, 0, 0, 0)');
+  await until(`getComputedStyle(${select('soft-mod-ctrl')}).borderColor === 'rgb(64, 69, 76)'`);
   await until(`getComputedStyle(${select('soft-mod-ctrl')}).backgroundColor === 'rgb(48, 53, 60)'`);
   assert.equal(await css(select('soft-shortcut-toggle'), 'backgroundColor'), 'rgb(48, 53, 60)');
   assert.ok(await evaluate(`Math.abs(${operationRow}.getBoundingClientRect().bottom - window.visualViewport.height) < 1`));
@@ -304,13 +304,20 @@ try {
   const keyEvents = "window.sent.filter(event => event.type === 'key')";
   const firstVirtualEvent = await evaluate(keyEvents + '.length');
   const letterA = `${virtualKeyboard}.querySelector('[data-key-feedback="letter-a"]')`;
-  await setSystemTheme('light');
   const ctrl = select('soft-mod-ctrl');
-  assert.equal(await css(functionRow, 'backgroundColor'), 'rgb(242, 245, 249)');
-  assert.equal(await evaluate(`${operationRow}.getBoundingClientRect().top - ${functionRow}.getBoundingClientRect().bottom`), 4);
-  await until(`getComputedStyle(${ctrl}).backgroundColor === 'rgb(252, 253, 255)'`);
-  assert.equal(await css(ctrl, 'color'), 'rgb(23, 44, 73)');
-  assert.equal(await css(select('soft-shortcut-toggle'), 'backgroundColor'), 'rgb(252, 253, 255)');
+  async function assertFunctionKeyStyle() {
+    for (const property of ['backgroundColor', 'borderColor', 'borderRadius', 'color']) {
+      const letterStyle = await css(letterA, property);
+      assert.equal(await css(ctrl, property), letterStyle);
+      assert.equal(await css(select('soft-shortcut-toggle'), property), letterStyle);
+    }
+  }
+  await assertFunctionKeyStyle();
+  await setSystemTheme('light');
+  assert.equal(await css(functionRow, 'backgroundColor'), 'rgba(0, 0, 0, 0)');
+  assert.equal(await evaluate(`${operationRow}.getBoundingClientRect().top - ${functionRow}.getBoundingClientRect().bottom`), 2);
+  await until(`getComputedStyle(${ctrl}).backgroundColor === 'rgb(255, 255, 255)'`);
+  await assertFunctionKeyStyle();
   assert.equal(await css(softbar, 'colorScheme'), 'light');
   assert.equal(await css(operationRow, 'backgroundColor'), 'rgb(242, 245, 249)');
   assert.equal(await css(letterA, 'backgroundColor'), 'rgb(255, 255, 255)');
@@ -328,7 +335,7 @@ try {
   await tapElement(select('soft-mod-ctrl'));
   await until(`getComputedStyle(${ctrl}).backgroundColor === 'rgb(229, 240, 255)'`);
   await setSystemTheme('dark');
-  await until(`getComputedStyle(${ctrl}).borderColor === 'rgb(157, 189, 224)'`);
+  await until(`getComputedStyle(${ctrl}).borderColor === 'rgb(64, 69, 76)'`);
   await until(`getComputedStyle(${ctrl}).backgroundColor === 'rgb(48, 72, 99)'`);
   await tapElement(select('soft-mod-shift'));
   await tapElement(`${virtualKeyboard}.querySelector('[data-key="Enter"]')`);
@@ -376,7 +383,7 @@ try {
   await setSystemTheme('light');
   assert.equal(await css(shortcutSettings, 'backgroundColor'), 'rgb(252, 253, 255)');
   assert.equal(await css(shortcutSettings, 'color'), 'rgb(24, 35, 53)');
-  assert.equal(await css(settingsButton, 'backgroundColor'), 'rgb(229, 240, 255)');
+  await until(`getComputedStyle(${settingsButton}).backgroundColor === 'rgb(229, 240, 255)'`);
   assert.equal(await css(tabOption, 'backgroundColor'), 'rgb(242, 245, 249)');
   assert.equal(await css(escapeOption, 'backgroundColor'), 'rgb(229, 240, 255)');
   assert.equal(await css(escapeOption, 'color'), 'rgb(24, 95, 168)');

@@ -404,7 +404,7 @@ export function SoftKeyboardBar({
     >
       <div className="soft-function-row" data-testid="soft-function-row">
         <div ref={settingsRegion}>
-          <button type="button" className="softbar-icon soft-function-settings" data-testid="soft-shortcut-toggle"
+          <button type="button" className="soft-key-btn soft-function-settings" data-testid="soft-shortcut-toggle"
             aria-label={t(locale, 'softShortcutSettings')} aria-expanded={settingsOpen}
             onClick={() => setSettingsOpen(open => !open)}>
             <ListPlus size={18} aria-hidden="true" />
