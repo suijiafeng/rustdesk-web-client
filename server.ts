@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer } from 'ws';
 import { GatewayAdmissionLimiter } from './server/admission.ts';
+import { createClientAddressResolver } from './server/clientAddress.ts';
 import { serveWebRtcSignal } from './server/webrtcSignal.ts';
 import { originAllowed, productionTokenProblem, redactLog } from './server/security.ts';
 import { serveSocket } from './server/session.ts';
@@ -40,6 +41,7 @@ async function startServer() {
 
   const webRtcEnabled = process.env.RUSTDESK_ENABLE_WEBRTC?.trim().toLowerCase() === 'true';
   const requireOrigin = process.env.RUSTDESK_REQUIRE_ORIGIN?.trim().toLowerCase() === 'true';
+  const clientAddress = createClientAddressResolver(process.env);
 
   app.disable('x-powered-by');
   app.use((_req, res, next) => {
@@ -116,7 +118,7 @@ async function startServer() {
       return;
     }
 
-    const admission = admissionLimiter.acquire(request.socket.remoteAddress ?? '');
+    const admission = admissionLimiter.acquire(clientAddress(request.socket.remoteAddress, request.headers));
     if (!admission) {
       rejectUpgrade(socket, '429 Too Many Requests');
       return;

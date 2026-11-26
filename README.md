@@ -85,6 +85,8 @@ NODE_ENV=production yarn start
 | `RUSTDESK_GATEWAY_TOKEN` | empty | Private token required for public gateways |
 | `RUSTDESK_ALLOWED_ORIGINS` | empty | Comma-separated WebSocket Origin allowlist |
 | `RUSTDESK_REQUIRE_ORIGIN` | `false` | Require an Origin header on WebSocket upgrades |
+| `RUSTDESK_TRUSTED_PROXIES` | empty | Comma-separated proxy IP addresses or CIDR ranges; empty trusts no forwarding headers |
+| `RUSTDESK_CLIENT_IP_HEADER` | `x-forwarded-for` | Client address header: `x-forwarded-for` or explicitly trusted `cf-connecting-ip` |
 | `RUSTDESK_ALLOW_PRIVATE_TARGETS` | `false` in production, `true` in development | Allow TCP connections to LAN and loopback targets |
 | `RUSTDESK_ALLOWED_TARGET_PORTS` | empty | Comma-separated extra TCP ports for ID and relay servers in production |
 | `RUSTDESK_ENABLE_WEBRTC` | `false` | Set to `true` to enable the optional WebRTC signaling path |
@@ -93,7 +95,11 @@ In production, `RUSTDESK_GATEWAY_TOKEN` must be a real value rather than an empt
 
 Production permits TCP ports `21114–21119` for ID and relay servers. Peer connections accept the port entered by the user or the dynamic NAT port supplied by the ID server. Every connection uses the same target IP checks. For a LAN deployment, set `RUSTDESK_ALLOW_PRIVATE_TARGETS=true`. Link-local and known cloud metadata addresses are always blocked.
 
-Both WebSocket endpoints share a limit of 128 connections per gateway instance, with up to 4 simultaneous connections and 24 upgrades per minute per source IP. Repeated token failures trigger a temporary backoff. The gateway uses the TCP peer address, so clients behind the same reverse proxy share its quota.
+Both WebSocket endpoints share a limit of 128 connections per gateway instance, with up to 4 simultaneous connections and 24 upgrades per minute per source IP. Repeated token failures trigger a temporary backoff for that source IP. IPv4-mapped IPv6 and equivalent IPv6 spellings share the same quota key.
+
+By default, the source is the TCP peer address. Behind a reverse proxy, configure only its actual IP addresses or CIDR ranges in `RUSTDESK_TRUSTED_PROXIES` (for example, `127.0.0.1,::1` for a proxy connecting over loopback). The gateway reads `X-Forwarded-For` only from a trusted peer, scans from right to left, skips trusted proxies, and selects the first untrusted address. Invalid inspected addresses or chains with no untrusted address fall back to the TCP peer. The proxy must append the observed client address or overwrite the header; never trust arbitrary client-supplied values. Invalid trust configuration prevents startup.
+
+For Cloudflare, the default `X-Forwarded-For` mode can follow the same trusted chain. To use `CF-Connecting-IP` instead, set `RUSTDESK_CLIENT_IP_HEADER=cf-connecting-ip` and trust only Cloudflare ingress or your own ingress that validates the Cloudflare source and overwrites/removes this header on every request. A generic proxy that merely passes the header through is insufficient. Missing or invalid `CF-Connecting-IP` falls back to the TCP peer, and untrusted peers cannot override their identity with either header.
 
 The health endpoint is available at `/api/health`:
 
