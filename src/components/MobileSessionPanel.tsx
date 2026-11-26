@@ -2,7 +2,7 @@ import React from 'react';
 import { RestartAction } from './RestartAction';
 import { AdaptiveSelect } from './AdaptiveSelect';
 import { ScrollDirectionSelect } from './ScrollDirectionSelect';
-import { ArrowDownUp, Clipboard, Shield, Activity, Eye, Focus, LockKeyhole, LogOut, Monitor, SlidersHorizontal, Volume2, Gauge, Film } from 'lucide-react';
+import { ArrowDownUp, ChevronLeft, CircleHelp, Clipboard, Shield, Activity, Eye, Focus, LockKeyhole, LogOut, Monitor, SlidersHorizontal, Volume2, Gauge, Film } from 'lucide-react';
 import { t, type I18nKey } from '../lib/i18n';
 import { formatConnectionError } from '../lib/errors';
 import type { SessionMenuProps } from './SessionMenu';
@@ -10,7 +10,12 @@ import type { PreferredCodec } from '../lib/displayPrefs';
 import type { QualityLevel } from '../lib/protocol';
 const qualityNames = { low: 'qualityLow', balanced: 'qualityBalanced', best: 'qualityBest' } as const;
 
-export type MobilePanel = 'toolbar' | 'actions' | 'display' | 'gestures';
+export type MobilePanel = 'toolbar' | 'actions' | 'display' | 'more' | 'gestures';
+
+export interface MobileSessionPanelProps extends SessionMenuProps {
+  mobilePanel: MobilePanel;
+  onNavigate: (panel: 'more' | 'gestures') => void;
+}
 
 const gestureRows = {
   touch: [
@@ -32,7 +37,7 @@ const gestureRows = {
   ],
 } as const;
 
-export function MobileSessionPanel(p: SessionMenuProps & { mobilePanel: MobilePanel }) {
+export function MobileSessionPanel(p: MobileSessionPanelProps) {
   const label = (key: I18nKey) => t(p.locale, key);
   React.useEffect(() => {
     if (p.decoderError) p.onNotify(formatConnectionError(p.locale, p.decoderError).message, true);
@@ -40,7 +45,7 @@ export function MobileSessionPanel(p: SessionMenuProps & { mobilePanel: MobilePa
   const notify = (text: string) => p.onNotify(text);
   const resolutionIndex = p.sizes.findIndex(s => s.width === p.stats.width && s.height === p.stats.height);
   const monitors = p.peer?.displays ?? [];
-  const panelName = { actions: 'moreActions', display: 'screens', gestures: 'dockGuide' } as const;
+  const panelName = { actions: 'moreActions', display: 'screens', more: 'dockMore', gestures: 'dockGuide' } as const;
 
   const toggle = (Icon: typeof Eye, text: I18nKey, checked: boolean, change: () => void, disabled = false) => (
     <label className="tool-row"><Icon /><span>{label(text)}</span>
@@ -60,14 +65,24 @@ export function MobileSessionPanel(p: SessionMenuProps & { mobilePanel: MobilePa
           {toggle(Volume2, 'remoteAudio', p.audioEnabled, p.onToggleAudio)}
           {toggle(Clipboard, 'clipSync', p.clipboardSync, p.onToggleClipboardSync, !p.clipboardAllowed)}
         </div>
-        <div className="tool-group">{action(Activity, 'diagTitle', p.onToggleDiagnostics)}</div>
         <div className="tool-group">
           {p.peer?.restartAllowed && <RestartAction locale={p.locale} className="tool-row" onConfirm={p.onRestart} />}
           {action(LockKeyhole, 'lockScreen', () => p.onQuickKey('Lock'))}
           {action(LogOut, 'disconnectRemote', p.onDisconnect, true)}
         </div>
       </>}
+      {p.mobilePanel === 'more' && <div className="tool-group">
+        <button type="button" className="tool-row" data-testid="more-gestures" onClick={() => p.onNavigate('gestures')}>
+          <CircleHelp />{label('dockGuide')}
+        </button>
+        <button type="button" className="tool-row" data-testid="more-connection-details" onClick={p.onToggleDiagnostics}>
+          <Activity />{label('diagTitle')}
+        </button>
+      </div>}
       {p.mobilePanel === 'gestures' && <div className="tool-group">
+        <button type="button" className="tool-row" data-testid="gestures-back" onClick={() => p.onNavigate('more')}>
+          <ChevronLeft />{label('dockMore')}
+        </button>
         <label className="tool-row"><ArrowDownUp /><span>{label('scrollDirection')}</span>
           <ScrollDirectionSelect locale={p.locale} tone="remote" testId="session-reverse-scroll"
             reverse={p.reverseScroll} onChange={p.onReverseScrollChange} />

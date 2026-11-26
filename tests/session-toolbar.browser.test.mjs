@@ -129,6 +129,17 @@ try {
   await tapElement(select('mobile-dock-expand'));
   await tapElement(select('dock-menu'));
   assert.equal(await evaluate(hasPrivacySwitch), false);
+  assert.equal(await evaluate(select('more-connection-details') + ' === null'), true);
+  assert.equal(await evaluate(select('dock-gestures') + ' === null'), true);
+  await tapElement(select('dock-more'));
+  await tapElement(select('more-gestures'));
+  await until(select('gesture-guide'));
+  await tapElement(select('gestures-back'));
+  await tapElement(select('more-connection-details'));
+  await until(select('diagnostic-overlay'));
+  await tapElement(select('diag-close'));
+  await tapElement(select('mobile-dock-expand'));
+  console.log('More: gesture guide, back navigation and connection details verified.');
   await tapElement(select('dock-display'));
   assert.equal(await evaluate(hasPrivacySwitch), true);
   const fps = select('fps-select');
@@ -186,7 +197,8 @@ try {
 
   const reverseScroll = select('session-reverse-scroll');
   await tapElement(select('mobile-dock-expand'));
-  await tapElement(select('dock-gestures'));
+  await tapElement(select('dock-more'));
+  await tapElement(select('more-gestures'));
   const originalPreference = await evaluate(reverseScroll + '.textContent');
   await tapElement(reverseScroll);
   await until(list);
@@ -199,7 +211,7 @@ try {
   const otherPreference = await evaluate(otherDirection + '.textContent');
   await tapElement(otherDirection);
   assert.equal(await evaluate(reverseScroll + '.textContent'), otherPreference);
-  await tapElement(select('dock-gestures'));
+  await tapElement(select('dock-more'));
   const reversedScroll = await threeFingerScroll();
   assert.equal(reversedScroll?.y, -originalScroll.y);
 

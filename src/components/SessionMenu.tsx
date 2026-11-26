@@ -1,7 +1,7 @@
 import { RestartAction } from './RestartAction';
 import { AdaptiveSelect } from './AdaptiveSelect';
 import { ScrollDirectionSelect } from './ScrollDirectionSelect';
-import { MobileSessionPanel, type MobilePanel } from './MobileSessionPanel';
+import { MobileSessionPanel, type MobileSessionPanelProps } from './MobileSessionPanel';
 import React, { useState } from 'react';
 import {
   Activity, ArrowDownUp,
@@ -77,7 +77,7 @@ export interface SessionMenuProps {
   onChangeQuality: (quality: QualityLevel, fps: number, codec?: PreferredCodec) => void;
 }
 
-export function SessionMenu(props: SessionMenuProps & { mobilePanel: MobilePanel }) {
+export function SessionMenu(props: MobileSessionPanelProps) {
   if (props.mobileLayout) return <MobileSessionPanel key={props.mobilePanel} {...props} />;
   return <DesktopSessionMenu {...props} />;
 }

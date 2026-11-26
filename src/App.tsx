@@ -2942,7 +2942,10 @@ export default function App() {
           onToggleKeyboard={toggleSoftKeyboard}
           onCollapse={closeChrome}
           onOpenMenu={panel => {
-            setMobilePanel(menuOpen && panel === mobilePanel ? 'toolbar' : panel);
+            setMobilePanel(current => {
+              const samePanel = panel === current || (panel === 'more' && current === 'gestures');
+              return menuOpen && samePanel ? 'toolbar' : panel;
+            });
             setMenuOpen(true);
           }}
         />
@@ -3014,6 +3017,7 @@ export default function App() {
           onNotify={showSessionTip}
           onRestart={requestRestart}
           mobilePanel={mobilePanel}
+          onNavigate={setMobilePanel}
           locale={locale}
           audioEnabled={audioEnabled}
           onToggleAudio={toggleAudio}
