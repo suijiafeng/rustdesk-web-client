@@ -1,4 +1,4 @@
-import { useKeyboardViewport } from './hooks/useKeyboardViewport';
+import { useKeyboardViewport, type SoftKeyboardMode } from './hooks/useKeyboardViewport';
 import { useClipboardSync } from './hooks/useClipboardSync';
 import { RemoteSocket } from './lib/remoteSocket';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -434,6 +434,7 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [connectDialog, setConnectDialog] = useState(false);
   const [softKeys, setSoftKeys] = useState(false);
+  const [softKeyboardMode, setSoftKeyboardMode] = useState<SoftKeyboardMode>('system');
   const [virtualCursorVisible, setVirtualCursorVisible] = useState(false);
   const [cursorEmbedded, setCursorEmbedded] = useState(false);
   const [cursorShape, setCursorShape] = useState<{
@@ -566,7 +567,7 @@ export default function App() {
   const remoteH = stats.height > 0 ? stats.height : sizeRef.current.height;
   const viewRef = useRef<ViewTransform>({ scale: 1, panX: 0, panY: 0 });
   const keyboardLayout = useKeyboardViewport({
-    enabled: phase === 'live', softKeys, stage: stageRef,
+    enabled: phase === 'live', softKeys, mode: softKeyboardMode, stage: stageRef,
     read: () => ({ mode: viewMode, zoom, view: { ...viewRef.current }, remoteW, remoteH,
       anchor: { ...(lastInputPointRef.current ?? cursorRef.current) } }),
     apply: (size, next) => {
@@ -994,10 +995,18 @@ export default function App() {
     // iOS requires focus during the original tap to open the system keyboard.
     flushSync(() => {
       closeChrome();
+      setSoftKeyboardMode('system');
       setSoftKeys(true);
     });
     softKeyboardInputRef.current?.focus({ preventScroll: true });
   }, [closeChrome, keyboardLayout.begin]);
+
+  const switchSoftKeyboard = (mode: SoftKeyboardMode) => {
+    keyboardLayout.switchMode(mode);
+    if (mode === 'virtual') softKeyboardInputRef.current?.blur();
+    flushSync(() => setSoftKeyboardMode(mode));
+    if (mode === 'system') softKeyboardInputRef.current?.focus({ preventScroll: true });
+  };
 
   const toggleSoftKeyboard = () => {
     if (softKeys) {
@@ -3073,6 +3082,9 @@ export default function App() {
           locale={locale}
           remotePlatform={peer?.platform}
           inputRef={softKeyboardInputRef}
+          mode={softKeyboardMode}
+          reservedSpace={keyboardLayout.reservedSpace}
+          onSwitchMode={switchSoftKeyboard}
           onSendText={sendText}
           onSendControl={(action, control) => send({ type: 'key', action, control })}
           onSendChord={sendChord}

@@ -16,3 +16,13 @@ export function keyboardView(
   return { scale: previous.scale, ...clampPan(width, height, remoteW, remoteH, previous.scale, panX, panY,
     { allowEdgePan: true, edgePadding: DEFAULT_EDGE_PADDING }) };
 }
+
+export function virtualKeyboardHeight(viewportHeight: number, landscape: boolean, systemHeight?: number): number {
+  const fallback = Math.round(viewportHeight * (landscape ? 0.44 : 0.34));
+  const preferred = systemHeight ?? Math.min(320, fallback);
+  return Math.min(Math.max(0, viewportHeight - 88), preferred);
+}
+
+export function keyboardSpaceToReserve(fullHeight: number, visibleHeight: number, keyboardHeight: number): number {
+  return Math.max(0, keyboardHeight - Math.max(0, fullHeight - visibleHeight));
+}

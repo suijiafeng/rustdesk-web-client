@@ -203,6 +203,66 @@ try {
   const reversedScroll = await threeFingerScroll();
   assert.equal(reversedScroll?.y, -originalScroll.y);
 
+  const softbar = select('softbar');
+  const keyboardSwitch = select('soft-keyboard-switch');
+  const virtualKeyboard = select('virtual-keyboard');
+  const toolbarTop = `${softbar}.getBoundingClientRect().top`;
+  await evaluate(`(() => {
+    const viewport = window.visualViewport;
+    let height = viewport.height;
+    Object.defineProperty(viewport, 'height', { get: () => height });
+    window.setTestViewportHeight = next => {
+      height = next;
+      viewport.dispatchEvent(new Event('resize'));
+    };
+  })()`);
+  const fullHeight = await evaluate('window.visualViewport.height');
+  await tapElement(select('dock-keyboard'));
+  await until(`${softbar}?.dataset.keyboardMode === 'system'`);
+  assert.equal(await evaluate('document.activeElement === ' + select('soft-input')), true);
+  await evaluate(`window.setTestViewportHeight(${fullHeight - 260})`);
+  await until(`${select('stage')}.dataset.keyboardAvoiding === 'true'`);
+  const systemKeyboardTop = await evaluate(toolbarTop);
+
+  await tapElement(keyboardSwitch);
+  assert.equal(await evaluate(softbar + '.dataset.keyboardMode'), 'virtual');
+  assert.equal(await evaluate(select('soft-input') + ' === null'), true);
+  assert.equal(await evaluate(toolbarTop), systemKeyboardTop);
+  for (const remaining of [180, 90, 0]) {
+    await evaluate(`window.setTestViewportHeight(${fullHeight - remaining})`);
+    await delay(35);
+    assert.equal(await evaluate(toolbarTop), systemKeyboardTop);
+  }
+  assert.equal(await evaluate(virtualKeyboard + '.getBoundingClientRect().height'), 260);
+
+  const keyEvents = "window.sent.filter(event => event.type === 'key')";
+  const firstVirtualEvent = await evaluate(keyEvents + '.length');
+  await tapElement(`${virtualKeyboard}.querySelector('.virtual-keyboard-row:nth-child(3) button')`);
+  await tapElement(select('soft-mod-ctrl'));
+  await tapElement(select('soft-mod-shift'));
+  await tapElement(`${virtualKeyboard}.querySelector('[data-key="Enter"]')`);
+  const virtualEvents = (await evaluate(keyEvents)).slice(firstVirtualEvent);
+  assert.deepEqual(virtualEvents.map(event => [event.action, event.control ?? event.chr]), [
+    ['down', 'a'], ['up', 'a'],
+    ['down', 'Control'], ['down', 'Shift'], ['down', 'Enter'],
+    ['up', 'Enter'], ['up', 'Shift'], ['up', 'Control'],
+  ]);
+  assert.equal(await evaluate(select('soft-input') + ' === null'), true);
+
+  await tapElement(keyboardSwitch);
+  assert.equal(await evaluate(softbar + '.dataset.keyboardMode'), 'system');
+  assert.equal(await evaluate('document.activeElement === ' + select('soft-input')), true);
+  assert.equal(await evaluate(toolbarTop), systemKeyboardTop);
+  for (const remaining of [90, 180, 260]) {
+    await evaluate(`window.setTestViewportHeight(${fullHeight - remaining})`);
+    await delay(35);
+    assert.equal(await evaluate(toolbarTop), systemKeyboardTop);
+  }
+  await tapElement(select('soft-hide'));
+  await evaluate(`window.setTestViewportHeight(${fullHeight})`);
+  await until(select('mobile-dock-expand'));
+  console.log('Keyboard switching: native focus, virtual key events and stable height during viewport changes verified.');
+
   await cdp('Emulation.setTouchEmulationEnabled', { enabled: false });
   await cdp('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
   await connect();
@@ -248,27 +308,9 @@ try {
   ]);
   console.log('macOS: Command and Option labels and Command+C events verified.');
 
-  const keyEvents = "window.sent.filter(event => event.type === 'key')";
-  await evaluate(select('soft-chord-toggle') + '.click()');
-  assert.equal(await evaluate(select('soft-chord-send') + '.disabled'), true);
-  assert.equal(await evaluate(`${select('soft-key-strip')}.querySelector('button[aria-label="Page Down"]') === null`), true);
-  await evaluate(`${select('soft-key-strip')}.querySelector('button[aria-label="Tab"]').click()`);
-  await evaluate(select('soft-mod-win') + '.click()');
-  await evaluate(select('soft-mod-alt') + '.click()');
-  await evaluate(select('soft-mod-alt') + '.click()');
-  await cdp('Input.insertText', { text: 'x' });
-  assert.match(await evaluate(select('soft-chord-preview') + '.textContent'), /Tab.*Command.*X/);
-  assert.equal(await evaluate(keyEvents + '.length'), keys.length);
-  await evaluate(select('soft-chord-send') + '.click()');
-  const combination = (await evaluate(keyEvents)).slice(keys.length);
-  assert.deepEqual(combination.map(key => [key.action, key.control ?? key.chr]), [
-    ['down', 'Meta'], ['down', 'Tab'], ['down', 'x'],
-    ['up', 'x'], ['up', 'Tab'], ['up', 'Meta'],
-  ]);
-  assert.equal(await evaluate(select('soft-chord-send') + '.disabled'), true);
-  await evaluate(select('soft-chord-toggle') + '.click()');
-  assert.equal(await evaluate(select('soft-chord-preview') + ' === null'), true);
-  console.log('Key combos: selection and removal stay local until sending, then keys are released in reverse order.');
+  assert.equal(await evaluate(select('soft-chord-toggle') + ' === null'), true);
+  assert.ok(await evaluate(`${select('soft-key-strip')}.querySelector('button[aria-label="Page Down"]') !== null`));
+  await evaluate(select('soft-hide') + '.click()');
 } finally {
   socket.close();
   const closed = await fetch(`${debuggerUrl}/json/close/${tab.id}`);
