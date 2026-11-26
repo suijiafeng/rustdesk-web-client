@@ -205,61 +205,6 @@ export function mapPhysicalKeyDown(ev: KeyboardEventLike): MappedKeyMessage | nu
   return null;
 }
 
-/**
- * Maps physical keyup events, using an optional `trackedChr` so releasing Shift before a letter
- * still releases the exact character that was pressed on keydown.
- */
-export function mapPhysicalKeyUp(
-  ev: KeyboardEventLike,
-  trackedChr?: string,
-): MappedKeyMessage | null {
-  if (isImeEvent(ev)) {
-    return null;
-  }
-
-  const control = controlFromKeyOrCode(ev.code, ev.key);
-  const modifiers = activeModifiers(ev);
-
-  if (control) {
-    return {
-      type: 'key',
-      action: 'up',
-      control,
-      modifiers: modifiers.length > 0 ? modifiers : undefined,
-    };
-  }
-
-  if (trackedChr) {
-    return {
-      type: 'key',
-      action: 'up',
-      chr: trackedChr,
-      modifiers: modifiers.length > 0 ? modifiers : undefined,
-    };
-  }
-
-  if (ev.key.length === 1) {
-    if (ev.ctrlKey || ev.altKey || ev.metaKey) {
-      return {
-        type: 'key',
-        action: 'up',
-        chr: ev.key.toLowerCase(),
-        modifiers,
-      };
-    }
-    if (isPrintableAscii(ev.key)) {
-      return {
-        type: 'key',
-        action: 'up',
-        chr: ev.key,
-        modifiers: modifiers.length > 0 ? modifiers : undefined,
-      };
-    }
-  }
-
-  return null;
-}
-
 export interface TextInputDiff {
   backspaces: number;
   insert: string;

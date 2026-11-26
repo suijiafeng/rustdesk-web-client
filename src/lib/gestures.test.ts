@@ -22,7 +22,6 @@ import {
   diffTextInput,
   isImeEvent,
   mapPhysicalKeyDown,
-  mapPhysicalKeyUp,
 } from './keys';
 
 test('fingerUp classifies tap, long-press, drag, and moved cancellation', () => {
@@ -122,21 +121,6 @@ test('physical keyboard forwards Space and Ctrl+C chord with modifiers', () => {
     modifiers: ['Control'],
   });
 
-  const ctrlCUp = mapPhysicalKeyUp({
-    code: 'KeyC',
-    key: 'c',
-    ctrlKey: true,
-    altKey: false,
-    shiftKey: false,
-    metaKey: false,
-    repeat: false,
-  });
-  assert.deepEqual(ctrlCUp, {
-    type: 'key',
-    action: 'up',
-    chr: 'c',
-    modifiers: ['Control'],
-  });
 });
 
 test('buildSoftKeyChord combines latched modifiers with target key or character', () => {
@@ -152,7 +136,7 @@ test('buildSoftKeyChord combines latched modifiers with target key or character'
   assert.deepEqual(buildSoftKeyChord([], { control: 'Escape' }), [{ control: 'Escape' }]);
 });
 
-test('physical keyboard sends native chr down/up for ASCII (including repeat and Shift tracking) and ignores IME composition events', () => {
+test('physical keyboard sends native ASCII keydowns including repeat and ignores IME composition events', () => {
   const downA = mapPhysicalKeyDown({
     code: 'KeyA',
     key: 'a',
@@ -174,21 +158,6 @@ test('physical keyboard sends native chr down/up for ASCII (including repeat and
     repeat: true,
   });
   assert.deepEqual(repeatA, { type: 'key', action: 'down', chr: 'a', modifiers: undefined });
-
-  // Shift released before KeyA: trackedChr ensures uppercase 'A' is released cleanly
-  const upTracked = mapPhysicalKeyUp(
-    {
-      code: 'KeyA',
-      key: 'a',
-      ctrlKey: false,
-      altKey: false,
-      shiftKey: false,
-      metaKey: false,
-      repeat: false,
-    },
-    'A',
-  );
-  assert.deepEqual(upTracked, { type: 'key', action: 'up', chr: 'A', modifiers: undefined });
 
   // Chinese / CJK IME Process or isComposing events must pass through to native IME
   assert.equal(isImeEvent({ isComposing: true, key: 'n' }), true);

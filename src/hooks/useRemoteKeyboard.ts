@@ -5,8 +5,9 @@ import {
   isImeEvent,
   isModifier,
   isPrintableAscii,
+  activeModifiers,
+  controlFromKeyOrCode,
   mapPhysicalKeyDown,
-  mapPhysicalKeyUp,
 } from '../lib/keys';
 import type { ClientMessage } from '../lib/protocol';
 import type { ConnectionPhase } from '../types';
@@ -21,6 +22,11 @@ interface Options {
   showCtrlAltDel: boolean;
 }
 
+type PressedKey = Extract<ReturnType<typeof mapPhysicalKeyDown>, { type: 'key' }>;
+const remoteKeyId = (key: PressedKey) => key.control ? `control:${key.control}` : `chr:${key.chr}`;
+const physicalKeyId = (event: KeyboardEvent) => event.code && event.code !== 'Unidentified'
+  ? event.code : `key:${controlFromKeyOrCode('', event.key) ?? event.key.toLowerCase()}`;
+
 export function useRemoteKeyboard({
   send,
   closeChrome,
@@ -32,7 +38,39 @@ export function useRemoteKeyboard({
 }: Options) {
   const captureComposingRef = useRef(false);
   const lastCompositionEndAtRef = useRef(0);
-  const pressedChrByCodeRef = useRef<Map<string, string>>(new Map());
+  const pressedKeysRef = useRef(new Map<string, PressedKey>());
+
+  const releaseKey = useCallback((physicalId: string, modifiers?: string[]) => {
+    const pressed = pressedKeysRef.current;
+    const key = pressed.get(physicalId);
+    if (!key) return;
+    pressed.delete(physicalId);
+    // Left/right modifiers currently share one protocol control key. Releasing
+    // either physical key must not release the other while it is still held.
+    if (Array.from(pressed.values()).some(other => remoteKeyId(other) === remoteKeyId(key))) return;
+    const remainingModifiers = modifiers ?? Array.from(new Set(
+      Array.from(pressed.values()).flatMap(other => other.control && isModifier(other.control) ? [other.control] : []),
+    ));
+    send({ type: 'key', action: 'up', control: key.control, chr: key.chr,
+      modifiers: remainingModifiers.length ? remainingModifiers : undefined });
+  }, [send]);
+
+  const releasePressedKeys = useCallback(() => {
+    // Release characters before their modifiers, and clear each tracked entry
+    // before sending so a delayed browser keyup cannot emit a second release.
+    const pressed = Array.from(pressedKeysRef.current.entries()).reverse();
+    pressed.sort(([, left], [, right]) => Number(isModifier(left.control ?? '')) - Number(isModifier(right.control ?? '')));
+    for (const [physicalId] of pressed) {
+      try { releaseKey(physicalId); } catch { /* The connection may already be closed. */ }
+    }
+    captureComposingRef.current = false;
+  }, [releaseKey]);
+
+  const inputAllowed = phaseRef.current === 'live' && !displayPrefsRef.current.viewOnly &&
+    !chromeRef.current.menu && !chromeRef.current.dialog;
+  useEffect(() => {
+    if (!inputAllowed) releasePressedKeys();
+  }, [inputAllowed, releasePressedKeys]);
 
   // Forward text efficiently: single ASCII chars as native keystrokes, CJK/multi-char as batched seq
   const sendText = useCallback(
@@ -119,6 +157,9 @@ export function useRemoteKeyboard({
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
+      if (isInsideChromeInput(e.target) || chromeRef.current.menu || chromeRef.current.dialog || displayPrefsRef.current.viewOnly) {
+        releasePressedKeys();
+      }
       if (e.target instanceof Element && e.target.closest('[data-adaptive-select], [data-session-confirm], [data-session-notice]')) return;
       if (chromeRef.current.menu || chromeRef.current.dialog) {
         if (e.key === 'Escape' && phaseRef.current === 'live') {
@@ -158,14 +199,23 @@ export function useRemoteKeyboard({
 
       const mapped = mapPhysicalKeyDown(e);
       if (mapped) {
-        if (mapped.type === 'key' && mapped.chr && e.code) {
-          pressedChrByCodeRef.current.set(e.code, mapped.chr);
+        if (mapped.type === 'key') {
+          const id = physicalKeyId(e);
+          const previous = pressedKeysRef.current.get(id);
+          // Auto-repeat can change 'A' into 'a' when Shift is released first.
+          if (previous && remoteKeyId(previous) !== remoteKeyId(mapped)) releaseKey(id, activeModifiers(e));
+          send(mapped);
+          pressedKeysRef.current.set(id, mapped);
+        } else {
+          send(mapped);
         }
-        send(mapped);
       }
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
+      // A previously sent key must be released even if focus moved into local
+      // chrome, view-only was enabled, or an IME composition has since started.
+      releaseKey(physicalKeyId(e), activeModifiers(e));
       if (
         !shouldIsolateKeyboardEvent({
           phase: phaseRef.current,
@@ -187,35 +237,29 @@ export function useRemoteKeyboard({
       // Prevent Alt/Meta keyup from focusing browser chrome menus
       e.preventDefault();
       e.stopPropagation();
-
-      if (displayPrefsRef.current.viewOnly) {
-        return;
-      }
-
-      const trackedChr = e.code ? pressedChrByCodeRef.current.get(e.code) : undefined;
-      if (e.code) {
-        pressedChrByCodeRef.current.delete(e.code);
-      }
-      const mapped = mapPhysicalKeyUp(e, trackedChr);
-      if (mapped && mapped.type === 'key') {
-        send(mapped);
-      }
     };
 
-    const onWindowBlur = () => {
-      captureComposingRef.current = false;
-      pressedChrByCodeRef.current.clear();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') releasePressedKeys();
+    };
+    const onFocusIn = (event: FocusEvent) => {
+      if (isInsideChromeInput(event.target)) releasePressedKeys();
     };
 
     window.addEventListener('keydown', onKeyDown, true);
     window.addEventListener('keyup', onKeyUp, true);
-    window.addEventListener('blur', onWindowBlur);
+    window.addEventListener('blur', releasePressedKeys);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    document.addEventListener('focusin', onFocusIn);
     return () => {
       window.removeEventListener('keydown', onKeyDown, true);
       window.removeEventListener('keyup', onKeyUp, true);
-      window.removeEventListener('blur', onWindowBlur);
+      window.removeEventListener('blur', releasePressedKeys);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      document.removeEventListener('focusin', onFocusIn);
+      releasePressedKeys();
     };
-  }, [closeChrome, send]);
+  }, [closeChrome, send, releaseKey, releasePressedKeys]);
 
   return {
     captureComposingRef,
