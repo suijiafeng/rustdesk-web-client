@@ -67,10 +67,6 @@ async function passwordEncryptionKey(): Promise<CryptoKey> {
   });
 }
 
-function forgetTabPasswords() {
-  try { sessionStorage.removeItem(SESSION_KEY); } catch { /* Browser storage unavailable. */ }
-}
-
 function bytesFromBase64(value: string) {
   return Uint8Array.from(atob(value), char => char.charCodeAt(0));
 }
@@ -83,37 +79,64 @@ async function decryptCredential(stored: string, key: CryptoKey, context?: strin
   return JSON.parse(new TextDecoder().decode(plain));
 }
 
-export async function restoreDevicePasswords(): Promise<SavedPasswordMap> {
+export interface RestoredDevicePasswords {
+  passwords: SavedPasswordMap;
+  hasFailures: boolean;
+}
+
+export async function restoreDevicePasswords(): Promise<RestoredDevicePasswords> {
   const storageKeys = Object.keys(window.localStorage).filter(key => key.startsWith(PASSWORD_STORAGE_PREFIX));
   let legacy: string | null = null;
   try { legacy = window.sessionStorage.getItem(SESSION_KEY); } catch { /* Session storage may be disabled. */ }
-  if (!storageKeys.length && !legacy) return {};
+  const passwords: SavedPasswordMap = Object.create(null);
+  let hasFailures = false;
+  if (!storageKeys.length && !legacy) return { passwords, hasFailures };
 
   const key = await passwordEncryptionKey();
-  const passwords: SavedPasswordMap = Object.create(null);
   for (const storageKey of storageKeys) {
-    const deviceKey = storageKey.slice(PASSWORD_STORAGE_PREFIX.length);
-    const stored = window.localStorage.getItem(storageKey);
-    if (!stored) continue;
-    const password = await decryptCredential(stored, key, deviceKey);
-    if (typeof password !== 'string') throw new Error('Invalid saved password');
-    passwords[deviceKey] = password;
+    try {
+      const deviceKey = storageKey.slice(PASSWORD_STORAGE_PREFIX.length);
+      const stored = window.localStorage.getItem(storageKey);
+      if (stored === null) continue;
+      const password = await decryptCredential(stored, key, deviceKey);
+      if (!deviceKey || typeof password !== 'string') throw new Error('Invalid saved password');
+      passwords[deviceKey] = password;
+    } catch {
+      // A corrupt or unreadable entry must not hide other devices' valid credentials.
+      // Keep the encrypted entry untouched so a transient storage failure is recoverable.
+      hasFailures = true;
+    }
   }
   if (legacy) {
-    const saved = await decryptCredential(legacy, key);
-    if (!saved || Array.isArray(saved) || typeof saved !== 'object') throw new Error('Invalid saved passwords');
-    for (const [deviceKey, password] of Object.entries(saved)) {
-      if (typeof password !== 'string' || !password || passwords[deviceKey]) continue;
-      const storageKey = PASSWORD_STORAGE_PREFIX + deviceKey;
-      await persistDevicePassword(deviceKey, password, () => window.localStorage.getItem(storageKey) === null);
-      const stored = window.localStorage.getItem(storageKey);
-      if (!stored) continue;
-      const migrated = await decryptCredential(stored, key, deviceKey);
-      if (typeof migrated === 'string') passwords[deviceKey] = migrated;
+    try {
+      const saved = await decryptCredential(legacy, key);
+      if (!saved || Array.isArray(saved) || typeof saved !== 'object') throw new Error('Invalid saved passwords');
+      let migrationComplete = true;
+      for (const [deviceKey, password] of Object.entries(saved)) {
+        if (Object.hasOwn(passwords, deviceKey)) continue;
+        try {
+          if (!deviceKey || typeof password !== 'string') throw new Error('Invalid saved password');
+          if (!password) continue;
+          const storageKey = PASSWORD_STORAGE_PREFIX + deviceKey;
+          // Never replace a newer per-device entry with an older session credential.
+          await persistDevicePassword(deviceKey, password, () => window.localStorage.getItem(storageKey) === null);
+          const stored = window.localStorage.getItem(storageKey);
+          if (stored === null) throw new Error('Saved password was not persisted');
+          const migrated = await decryptCredential(stored, key, deviceKey);
+          if (typeof migrated !== 'string') throw new Error('Invalid saved password');
+          passwords[deviceKey] = migrated;
+        } catch {
+          hasFailures = true;
+          migrationComplete = false;
+        }
+      }
+      // Retain the old encrypted container until every entry has a durable replacement.
+      if (migrationComplete) window.sessionStorage.removeItem(SESSION_KEY);
+    } catch {
+      hasFailures = true;
     }
-    forgetTabPasswords();
   }
-  return passwords;
+  return { passwords, hasFailures };
 }
 
 async function encryptCredential(value: string, context: string): Promise<string> {

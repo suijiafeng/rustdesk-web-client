@@ -89,18 +89,21 @@ export function useSavedDevices() {
       const current = ++revision;
       const mutation = passwordMutation.current;
       try {
-        const saved = await restoreDevicePasswords();
+        const { passwords: saved, hasFailures } = await restoreDevicePasswords();
         if (active && current === revision && passwordMutation.current !== mutation) {
           void restore();
           return;
         }
-        if (active && current === revision) setSavedPasswords(previous => {
-          for (const key of passwordWrites.current.keys()) {
-            if (previous[key]) saved[key] = previous[key];
-            else delete saved[key];
-          }
-          return saved;
-        });
+        if (active && current === revision) {
+          if (hasFailures) setPasswordStorageFailed(true);
+          setSavedPasswords(previous => {
+            for (const key of passwordWrites.current.keys()) {
+              if (previous[key]) saved[key] = previous[key];
+              else delete saved[key];
+            }
+            return saved;
+          });
+        }
       } catch {
         if (active && current === revision) setPasswordStorageFailed(true);
       } finally {
