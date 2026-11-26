@@ -467,6 +467,7 @@ export default function App() {
     resolveTargetFps(displayPrefs.qualityPreset, displayPrefs.customFps),
   );
   const [sessionTip, setSessionTip] = useState<{ text: string; error: boolean } | null>(null);
+  const [webRtcFallbackReason, setWebRtcFallbackReason] = useState<string | null>(null);
   const showSessionTip = useCallback((text: string, error = false) => {
     setSessionTip({ text, error });
   }, []);
@@ -1180,6 +1181,7 @@ export default function App() {
   const connectSession = useCallback(
     async (req?: ConnectRequest, retry = false) => {
       const generation = ++connectGeneration.current;
+      setWebRtcFallbackReason(null);
       if (!retry) {
         setRestartState(null);
         reconnectRequest.current = null;
@@ -1361,6 +1363,9 @@ export default function App() {
         }
 
         switch (msg.type) {
+          case 'webrtcFallback':
+            setWebRtcFallbackReason(msg.reason);
+            break;
           case 'status':
             if (msg.state === 'live') {
               reconnectRequest.current = {
@@ -1670,6 +1675,7 @@ export default function App() {
 
   const disconnect = useCallback(() => {
     connectGeneration.current++;
+    setWebRtcFallbackReason(null);
     reconnectRequest.current = null;
     setRestartState(null);
     finishPendingClick();
@@ -1934,14 +1940,14 @@ export default function App() {
       if (!(target instanceof Element)) return false;
       return Boolean(
         target.closest('[data-testid="connection-panel"]') ||
-          target.closest('[data-adaptive-select], [data-session-confirm]') ||
+          target.closest('[data-adaptive-select], [data-session-confirm], [data-session-notice]') ||
           target.closest('[data-testid="session-menu"]') ||
           target.closest('[data-testid="softbar"]'),
       );
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof Element && e.target.closest('[data-adaptive-select], [data-session-confirm]')) return;
+      if (e.target instanceof Element && e.target.closest('[data-adaptive-select], [data-session-confirm], [data-session-notice]')) return;
       if (chromeRef.current.menu || chromeRef.current.dialog) {
         if (e.key === 'Escape' && phaseRef.current === 'live') {
           e.preventDefault();
@@ -2549,7 +2555,7 @@ export default function App() {
           target.closest('[data-testid="session-menu"]') ||
           target.closest('[data-testid="softbar"]') ||
           target.closest('[data-testid="diagnostic-overlay"]') ||
-          target.closest('.remote-tools, .remote-capsule, [data-adaptive-select]'),
+          target.closest('.remote-tools, .remote-capsule, [data-adaptive-select], [data-session-notice]'),
       );
     };
 
@@ -2957,10 +2963,19 @@ export default function App() {
         />
       )}
 
-      {phase === 'live' && (
+      {(phase === 'live' || webRtcFallbackReason !== null) && (
         <div className="session-tip-region" aria-live="polite" aria-atomic="true">
-          {sessionTip && <div className="session-tip" data-testid="session-tip">{sessionTip.text}</div>}
-          {clipboardSync && clipboardAllowed && clipboard.pending && (
+          {webRtcFallbackReason !== null && (
+            <div className="session-tip fallback-tip" data-testid="webrtc-fallback-tip" data-session-notice
+              onPointerDown={e => e.stopPropagation()} onPointerUp={e => e.stopPropagation()}
+              onPointerMove={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
+              <span>{t(locale, 'webRtcFallback')}<br />{webRtcFallbackReason}</span>
+              <button type="button" data-testid="webrtc-fallback-dismiss" aria-label={t(locale, 'close')}
+                onClick={() => setWebRtcFallbackReason(null)}>×</button>
+            </div>
+          )}
+          {phase === 'live' && sessionTip && <div className="session-tip" data-testid="session-tip">{sessionTip.text}</div>}
+          {phase === 'live' && clipboardSync && clipboardAllowed && clipboard.pending && (
             <div className="session-tip clipboard-tip" data-testid="clipboard-tip"
               onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
               <span>{t(locale, clipboard.pending === 'write' ? 'clipRemoteReady' : 'clipLocalReady')}</span>

@@ -2185,8 +2185,8 @@ button:focus-visible {
   box-shadow: 0 2px 8px var(--remote-shadow);
 }
 
-.clipboard-tip { display: flex; align-items: center; gap: 12px; pointer-events: auto; }
-.clipboard-tip button { color: var(--remote-accent); background: none; border: 0; min-height: 32px; padding: 0 4px; white-space: nowrap; }
+.clipboard-tip, .fallback-tip { display: flex; align-items: center; gap: 12px; pointer-events: auto; }
+.clipboard-tip button, .fallback-tip button { color: var(--remote-accent); background: none; border: 0; min-height: 32px; padding: 0 4px; white-space: nowrap; }
 
 .diag-header {
   display: flex;

@@ -69,6 +69,7 @@ export interface GatewayVideoStats {
 }
 
 export type ServerMessage =
+  | { type: 'webrtcFallback'; reason: string }
   | { type: 'permissions'; privacyAllowed: boolean; clipboardAllowed: boolean }
   | { type: 'privacyResult'; enabled?: boolean; failed: boolean }
   | { type: 'restartPermission'; allowed: boolean }

@@ -114,12 +114,17 @@ window.WebSocket = class extends EventTarget {
         this.onmessage?.({ data: JSON.stringify({ type: 'status', state: 'error', detail: 'gateway token required' }) });
         return;
       }
-      for (const reply of [
-        { type: 'peer', platform: new URLSearchParams(location.search).get('platform') ?? 'Windows',
-          hostname: 'Test host', currentDisplay: 0, displays: [], privacyAllowed: true },
-        { type: 'status', state: 'live' },
-        { type: 'resolutions', display: 0, sizes: Array.from({length: 12}, (_, i) => ({width: 800+i*80, height: 600+i*50})) },
-      ]) this.onmessage?.({ data: JSON.stringify(reply) });
+      const connected = () => {
+        for (const reply of [
+          { type: 'peer', platform: new URLSearchParams(location.search).get('platform') ?? 'Windows',
+            hostname: 'Test host', currentDisplay: 0, displays: [], privacyAllowed: true },
+          { type: 'status', state: 'live' },
+          { type: 'resolutions', display: 0, sizes: Array.from({length: 12}, (_, i) => ({width: 800+i*80, height: 600+i*50})) },
+        ]) this.onmessage?.({ data: JSON.stringify(reply) });
+      };
+      if (webRtcTest && new URLSearchParams(location.search).has('holdGateway')) {
+        window.finishGatewayConnect = connected;
+      } else connected();
     }, 10);
   }
   close() { this.readyState = 3; }
@@ -158,6 +163,7 @@ try {
   await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] });
   await connect();
   await until(select('mobile-dock-expand'));
+  assert.equal(await evaluate(select('webrtc-fallback-tip')), null);
   await until("document.documentElement.dataset.theme === 'dark'");
   await tapElement(select('mobile-dock-expand'));
   await tap(100, 360);
@@ -670,28 +676,68 @@ try {
   const directPriorityUrl = new URL(appUrl);
   directPriorityUrl.searchParams.set('webRtcTest', '1');
   directPriorityUrl.searchParams.set('peer', '901234571');
-  async function beginWebRtcTest() {
-    await cdp('Page.navigate', { url: directPriorityUrl.href });
+  directPriorityUrl.searchParams.set('holdGateway', '1');
+  async function submitWebRtcConnection() {
     await until(`window.openedConnections && ${select('connect')}`);
     await evaluate(select('connect') + '.click()');
     await until(select('password-confirm-connect'));
     await evaluate(select('password-confirm-connect') + '.click()');
   }
+  async function beginWebRtcTest() {
+    await cdp('Page.navigate', { url: directPriorityUrl.href });
+    await submitWebRtcConnection();
+  }
+  const fallbackTip = select('webrtc-fallback-tip');
+  const fallbackDismiss = select('webrtc-fallback-dismiss');
   await beginWebRtcTest();
   await until('window.webRtcOffer');
   assert.deepEqual(await evaluate('window.openedConnections'), ['/ws/webrtc']);
   assert.equal(await evaluate("window.sent.some(event => event.type === 'connect')"), false);
+  assert.equal(await evaluate(fallbackTip), null);
   await evaluate('window.rejectWebRtcOffer()');
-  await until(`${select('stage')}.dataset.remoteActive === 'true'`);
+  await until(fallbackTip);
+  await until('window.finishGatewayConnect');
+  assert.match(await evaluate(fallbackTip + '.textContent'), /Incompatible ID server/);
+  assert.match(await evaluate(fallbackTip + '.textContent'), /WebRTC/);
+  assert.equal(await evaluate(`${select('stage')}.dataset.remoteActive`), 'false');
   assert.deepEqual(await evaluate('window.openedConnections'), ['/ws/webrtc', '/ws']);
   assert.equal(await evaluate("window.sent.filter(event => event.type === 'connect').length"), 1);
 
+  await evaluate(select('cancel-connect') + '.click()');
+  await until(fallbackTip + ' === null');
+  await evaluate('window.webRtcOffer = null; window.finishGatewayConnect = null');
+  await submitWebRtcConnection();
+  await until('window.webRtcOffer');
+  assert.equal(await evaluate(fallbackTip), null);
+  await evaluate('window.rejectWebRtcOffer()');
+  await until(fallbackTip);
+  await until('window.finishGatewayConnect');
+  await evaluate('window.finishGatewayConnect()');
+  await until(`${select('stage')}.dataset.remoteActive === 'true'`);
+  assert.match(await evaluate(fallbackTip + '.textContent'), /Incompatible ID server/);
+  const remoteInputMessages = "window.sent.filter(event => ['mouse', 'key', 'text'].includes(event.type))";
+  const inputBeforeDismiss = await evaluate(remoteInputMessages);
+  await tapElement(fallbackDismiss);
+  await until(fallbackTip + ' === null');
+  assert.equal(await evaluate(`${select('stage')}.dataset.remoteActive`), 'true');
+  assert.deepEqual(await evaluate(remoteInputMessages), inputBeforeDismiss);
+
+  await beginWebRtcTest();
+  await until('window.webRtcOffer');
+  await evaluate(select('cancel-connect') + '.click()');
+  await evaluate('window.rejectWebRtcOffer()');
+  await delay(50);
+  assert.equal(await evaluate(fallbackTip), null);
+  assert.deepEqual(await evaluate('window.openedConnections'), ['/ws/webrtc']);
+
+  directPriorityUrl.searchParams.delete('holdGateway');
   directPriorityUrl.searchParams.set('forceRelay', '1');
   await beginWebRtcTest();
   await until(`${select('stage')}.dataset.remoteActive === 'true'`);
   assert.deepEqual(await evaluate('window.openedConnections'), ['/ws']);
   assert.equal(await evaluate("window.sent.find(event => event.type === 'connect').forceRelay"), true);
-  console.log('WebRTC priority: signal first, open the gateway only after fallback, and preserve forced relay.');
+  assert.equal(await evaluate(fallbackTip), null);
+  console.log('WebRTC fallback: show the failure through gateway connection, allow dismissal, clear on retry, and ignore cancelled attempts or forced relay.');
 } finally {
   socket.close();
   const closed = await fetch(`${debuggerUrl}/json/close/${tab.id}`);

@@ -67,7 +67,7 @@ export class RemoteSocket {
         this.session = createNativeSession(conn, selectCodecs(message.codecs),
           value => this.onmessage?.(new MessageEvent('message', { data: value })), () => this.close(), message.codec);
         this.session.start();
-      })().catch(async error => {
+      })().catch(error => {
         if (abort.signal.aborted || this.mode === 'closed') return;
         if (error?.name === 'WebRtcLoginError' || this.mode === 'webrtc') {
           this.onmessage?.(new MessageEvent('message', { data: JSON.stringify({
@@ -76,7 +76,11 @@ export class RemoteSocket {
           this.close();
           return;
         }
-        this.openGateway(data);
+        this.onmessage?.(new MessageEvent('message', { data: JSON.stringify({
+          type: 'webrtcFallback',
+          reason: error instanceof Error && error.message ? error.message : 'WebRTC connection failed',
+        }) }));
+        if (!abort.signal.aborted) this.openGateway(data);
       });
       return;
     }
