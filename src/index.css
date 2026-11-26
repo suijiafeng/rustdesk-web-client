@@ -877,51 +877,69 @@ button:focus-visible {
   color: var(--ink);
 }
 
+/* Non-interactive telemetry stays transparent to the remote desktop underneath. */
 .diag-overlay {
   position: absolute;
   z-index: 4;
-  top: calc(12px + env(safe-area-inset-top, 0px));
+  top: calc(48px + env(safe-area-inset-top, 0px));
   left: calc(12px + env(safe-area-inset-left, 0px));
-  width: 280px;
-  max-height: calc(100% - 52px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
-  overflow: auto;
-  overscroll-behavior: contain;
-  touch-action: pan-y;
-  max-width: calc(100vw - 24px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
-  padding: 9px 11px;
-  border-radius: 12px;
-  border: 1px solid var(--remote-line);
-  background: var(--remote-panel-surface);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  color: var(--remote-ink);
-  box-shadow: 0 10px 28px var(--remote-shadow);
+  right: calc(12px + env(safe-area-inset-right, 0px));
+  padding: 7px 12px 8px;
+  border-radius: 10px;
+  border: 1px solid rgb(255 255 255 / 9%);
+  background: linear-gradient(105deg, rgb(12 20 30 / 66%), rgb(12 20 30 / 42%));
+  color: #f3f7fc;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 70%);
+  pointer-events: none;
+  user-select: none;
+  contain: layout style;
 }
-
+.diag-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.diag-context { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 12px; min-width: 0; font-size: 11px; line-height: 1.4; }
+.diag-route { font-weight: 600; }
+.diag-format, .diag-security, .diag-window { color: #d1dce8; }
+.diag-security { display: inline-flex; align-items: center; gap: 4px; }
+.diag-window { opacity: .85; }
+.diag-actions { display: flex; align-self: flex-start; flex-shrink: 0; pointer-events: auto; }
 .diag-icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
-  border: 1px solid var(--remote-line);
-  background: var(--remote-control-surface);
-  color: var(--remote-muted);
-  transition: background-color 140ms ease, color 140ms ease;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border: 0; border-radius: 6px;
+  background: transparent; color: #e0eaf5; cursor: pointer;
 }
-
-.diag-icon-btn:hover {
-  background: var(--remote-hover);
-  color: var(--remote-ink);
-}
+.diag-icon-btn:hover, .diag-icon-btn:focus-visible { background: rgb(255 255 255 / 16%); color: #fff; }
+.diag-icon-btn:focus-visible { outline: 2px solid #8cd5ff; outline-offset: -2px; }
+.diag-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.diag-metric { min-width: 0; --trend-color: #89d9c3; }
+.diag-metric-bitrate { --trend-color: #8cc8ff; }
+.diag-metric-rtt { --trend-color: #e7c386; }
+.diag-metric-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+.diag-metric-label { font-size: 11px; color: #d1dce8; }
+.diag-metric-heading strong { font-size: 15px; font-weight: 600; white-space: nowrap; }
+.diag-trend { position: relative; height: 36px; margin-top: 2px; color: var(--trend-color); }
+.diag-trend svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.diag-chart-line { fill: none; stroke: currentColor; stroke-width: 1.5; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
+.diag-chart-grid { fill: none; stroke: rgb(255 255 255 / 12%); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-dasharray: 2 5; }
+.diag-trend circle { fill: currentColor; }
+.diag-chart-scale { position: absolute; left: 0; top: 1px; font-size: 9px; color: #bbc7d5; }
+.diag-overlay[data-collapsed="true"] { padding-bottom: 7px; }
+@media (pointer: coarse) { .diag-icon-btn { width: 38px; height: 38px; } }
 
 @media (max-width: 640px) {
   .diag-overlay {
-    top: calc(32px + env(safe-area-inset-top, 0px));
-    left: calc(10px + env(safe-area-inset-left, 0px));
-    width: min(280px, calc(100vw - 20px));
+    top: calc(38px + env(safe-area-inset-top, 0px));
+    left: calc(8px + env(safe-area-inset-left, 0px));
+    right: calc(8px + env(safe-area-inset-right, 0px));
+    padding: 5px 8px 7px;
   }
+  .diag-context { column-gap: 8px; font-size: 10px; }
+  .diag-window { flex-basis: 100%; }
+  .diag-security { display: none; }
+  .diag-metrics { gap: 12px; margin-top: 3px; }
+  .diag-metric-heading { align-items: flex-start; flex-direction: column; gap: 0; }
+  .diag-metric-label { font-size: 10px; }
+  .diag-metric-heading strong { font-size: 14px; }
+  .diag-trend { height: 28px; }
+  .diag-chart-scale { font-size: 8px; }
 
   .sheet.sheet-menu {
     top: auto;
@@ -2187,32 +2205,6 @@ button:focus-visible {
 
 .clipboard-tip, .fallback-tip { display: flex; align-items: center; gap: 12px; pointer-events: auto; }
 .clipboard-tip button, .fallback-tip button { color: var(--remote-accent); background: none; border: 0; min-height: 32px; padding: 0 4px; white-space: nowrap; }
-
-.diag-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 14px;
-  font-weight: 600;
-}
-.diag-route {
-  margin: 4px 0 8px;
-  font-size: 12px;
-  color: var(--remote-muted);
-}
-.diag-values {
-  margin: 0;
-  border-top: 1px solid var(--remote-line);
-  font-size: 13px;
-}
-.diag-values > div {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 5px 0;
-}
-.diag-values dt { color: var(--remote-muted); }
-.diag-values dd { margin: 0; text-align: end; }
 
 /* Consistent controls across settings and session menus. */
 :root { --select-surface:var(--surface); --select-ink:var(--ink); --select-line:var(--line); --select-accent:#0b6bcb; --select-hover:var(--rd-hover-bg); }

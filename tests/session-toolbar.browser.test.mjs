@@ -526,8 +526,15 @@ try {
 
   await connect('Mac OS', true);
   const diagnostics = select('diagnostic-overlay');
-  await until(`${diagnostics}?.textContent.includes('128 KiB')`);
-  assert.ok(await evaluate(`${diagnostics}.textContent.includes('42')`));
+  for (const metric of ['fps', 'bitrate', 'rtt']) await until(select(`diag-chart-${metric}`));
+  await until(`${diagnostics}?.textContent.match(/Waiting for keyframe|等待关键帧/)`);
+  assert.doesNotMatch(await evaluate(diagnostics + '.textContent'), /128 KiB|Gateway queue|Dropped frames|网关队列|网关丢帧/);
+  const controlsBeforeClosingDiagnostics = await evaluate("window.sent.filter(event => event.type === 'key' || event.type === 'mouse').length");
+  await evaluate(select('diag-close') + '.focus()');
+  await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: '\r', unmodifiedText: '\r' });
+  await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+  await until(select('diagnostic-overlay') + ' === null');
+  assert.equal(await evaluate("window.sent.filter(event => event.type === 'key' || event.type === 'mouse').length"), controlsBeforeClosingDiagnostics);
   await openDesktopToolbar();
   assert.equal(await evaluate(select('toolbar-cad') + ' === null'), true);
   await evaluate(select('toolbar-keyboard') + '.click()');

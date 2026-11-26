@@ -222,8 +222,6 @@ export function SessionPanels({
           routeLabel={routeLabel}
           browserDirect={peer?.route?.startsWith('webrtc')}
           encryptionLabel={t(locale, peer?.encrypted ? 'linkEncrypted' : 'linkPlain')}
-          hostRttMs={rtt}
-          targetFps={targetFps}
           gatewayVideo={gatewayVideo}
           onClose={() => setDiagnosticsOpen(false)}
         />

@@ -13,7 +13,9 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 const chromePath = process.env.CHROME_BIN || (process.platform === 'darwin'
   ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : 'google-chrome');
 
-export async function runBrowserFixture(fixturePath, { resultName = 'cspResult', chromeArgs = [], timeoutMs = 15000 } = {}) {
+export async function runBrowserFixture(fixturePath, {
+  resultName = 'cspResult', chromeArgs = [], timeoutMs = 15000, configure, inspect,
+} = {}) {
   const built = await build({
     configFile: path.join(root, 'vite.config.ts'),
     logLevel: 'error',
@@ -23,11 +25,13 @@ export async function runBrowserFixture(fixturePath, { resultName = 'cspResult',
   const entry = output.find(item => item.type === 'chunk' && item.isEntry);
   assert.ok(entry, 'Vite must produce the browser fixture');
   const files = new Map(output.map(item => ['/' + item.fileName, item.type === 'chunk' ? item.code : item.source]));
+  const styles = output.filter(item => item.fileName.endsWith('.css'))
+    .map(item => `<link rel="stylesheet" href="/${item.fileName}">`).join('');
   const server = http.createServer((request, response) => {
     response.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; connect-src 'self'");
     const resource = files.get(request.url);
-    response.setHeader('Content-Type', resource ? 'text/javascript' : 'text/html');
-    response.end(resource ?? `<!doctype html><script type="module" src="/${entry.fileName}"></script>`);
+    response.setHeader('Content-Type', resource ? request.url.endsWith('.css') ? 'text/css' : 'text/javascript' : 'text/html');
+    response.end(resource ?? `<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1">${styles}<script type="module" src="/${entry.fileName}"></script>`);
   });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -68,6 +72,7 @@ export async function runBrowserFixture(fixturePath, { resultName = 'cspResult',
       socket.send(JSON.stringify({ id: sequence, method, params }));
     });
     await cdp('Runtime.enable');
+    await configure?.(cdp);
     await cdp('Page.navigate', { url: `http://127.0.0.1:${server.address().port}/` });
     let result;
     for (let attempt = 0; attempt < Math.ceil(timeoutMs / 100); attempt++) {
@@ -80,6 +85,8 @@ export async function runBrowserFixture(fixturePath, { resultName = 'cspResult',
     }
     assert.deepEqual(exceptions, [], JSON.stringify(exceptions));
     assert.equal(result?.status, 'passed', JSON.stringify(result));
+    await inspect?.(cdp, result);
+    assert.deepEqual(exceptions, [], JSON.stringify(exceptions));
     return result;
   } finally {
     socket?.close();
