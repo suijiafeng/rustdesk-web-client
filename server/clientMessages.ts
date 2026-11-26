@@ -20,25 +20,40 @@ interface ClientMessageContext extends SessionContext {
   startHostPump: (conn: ConnectedHost) => Promise<void>;
 }
 
+type MessageByType = {
+  [Type in ClientMessage['type']]: Extract<ClientMessage, { type: Type }>;
+};
+
+type MessageHandlers = {
+  [Type in keyof MessageByType]: (message: MessageByType[Type]) => void | Promise<void>;
+};
+
 export function createClientMessageHandler(context: ClientMessageContext) {
   const { state, ws, videoBuffer, sendJson, cleanup, config, connectionSignal, clearConnectDeadline, startHostPump } = context;
 
-  return async (rawData: RawData, isBinary: boolean): Promise<void> => {
-    if (isBinary || state.phase === 'closed') return;
-    let parsed: ClientMessage;
-    try {
-      const text = typeof rawData === 'string' ? rawData : rawData.toString('utf8');
-      parsed = JSON.parse(text) as ClientMessage;
-      if (!parsed || typeof parsed !== 'object' || typeof parsed.type !== 'string') {
-        throw new Error('missing type field');
+  const forwardToHost = (hostMsg: Record<string, unknown> | null, refreshVideo = false) => {
+    const activeHost = state.hostConn;
+    if (hostMsg && activeHost) {
+      void activeHost.stream.sendRaw(encodeMessage(hostMsg)).catch((err) => {
+        if (state.phase === 'live') {
+          sendJson({ type: 'status', state: 'error', detail: humanizeError(err) });
+          cleanup(false);
+        }
+      });
+      if (refreshVideo) {
+        void activeHost.stream
+          .sendRaw(encodeMessage(buildRefreshVideoMessage()))
+          .catch(() => {});
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      sendJson({ type: 'error', message: `bad message: ${msg}` });
-      return;
     }
+  };
 
-    if (parsed.type === 'ping') {
+  const forwardControl = (parsed: ClientMessage) => {
+    forwardToHost(toHostMessage(parsed, state.sessionCodecs));
+  };
+
+  const handlers: MessageHandlers = {
+    ping: parsed => {
       const seq = Number.isFinite(Number(parsed.seq)) ? Number(parsed.seq) : 0;
       const clientTs = Number.isFinite(Number(parsed.clientTs)) ? Number(parsed.clientTs) : 0;
       sendJson({
@@ -54,17 +69,13 @@ export function createClientMessageHandler(context: ClientMessageContext) {
           },
         }),
       });
-      return;
-    }
-
-    if (parsed.type === 'disconnect') {
+    },
+    disconnect: () => {
       cleanup(true);
-      return;
-    }
-
-    if (state.phase === 'awaiting-connect') {
-      if (parsed.type !== 'connect') {
-        sendJson({ type: 'error', message: 'send a connect message first' });
+    },
+    connect: async parsed => {
+      if (state.phase !== 'awaiting-connect') {
+        sendJson({ type: 'error', message: 'already connected' });
         return;
       }
 
@@ -144,92 +155,110 @@ export function createClientMessageHandler(context: ClientMessageContext) {
           cleanup(false);
         }
       }
+    },
+    clipboard: parsed => {
+      const conn = state.hostConn;
+      if (!conn || !conn.clipboardAllowed || typeof parsed.text !== 'string') return;
+      forwardControl(parsed);
+    },
+    privacy: async parsed => {
+      const conn = state.hostConn;
+      if (!conn) return;
+      if (!permissions(conn).privacyAllowed || typeof parsed.enabled !== 'boolean') {
+        sendJson({ type: 'privacyResult', failed: true });
+        return;
+      }
+      const [major, minor, patch] = String(conn.peerInfo.version).split('.').map(Number);
+      const modern = major > 1 || (major === 1 && (minor > 2 || (minor === 2 && patch >= 4)));
+      const misc = modern ? { toggle_privacy_mode: { on: parsed.enabled, impl_key: state.privacyImpl } }
+        : { option: { privacy_mode: parsed.enabled ? 2 : 1 } };
+      try {
+        await conn.stream.sendRaw(encodeMessage({ misc }));
+      } catch {
+        sendJson({ type: 'privacyResult', failed: true });
+      }
+    },
+    restart: async () => {
+      const conn = state.hostConn;
+      if (!conn) return;
+      if (!canRestart(conn)) {
+        sendJson({ type: 'restartResult', sent: false });
+        return;
+      }
+      try {
+        await conn.stream.sendRaw(encodeMessage({ misc: { restart_remote_device: true } }));
+        sendJson({ type: 'restartResult', sent: true });
+      } catch {
+        sendJson({ type: 'restartResult', sent: false });
+      }
+    },
+    audio: parsed => {
+      if (typeof parsed.enabled !== 'boolean') return;
+      if (parsed.enabled && !state.audioAllowed) {
+        sendJson({ type: 'audioDenied' });
+        return;
+      }
+      state.audioRequested = parsed.enabled;
+      if (state.audioRequested && state.audioFormat) sendJson({ type: 'audioFormat', ...state.audioFormat });
+      forwardControl(parsed);
+    },
+    resolution: parsed => {
+      const conn = state.hostConn;
+      if (!conn) return;
+      const { display, width, height } = parsed;
+      if (display !== state.resolutionDisplay || !state.sizes.some(size => size.width === width && size.height === height)) {
+        sendJson({ type: 'error', message: 'The active display does not offer that resolution.' });
+        return;
+      }
+      const [major, minor, patch] = String(conn.peerInfo.version ?? '').split('.').map(Number);
+      const modern = major > 1 || (major === 1 && (minor > 2 || (minor === 2 && patch >= 4)));
+      const resolution = { width, height };
+      const hostMsg = { misc: modern
+        ? { change_display_resolution: { display, resolution } }
+        : { change_resolution: resolution } };
+      forwardToHost(hostMsg);
+    },
+    quality: parsed => {
+      const refreshVideo = Boolean(state.sessionCodecs && decodingPreferenceChanged(state.sessionCodecs, state.preferredCodec, parsed.codec));
+      if (refreshVideo) state.preferredCodec = parsed.codec;
+      const hostMsg = toHostMessage(refreshVideo ? parsed : { ...parsed, codec: undefined }, state.sessionCodecs);
+      forwardToHost(hostMsg, refreshVideo);
+    },
+    mouse: forwardControl,
+    key: forwardControl,
+    text: forwardControl,
+    followWindow: forwardControl,
+    switchDisplay: forwardControl,
+    refresh: forwardControl,
+  };
+
+  const dispatch = <Type extends keyof MessageByType>(type: Type, message: MessageByType[Type]) => handlers[type](message);
+
+  return async (rawData: RawData, isBinary: boolean): Promise<void> => {
+    if (isBinary || state.phase === 'closed') return;
+    let parsed: ClientMessage;
+    try {
+      const text = typeof rawData === 'string' ? rawData : rawData.toString('utf8');
+      parsed = JSON.parse(text) as ClientMessage;
+      if (!parsed || typeof parsed !== 'object' || typeof parsed.type !== 'string') {
+        throw new Error('missing type field');
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      sendJson({ type: 'error', message: `bad message: ${msg}` });
       return;
     }
 
-    if (parsed.type === 'connect') {
-      sendJson({ type: 'error', message: 'already connected' });
-      return;
-    }
-
-    if (state.phase !== 'live') return;
-
-    if (state.hostConn) {
-      if (parsed.type === 'clipboard' && (!state.hostConn.clipboardAllowed || typeof parsed.text !== 'string')) return;
-      if (parsed.type === 'privacy') {
-        if (!permissions(state.hostConn).privacyAllowed || typeof parsed.enabled !== 'boolean') {
-          sendJson({ type: 'privacyResult', failed: true });
-          return;
-        }
-        const [major, minor, patch] = String(state.hostConn.peerInfo.version).split('.').map(Number);
-        const modern = major > 1 || (major === 1 && (minor > 2 || (minor === 2 && patch >= 4)));
-        const misc = modern ? { toggle_privacy_mode: { on: parsed.enabled, impl_key: state.privacyImpl } }
-          : { option: { privacy_mode: parsed.enabled ? 2 : 1 } };
-        try {
-          await state.hostConn.stream.sendRaw(encodeMessage({ misc }));
-        } catch {
-          sendJson({ type: 'privacyResult', failed: true });
-        }
+    if (parsed.type !== 'ping' && parsed.type !== 'disconnect' && parsed.type !== 'connect') {
+      if (state.phase === 'awaiting-connect') {
+        sendJson({ type: 'error', message: 'send a connect message first' });
         return;
       }
-      if (parsed.type === 'restart') {
-        const conn = state.hostConn;
-        if (!canRestart(conn)) {
-          sendJson({ type: 'restartResult', sent: false });
-          return;
-        }
-        try {
-          await conn.stream.sendRaw(encodeMessage({ misc: { restart_remote_device: true } }));
-          sendJson({ type: 'restartResult', sent: true });
-        } catch {
-          sendJson({ type: 'restartResult', sent: false });
-        }
-        return;
-      }
-      if (parsed.type === 'audio') {
-        if (typeof parsed.enabled !== 'boolean') return;
-        if (parsed.enabled && !state.audioAllowed) {
-          sendJson({ type: 'audioDenied' });
-          return;
-        }
-        state.audioRequested = parsed.enabled;
-        if (state.audioRequested && state.audioFormat) sendJson({ type: 'audioFormat', ...state.audioFormat });
-      }
-      let hostMsg;
-      let refreshVideo = false;
-      if (parsed.type === 'resolution') {
-        const { display, width, height } = parsed;
-        if (display !== state.resolutionDisplay || !state.sizes.some(size => size.width === width && size.height === height)) {
-          sendJson({ type: 'error', message: 'The active display does not offer that resolution.' });
-          return;
-        }
-        const [major, minor, patch] = String(state.hostConn.peerInfo.version ?? '').split('.').map(Number);
-        const modern = major > 1 || (major === 1 && (minor > 2 || (minor === 2 && patch >= 4)));
-        const resolution = { width, height };
-        hostMsg = { misc: modern
-          ? { change_display_resolution: { display, resolution } }
-          : { change_resolution: resolution } };
-      } else if (parsed.type === 'quality') {
-        refreshVideo = Boolean(state.sessionCodecs && decodingPreferenceChanged(state.sessionCodecs, state.preferredCodec, parsed.codec));
-        if (refreshVideo) state.preferredCodec = parsed.codec;
-        hostMsg = toHostMessage(refreshVideo ? parsed : { ...parsed, codec: undefined }, state.sessionCodecs);
-      } else {
-        hostMsg = toHostMessage(parsed, state.sessionCodecs);
-      }
-      if (hostMsg) {
-        const activeHost = state.hostConn;
-        void activeHost.stream.sendRaw(encodeMessage(hostMsg)).catch((err) => {
-          if (state.phase === 'live') {
-            sendJson({ type: 'status', state: 'error', detail: humanizeError(err) });
-            cleanup(false);
-          }
-        });
-        if (refreshVideo) {
-          void activeHost.stream
-            .sendRaw(encodeMessage(buildRefreshVideoMessage()))
-            .catch(() => {});
-        }
-      }
+      if (state.phase !== 'live' || !state.hostConn) return;
     }
+
+    // Runtime messages are untrusted; inherited property names are not message types.
+    if (!Object.hasOwn(handlers, parsed.type)) return;
+    return dispatch(parsed.type, parsed);
   };
 }
