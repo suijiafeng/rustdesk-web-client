@@ -50,6 +50,7 @@ export function shouldRequestKeyframeRefresh(params: {
   waitingForKey: boolean;
   waitingSinceMs: number | null;
   decodeQueueSize: number;
+  oldestFrameAgeMs?: number;
   lastRefreshMs: number;
   nowMs: number;
 }): boolean {
@@ -57,6 +58,9 @@ export function shouldRequestKeyframeRefresh(params: {
     return false;
   }
   if (params.decodeQueueSize > MAX_DECODE_QUEUE_SIZE) {
+    return true;
+  }
+  if ((params.oldestFrameAgeMs ?? 0) >= KEYFRAME_WAIT_REFRESH_MS) {
     return true;
   }
   if (
@@ -132,6 +136,9 @@ export interface DecoderMetrics {
   renderedCount: number;
   droppedCount: number;
   decodeQueueSize: number;
+  inFlightFrames: number;
+  oldestFrameAgeMs: number;
+  decodeLatencyMs: number;
   waitingForKey: boolean;
 }
 
@@ -149,6 +156,11 @@ export class RemoteDecoder {
   private waitKey = true;
   private recoveringFromBacklog = false;
   private generation = 0;
+  private readonly inFlight = new Map<number, number>();
+  private firstSubmittedMs: number | null = null;
+  private generationHasOutput = false;
+  private lastOutputTimestampUs = 0;
+  private decodeLatencyMs = 0;
   private waitingSinceMs: number | null = null;
   private lastRefreshMs = 0;
   private lastTimestampUs = 0;
@@ -172,8 +184,22 @@ export class RemoteDecoder {
       renderedCount: this.renderedCount,
       droppedCount: this.droppedCount,
       decodeQueueSize: this.decoder?.state === 'configured' ? this.decoder.decodeQueueSize : 0,
+      inFlightFrames: this.inFlight.size,
+      oldestFrameAgeMs: this.oldestFrameAge(performance.now()),
+      decodeLatencyMs: this.decodeLatencyMs,
       waitingForKey: this.waitKey,
     };
+  }
+
+  /** Called by the session's existing stats tick, including when no new video arrives. */
+  checkStall(): void {
+    const nowMs = performance.now();
+    const queueSize = Math.max(this.decoder?.decodeQueueSize ?? 0, this.inFlight.size);
+    if (queueSize > MAX_DECODE_QUEUE_SIZE || this.oldestFrameAge(nowMs) >= KEYFRAME_WAIT_REFRESH_MS) {
+      this.recoveringFromBacklog = true;
+      this.markWaitingForKey(nowMs);
+    }
+    this.maybeRequestRefresh(nowMs, queueSize);
   }
 
   push(packet: VideoPacket, canvas: HTMLCanvasElement | null): void {
@@ -202,18 +228,24 @@ export class RemoteDecoder {
 
     if (!this.configured || !this.decoder || this.decoder.state !== 'configured') return;
 
-    const queueSize = this.decoder.decodeQueueSize;
-    if (queueSize > MAX_DECODE_QUEUE_SIZE) {
+    // decodeQueueSize counts control requests awaiting codec admission, not work
+    // already accepted by the codec. Track submissions until their outputs arrive.
+    const queueSize = Math.max(this.decoder.decodeQueueSize, this.inFlight.size);
+    if (queueSize > MAX_DECODE_QUEUE_SIZE || this.oldestFrameAge(nowMs) >= KEYFRAME_WAIT_REFRESH_MS) {
       this.recoveringFromBacklog = true;
-      if (!packet.key) {
+    }
+
+    if (this.recoveringFromBacklog) {
+      // Give a newly created codec time to produce its first output. Replacing it
+      // after every small burst of keyframes can otherwise prevent all playback.
+      const canReplace = this.generationHasOutput || this.firstSubmittedMs === null ||
+        nowMs - this.firstSubmittedMs >= REFRESH_COOLDOWN_MS;
+      if (!packet.key || !canReplace) {
         this.droppedCount += 1;
         this.markWaitingForKey(nowMs);
         this.maybeRequestRefresh(nowMs, queueSize);
         return;
       }
-    }
-
-    if (packet.key && this.recoveringFromBacklog) {
       // The newest independent frame replaces stale queued work. Merely skipping
       // delta frames leaves the old decoder draining seconds of obsolete video,
       // and allowing every keyframe through makes the queue unbounded.
@@ -232,6 +264,8 @@ export class RemoteDecoder {
     this.lastTimestampUs = nextMonotonicTimestampUs(this.lastTimestampUs, nowMs);
 
     try {
+      this.firstSubmittedMs ??= nowMs;
+      this.inFlight.set(this.lastTimestampUs, nowMs);
       this.decoder.decode(
         new EncodedVideoChunk({
           type: packet.key ? 'key' : 'delta',
@@ -243,6 +277,32 @@ export class RemoteDecoder {
       const msg = err instanceof Error ? err.message : String(err);
       this.fail(msg);
     }
+  }
+
+  private oldestFrameAge(nowMs: number): number {
+    const oldest = this.inFlight.values().next().value;
+    return oldest === undefined ? 0 : Math.max(0, nowMs - oldest);
+  }
+
+  private acceptOutput(frame: VideoFrame): boolean {
+    this.generationHasOutput = true;
+    if (frame.timestamp < this.lastOutputTimestampUs) {
+      this.decodedCount++;
+      this.droppedCount++;
+      frame.close();
+      return false;
+    }
+    this.lastOutputTimestampUs = frame.timestamp;
+    const submittedMs = this.inFlight.get(frame.timestamp);
+    if (submittedMs !== undefined) this.decodeLatencyMs = Math.max(0, performance.now() - submittedMs);
+    // A chunk need not emit exactly one frame. Retire older submissions when a
+    // newer output arrives, and reject their late output above instead of letting
+    // non-displayed codec inputs accumulate as phantom outstanding frames.
+    for (const timestamp of this.inFlight.keys()) {
+      if (timestamp > frame.timestamp) break;
+      this.inFlight.delete(timestamp);
+    }
+    return true;
   }
 
   private markWaitingForKey(nowMs: number): void {
@@ -258,6 +318,7 @@ export class RemoteDecoder {
         waitingForKey: this.waitKey,
         waitingSinceMs: this.waitingSinceMs,
         decodeQueueSize,
+        oldestFrameAgeMs: this.oldestFrameAge(nowMs),
         lastRefreshMs: this.lastRefreshMs,
         nowMs,
       })
@@ -284,7 +345,7 @@ export class RemoteDecoder {
       this.decoder = new VideoDecoder({
         output: (frame) => {
           if (generation !== this.generation) { frame.close(); return; }
-          this.enqueue(frame);
+          if (this.acceptOutput(frame)) this.enqueue(frame);
         },
         error: (err) => {
           if (generation === this.generation) this.fail(err.message || 'VideoDecoder error');
@@ -382,6 +443,10 @@ export class RemoteDecoder {
 
   private closeDecoderOnly(): void {
     this.generation++;
+    this.inFlight.clear();
+    this.firstSubmittedMs = null;
+    this.generationHasOutput = false;
+    this.lastOutputTimestampUs = 0;
     if (this.rafId !== null) {
       cancelAnimationFrame(this.rafId);
       this.rafId = null;
@@ -412,6 +477,7 @@ export class RemoteDecoder {
     this.waitingSinceMs = null;
     this.lastRefreshMs = 0;
     this.lastTimestampUs = 0;
+    this.decodeLatencyMs = 0;
     this.codec = '';
     this.width = 0;
     this.height = 0;
