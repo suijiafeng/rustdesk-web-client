@@ -511,11 +511,11 @@ button:focus-visible {
   --remote-selected: #e5f0ff;
   --remote-switch-off: #737f90;
   --remote-shadow: #0710232b;
+  --remote-key-surface: var(--remote-panel-surface);
+  --remote-shortcut-option-surface: var(--remote-toolbar-surface);
   --remote-key-ink: #172c49;
   --remote-key-outline: #74869c;
-  --remote-key-halo: #ffffff;
   --remote-key-selected-line: var(--remote-accent);
-  --remote-key-selected-fill: var(--remote-selected);
   --remote-key-press: #c9e0ff;
   --remote-key-press-ink: var(--remote-ink);
 }
@@ -533,11 +533,11 @@ button:focus-visible {
   --remote-selected: #304863;
   --remote-switch-off: #535962;
   --remote-shadow: #0005;
+  --remote-key-surface: var(--remote-control-surface);
+  --remote-shortcut-option-surface: transparent;
   --remote-key-ink: #e4ebf7;
   --remote-key-outline: #64758a;
-  --remote-key-halo: #000;
   --remote-key-selected-line: #9dbde0;
-  --remote-key-selected-fill: transparent;
   --remote-key-press: #356597;
   --remote-key-press-ink: #fff;
 }
@@ -551,6 +551,7 @@ button:focus-visible {
   grid-template-rows: repeat(2, minmax(0, 1fr));
   row-gap: 4px;
   height: var(--softbar-height);
+  color-scheme: var(--remote-scheme);
   --function-key-height: 32px;
 }
 
@@ -671,7 +672,7 @@ button:focus-visible {
   padding: 0 8px;
   border: 1px solid var(--remote-line);
   border-radius: 6px;
-  background: transparent;
+  background: var(--remote-shortcut-option-surface);
   color: inherit;
   font-size: 12px;
   cursor: pointer;
@@ -701,6 +702,7 @@ button:focus-visible {
 .soft-shortcut-chip[aria-pressed="true"] {
   border-color: var(--remote-accent);
   background: var(--remote-selected);
+  color: var(--remote-accent);
 }
 
 .soft-key-capture {
@@ -757,29 +759,28 @@ button:focus-visible {
   min-width: 32px;
   border: 1px solid var(--remote-key-outline);
   border-radius: 7px;
-  background: transparent;
+  background: var(--remote-key-surface);
   color: var(--remote-key-ink);
-  box-shadow: 0 0 1px var(--remote-key-halo);
 }
 
 .soft-key-strip .soft-key-btn {
   padding: 3px 8px;
-  text-shadow: 0 1px 2px var(--remote-key-halo), 0 -1px 2px var(--remote-key-halo);
 }
 
 .soft-function-settings {
   width: var(--function-key-height);
   padding: 0;
-  color: var(--remote-key-ink);
 }
 
-.soft-function-settings svg {
-  filter: drop-shadow(0 0 1px var(--remote-key-halo));
+.soft-function-settings[aria-expanded="true"] {
+  border-color: var(--remote-accent);
+  background: var(--remote-selected);
+  color: var(--remote-accent);
 }
 
 .soft-key-strip .soft-key-btn[aria-pressed="true"] {
   border-color: var(--remote-key-selected-line);
-  background: var(--remote-key-selected-fill);
+  background: var(--remote-selected);
   color: var(--remote-accent);
 }
 
@@ -791,7 +792,6 @@ button:focus-visible {
   background: var(--remote-key-press);
   border-color: var(--remote-accent);
   box-shadow: inset 0 2px 3px var(--remote-shadow);
-  text-shadow: none;
   color: var(--remote-key-press-ink);
   transition: none;
 }
@@ -808,7 +808,6 @@ button:focus-visible {
   padding: 5px max(5px, env(safe-area-inset-right, 0px))
     max(5px, env(safe-area-inset-bottom, 0px)) max(5px, env(safe-area-inset-left, 0px));
   background: var(--remote-toolbar-surface);
-  color-scheme: var(--remote-scheme);
   touch-action: manipulation;
 }
 

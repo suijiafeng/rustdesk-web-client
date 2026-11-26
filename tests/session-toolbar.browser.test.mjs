@@ -266,8 +266,9 @@ try {
   const operationRow = select('soft-operation-row');
   assert.equal(await evaluate(`${operationRow}.getBoundingClientRect().top - ${functionRow}.getBoundingClientRect().bottom`), 4);
   assert.equal(await evaluate(`getComputedStyle(${functionRow}).backgroundColor`), 'rgba(0, 0, 0, 0)');
-  assert.equal(await evaluate(`getComputedStyle(${select('soft-mod-ctrl')}).backgroundColor`), 'rgba(0, 0, 0, 0)');
   await until(`getComputedStyle(${select('soft-mod-ctrl')}).borderColor === 'rgb(100, 117, 138)'`);
+  assert.equal(await css(select('soft-mod-ctrl'), 'backgroundColor'), 'rgb(48, 53, 60)');
+  assert.equal(await css(select('soft-shortcut-toggle'), 'backgroundColor'), 'rgb(48, 53, 60)');
   assert.ok(await evaluate(`Math.abs(${operationRow}.getBoundingClientRect().bottom - window.visualViewport.height) < 1`));
   assert.match(await switchLabel(), /切到电脑键盘|Switch to computer keyboard/);
   assert.ok(await evaluate(`${operationRow}.firstElementChild === ${keyboardSwitch} &&
@@ -300,8 +301,10 @@ try {
   await setSystemTheme('light');
   const ctrl = select('soft-mod-ctrl');
   assert.equal(await css(functionRow, 'backgroundColor'), 'rgba(0, 0, 0, 0)');
-  assert.equal(await css(ctrl, 'backgroundColor'), 'rgba(0, 0, 0, 0)');
-  await until(`getComputedStyle(${ctrl}).color === 'rgb(23, 44, 73)'`);
+  await until(`getComputedStyle(${ctrl}).backgroundColor === 'rgb(252, 253, 255)'`);
+  assert.equal(await css(ctrl, 'color'), 'rgb(23, 44, 73)');
+  assert.equal(await css(select('soft-shortcut-toggle'), 'backgroundColor'), 'rgb(252, 253, 255)');
+  assert.equal(await css(softbar, 'colorScheme'), 'light');
   assert.equal(await css(operationRow, 'backgroundColor'), 'rgb(242, 245, 249)');
   assert.equal(await css(letterA, 'backgroundColor'), 'rgb(255, 255, 255)');
   const letterPoint = await evaluate(`(() => {
@@ -319,6 +322,7 @@ try {
   await until(`getComputedStyle(${ctrl}).backgroundColor === 'rgb(229, 240, 255)'`);
   await setSystemTheme('dark');
   await until(`getComputedStyle(${ctrl}).borderColor === 'rgb(157, 189, 224)'`);
+  assert.equal(await css(ctrl, 'backgroundColor'), 'rgb(48, 72, 99)');
   await tapElement(select('soft-mod-shift'));
   await tapElement(`${virtualKeyboard}.querySelector('[data-key="Enter"]')`);
   await tapElement(`${virtualKeyboard}.querySelector('[data-key="Shift"]')`);
@@ -364,6 +368,11 @@ try {
   await until(shortcutSettings);
   await setSystemTheme('light');
   assert.equal(await css(shortcutSettings, 'backgroundColor'), 'rgb(252, 253, 255)');
+  assert.equal(await css(shortcutSettings, 'color'), 'rgb(24, 35, 53)');
+  assert.equal(await css(settingsButton, 'backgroundColor'), 'rgb(229, 240, 255)');
+  assert.equal(await css(tabOption, 'backgroundColor'), 'rgb(242, 245, 249)');
+  assert.equal(await css(escapeOption, 'backgroundColor'), 'rgb(229, 240, 255)');
+  assert.equal(await css(escapeOption, 'color'), 'rgb(24, 95, 168)');
   await setSystemTheme('dark');
   assert.equal(await css(shortcutSettings, 'backgroundColor'), 'rgb(34, 37, 43)');
   const panelFits = width => `(() => {
