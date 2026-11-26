@@ -2,7 +2,7 @@ import React from 'react';
 import { RestartAction } from './RestartAction';
 import { AdaptiveSelect } from './AdaptiveSelect';
 import { ScrollDirectionSelect } from './ScrollDirectionSelect';
-import { ArrowDownUp, ChevronLeft, CircleHelp, Clipboard, Shield, Activity, Eye, Focus, LockKeyhole, LogOut, Monitor, SlidersHorizontal, Volume2, Gauge, Film } from 'lucide-react';
+import { ArrowDownUp, Clipboard, Shield, Activity, Eye, Focus, LockKeyhole, LogOut, Monitor, SlidersHorizontal, Volume2, Gauge, Film } from 'lucide-react';
 import { t, type I18nKey } from '../lib/i18n';
 import { formatConnectionError } from '../lib/errors';
 import type { SessionMenuProps } from './SessionMenu';
@@ -10,32 +10,11 @@ import type { PreferredCodec } from '../lib/displayPrefs';
 import type { QualityLevel } from '../lib/protocol';
 const qualityNames = { low: 'qualityLow', balanced: 'qualityBalanced', best: 'qualityBest' } as const;
 
-export type MobilePanel = 'toolbar' | 'actions' | 'display' | 'more' | 'gestures';
+export type MobilePanel = 'toolbar' | 'actions' | 'display';
 
 export interface MobileSessionPanelProps extends SessionMenuProps {
   mobilePanel: MobilePanel;
-  onNavigate: (panel: 'more' | 'gestures') => void;
 }
-
-const gestureRows = {
-  touch: [
-    ['gTouchTapTitle', 'gTouchTapDesc'],
-    ['gDoubleTapTitle', 'gTouchDoubleTapDesc'],
-    ['gTouchRightTitle', 'gTouchRightDesc'],
-    ['gTouchDragTitle', 'gTouchDragDesc'],
-    ['gTouchPinchTitle', 'gTouchPinchDesc'],
-    ['gTouchScrollTitle', 'gTouchScrollDesc'],
-  ],
-  mouse: [
-    ['gMouseSlideTitle', 'gMouseSlideDesc'],
-    ['gMouseTapTitle', 'gMouseTapDesc'],
-    ['gDoubleTapTitle', 'gMouseDoubleTapDesc'],
-    ['gMouseDragTitle', 'gMouseDragDesc'],
-    ['gMouseRightTitle', 'gMouseRightDesc'],
-    ['gMousePinchTitle', 'gMousePinchDesc'],
-    ['gTouchScrollTitle', 'gTouchScrollDesc'],
-  ],
-} as const;
 
 export function MobileSessionPanel(p: MobileSessionPanelProps) {
   const label = (key: I18nKey) => t(p.locale, key);
@@ -45,7 +24,7 @@ export function MobileSessionPanel(p: MobileSessionPanelProps) {
   const notify = (text: string) => p.onNotify(text);
   const resolutionIndex = p.sizes.findIndex(s => s.width === p.stats.width && s.height === p.stats.height);
   const monitors = p.peer?.displays ?? [];
-  const panelName = { actions: 'moreActions', display: 'screens', more: 'dockMore', gestures: 'dockGuide' } as const;
+  const panelName = { actions: 'moreActions', display: 'screens' } as const;
 
   const toggle = (Icon: typeof Eye, text: I18nKey, checked: boolean, change: () => void, disabled = false) => (
     <label className="tool-row"><Icon /><span>{label(text)}</span>
@@ -75,27 +54,14 @@ export function MobileSessionPanel(p: MobileSessionPanelProps) {
           {action(LogOut, 'disconnectRemote', p.onDisconnect, true)}
         </div>
       </>}
-      {p.mobilePanel === 'more' && <div className="tool-group">
-        <button type="button" className="tool-row" data-testid="more-gestures" onClick={() => p.onNavigate('gestures')}>
-          <CircleHelp />{label('dockGuide')}
-        </button>
-        <button type="button" className="tool-row" data-testid="more-connection-details" onClick={p.onToggleDiagnostics}>
-          <Activity />{label('diagTitle')}
-        </button>
-      </div>}
-      {p.mobilePanel === 'gestures' && <div className="tool-group">
-        <button type="button" className="tool-row" data-testid="gestures-back" onClick={() => p.onNavigate('more')}>
-          <ChevronLeft />{label('dockMore')}
-        </button>
-        <h2 className="text-base font-semibold my-2">{label(p.touchMode ? 'touchModeGestures' : 'mouseModeGestures')}</h2>
-        <dl data-testid="gesture-guide">{gestureRows[p.touchMode ? 'touch' : 'mouse'].map(([name, desc]) =>
-          <div key={name}><dt>{label(name)}</dt><dd>{label(desc)}</dd></div>)}</dl>
-      </div>}
       {p.mobilePanel === 'display' && <>
         {monitors.length > 1 && <div className="tool-group tool-options">{monitors.map(d =>
           <button key={d.index} aria-pressed={d.index === p.display} disabled={d.online === false}
             onClick={() => { p.onSwitchDisplay(d.index); notify(label('requestSent')+' · '+(d.name || label('screens')+' '+(d.index+1))); }}><Monitor />{d.name || label('screens')+' '+(d.index+1)}</button>)}</div>}
         <div className="tool-group">
+          <button type="button" className="tool-row" data-testid="screen-connection-details" onClick={p.onToggleDiagnostics}>
+            <Activity />{label('diagTitle')}
+          </button>
           {p.peer?.privacyAllowed && toggle(Shield, 'privacyMode', p.privacyEnabled, p.onTogglePrivacy, p.privacyPending || p.viewOnly)}
           {p.sizes.length > 0 && <label className="tool-row"><Monitor /><span>{label('remoteResolution')}</span>
             <AdaptiveSelect tone="remote" label={label('remoteResolution')} testId="resolution-select" disabled={p.viewOnly}

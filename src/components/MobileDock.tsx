@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Keyboard, Layers2, Ellipsis, Monitor, MousePointer2, Pointer } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Keyboard, Layers2, Monitor, MousePointer2, Pointer } from 'lucide-react';
 import { t, type Locale } from '../lib/i18n';
 import type { MobilePanel } from './MobileSessionPanel';
 
@@ -18,7 +18,6 @@ export function MobileDock({ locale, activePanel, touchMode, onToggleTouchMode, 
     ['dock-input-mode', touchMode ? 'touch' : 'mouse', touchMode ? Pointer : MousePointer2, onToggleTouchMode, !touchMode],
     ['dock-display', 'screens', Monitor, () => onOpenMenu('display'), activePanel === 'display'],
     ['dock-menu', 'moreActions', Layers2, () => onOpenMenu('actions'), activePanel === 'actions'],
-    ['dock-more', 'dockMore', Ellipsis, () => onOpenMenu('more'), activePanel === 'more' || activePanel === 'gestures'],
   ] as const;
 
   if (activePanel) return (
@@ -27,7 +26,7 @@ export function MobileDock({ locale, activePanel, touchMode, onToggleTouchMode, 
         <button key={id} type="button" data-testid={id} className={active ? 'selected' : ''}
           aria-label={id === 'dock-input-mode' ? t(locale, 'toggleInputMode') : undefined}
           aria-pressed={id === 'dock-input-mode' ? touchMode : undefined}
-          aria-expanded={id === 'dock-more' || id === 'dock-menu' || id === 'dock-display' ? active : undefined}
+          aria-expanded={id === 'dock-menu' || id === 'dock-display' ? active : undefined}
           onClick={action}>
           <Icon size={20} /><span>{t(locale, label)}</span>
         </button>

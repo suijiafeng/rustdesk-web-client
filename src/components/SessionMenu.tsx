@@ -172,15 +172,6 @@ function DesktopSessionMenu({
           <div className="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
-              className={`rd-btn${diagnosticsOpen ? ' active' : ''}`}
-              aria-label={t(locale, 'diagTitle')}
-              title={t(locale, 'diagTitle')}
-              onClick={onToggleDiagnostics}
-            >
-              <Activity size={16} />
-            </button>
-            <button
-              type="button"
               className="rd-btn"
               style={{ minWidth: 36, minHeight: 36, padding: 6 }}
               data-testid="session-close"
@@ -254,6 +245,10 @@ function DesktopSessionMenu({
                   <Monitor size={18} />{d.name || t(locale, 'screens')+' '+(d.index+1)}</button>)}
               </div>}
               <div className="session-group">
+                <button type="button" className={`session-setting-row${diagnosticsOpen ? ' active' : ''}`}
+                  data-testid="screen-connection-details" onClick={onToggleDiagnostics}>
+                  <Activity size={16} /><span>{t(locale, 'diagTitle')}</span>
+                </button>
                 {peer?.privacyAllowed && <label className="session-setting-row"><Shield /><span>{t(locale, 'privacyMode')}</span>
                   <input className="ui-switch" type="checkbox" role="switch" checked={privacyEnabled} disabled={privacyPending || viewOnly} onChange={onTogglePrivacy} />
                 </label>}
