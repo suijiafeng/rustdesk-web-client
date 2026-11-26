@@ -6,21 +6,13 @@ import { fileURLToPath } from 'node:url';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer } from 'ws';
 import { GatewayAdmissionLimiter } from './server/admission.ts';
-import { createClientAddressResolver } from './server/clientAddress.ts';
+import { getRuntimeConfig } from './server/config.ts';
 import { serveWebRtcSignal } from './server/webrtcSignal.ts';
-import { originAllowed, productionTokenProblem, redactLog } from './server/security.ts';
+import { originAllowed, redactLog } from './server/security.ts';
 import { serveSocket } from './server/session.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-function normalizeGatewayToken(raw: string | undefined): string {
-  const trimmed = (raw ?? '').trim().replace(/^["']|["']$/g, '').trim();
-  if (!trimmed || /^(MY_GATEWAY_TOKEN|YOUR_GATEWAY_TOKEN|CHANGE_ME|PLACEHOLDER)$/i.test(trimmed)) {
-    return '';
-  }
-  return trimmed;
-}
 
 function rejectUpgrade(socket: Duplex, status: string): void {
   const deadline = setTimeout(() => socket.destroy(), 1_000);
@@ -31,17 +23,9 @@ function rejectUpgrade(socket: Duplex, status: string): void {
 }
 
 async function startServer() {
+  const config = getRuntimeConfig();
+  const { host, port, gatewayToken, webRtcEnabled, requireOrigin, clientAddress, requestProtocol } = config;
   const app = express();
-  const port = Number(process.env.PORT) || 3000;
-  const gatewayToken = normalizeGatewayToken(process.env.RUSTDESK_GATEWAY_TOKEN);
-  const tokenProblem = productionTokenProblem(process.env.NODE_ENV, gatewayToken);
-  if (tokenProblem) {
-    throw new Error(tokenProblem);
-  }
-
-  const webRtcEnabled = process.env.RUSTDESK_ENABLE_WEBRTC?.trim().toLowerCase() === 'true';
-  const requireOrigin = process.env.RUSTDESK_REQUIRE_ORIGIN?.trim().toLowerCase() === 'true';
-  const clientAddress = createClientAddressResolver(process.env);
 
   app.disable('x-powered-by');
   app.use((_req, res, next) => {
@@ -103,8 +87,10 @@ async function startServer() {
     }
 
     const origin = typeof request.headers.origin === 'string' ? request.headers.origin : '';
-    const allowlist = process.env.RUSTDESK_ALLOWED_ORIGINS ?? '';
-    if (!originAllowed(origin, request.headers.host ?? '', allowlist, requireOrigin)) {
+    if (!originAllowed(origin, request.headers.host ?? '', config.allowedOrigins, requireOrigin, {
+      protocol: requestProtocol(request.socket.remoteAddress, request.headers),
+      allowLoopback: !config.production,
+    })) {
       socket.destroy();
       return;
     }
@@ -130,7 +116,7 @@ async function startServer() {
     });
   });
 
-  if (process.env.NODE_ENV !== 'production') {
+  if (!config.production) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true, hmr: false },
@@ -145,7 +131,6 @@ async function startServer() {
     });
   }
 
-  const host = process.env.RENDER === 'true' ? '0.0.0.0' : process.env.HOST || '127.0.0.1';
   httpServer.listen(port, host, () => {
     console.log(redactLog(`RustDesk Web Gateway listening on http://${host}:${port}`));
   });

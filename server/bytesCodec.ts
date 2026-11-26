@@ -2,7 +2,8 @@ import dns from 'node:dns/promises';
 import net from 'node:net';
 import nacl from 'tweetnacl';
 import { blake2b } from '@noble/hashes/blake2.js';
-import { privateTargetsAllowed, targetAddressAllowed, targetHostAllowed, targetPortAllowed } from './security.ts';
+import { targetAddressAllowed, targetHostAllowed, targetPortAllowed } from './security.ts';
+import { getRuntimeConfig } from './config.ts';
 
 export const MAX_FRAME_LENGTH = 16 * 1024 * 1024;
 export const MAX_RECEIVE_BYTES = MAX_FRAME_LENGTH * 2 + 8;
@@ -350,19 +351,19 @@ export class EncryptedFramedStream {
     timeoutMs: number,
     { signal, peerConnection = false }: { signal?: AbortSignal; peerConnection?: boolean } = {},
   ): Promise<EncryptedFramedStream> {
+    const config = getRuntimeConfig();
     const cleanHost = host.trim();
     if (!targetHostAllowed(cleanHost)) {
       throw new Error('That target address is not allowed.');
     }
-    if (!targetPortAllowed(port, peerConnection, process.env)) {
+    if (!targetPortAllowed(port, peerConnection, config)) {
       throw new Error('That target port is not allowed.');
     }
 
     signal?.throwIfAborted();
     const resolved = await resolveDialTargets(cleanHost, Math.min(timeoutMs, 5_000));
     signal?.throwIfAborted();
-    const allowPrivate = privateTargetsAllowed(process.env);
-    const targets = resolved.filter(({ address }) => targetAddressAllowed(address, allowPrivate));
+    const targets = resolved.filter(({ address }) => targetAddressAllowed(address, config.allowPrivateTargets));
     if (targets.length === 0) throw new Error('That target address is not allowed.');
 
     const deadline = Date.now() + timeoutMs;

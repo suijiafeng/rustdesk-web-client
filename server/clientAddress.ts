@@ -15,8 +15,8 @@ function normalizeAddress(raw: string): string | null {
   return `${high >>> 8}.${high & 255}.${low >>> 8}.${low & 255}`;
 }
 
-/** Compile once at startup; a bad trust policy must not silently weaken admission checks. */
-export function createClientAddressResolver(env: NodeJS.ProcessEnv) {
+/** Compile once at startup; a bad trust policy must not silently weaken request checks. */
+function createTrustedProxyChecker(env: NodeJS.ProcessEnv) {
   const trusted = new BlockList();
   for (const item of (env.RUSTDESK_TRUSTED_PROXIES ?? '').split(',')) {
     const entry = item.trim();
@@ -41,12 +41,34 @@ export function createClientAddressResolver(env: NodeJS.ProcessEnv) {
     }
   }
 
+  return (raw: string | undefined): boolean => {
+    const address = normalizeAddress(raw ?? '');
+    return address !== null && trusted.check(address, isIP(address) === 4 ? 'ipv4' : 'ipv6');
+  };
+}
+
+/** Only the immediate trusted ingress may describe the browser-facing protocol. */
+export function createRequestProtocolResolver(env: NodeJS.ProcessEnv) {
+  const isTrusted = createTrustedProxyChecker(env);
+  return (remoteAddress: string | undefined, headers: IncomingHttpHeaders, encrypted = false): 'http:' | 'https:' | null => {
+    const forwarded = headers['x-forwarded-proto'];
+    if (isTrusted(remoteAddress) && forwarded !== undefined) {
+      if (typeof forwarded !== 'string') return null;
+      const protocol = forwarded.trim().toLowerCase();
+      // The ingress must overwrite this header, rather than append an untrusted chain.
+      return protocol === 'http' || protocol === 'https' ? `${protocol}:` : null;
+    }
+    return encrypted ? 'https:' : 'http:';
+  };
+}
+
+export function createClientAddressResolver(env: NodeJS.ProcessEnv) {
+  const isTrusted = createTrustedProxyChecker(env);
+
   const header = env.RUSTDESK_CLIENT_IP_HEADER?.trim().toLowerCase() || 'x-forwarded-for';
   if (header !== 'x-forwarded-for' && header !== 'cf-connecting-ip') {
     throw new Error('RUSTDESK_CLIENT_IP_HEADER must be x-forwarded-for or cf-connecting-ip.');
   }
-  const isTrusted = (address: string) => trusted.check(address, isIP(address) === 4 ? 'ipv4' : 'ipv6');
-
   return (remoteAddress: string | undefined, headers: IncomingHttpHeaders): string => {
     const peer = normalizeAddress(remoteAddress ?? '');
     if (!peer) return remoteAddress || 'unknown';

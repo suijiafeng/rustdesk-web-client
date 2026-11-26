@@ -94,11 +94,17 @@ NODE_ENV=production yarn start
 
 生产模式不会接受空令牌或占位令牌。网关令牌与 RustDesk 被控端密码是两个独立凭据。
 
+配置在开始监听前统一解析校验：布尔值只接受 `true` 或 `false`，端口必须为 1–65535 的整数，Origin 或代理网段格式错误会阻止启动，并提示对应配置项名称。修改配置需要重启；连接策略不会随着进程内环境变量变化而漂移。
+
 生产环境允许 ID 和中继服务器使用 TCP `21114–21119`。对端连接支持用户填写的直连端口，以及 ID 服务器下发的 NAT 动态端口。所有连接统一校验目标 IP。局域网部署可设置 `RUSTDESK_ALLOW_PRIVATE_TARGETS=true`，链路本地地址及已知云元数据地址始终会被拦截。
 
 两个 WebSocket 入口共享每个网关实例最多 128 条连接的限额，每个来源 IP 最多同时 4 条连接，每分钟最多 24 次升级。多次令牌校验失败仅对该来源 IP 触发短时退避。IPv4 映射 IPv6 地址及等价的 IPv6 写法会归一化，使用同一份额度。
 
 默认使用 TCP 对端地址。经反向代理部署时，将实际代理 IP 或 CIDR 网段填入 `RUSTDESK_TRUSTED_PROXIES`，例如通过回环地址连接网关的代理可填 `127.0.0.1,::1`。仅当 TCP 对端可信时才解析 `X-Forwarded-For`，从右向左跳过可信代理，采用第一个不可信地址。检查到格式错误的地址或整条链都可信时回退为 TCP 对端地址。代理必须追加实际连接来源或覆盖转发头，不能直接信任客户端提交的值。信任配置格式错误会阻止启动。
+
+WebSocket 的 Origin 必须与请求的协议、域名和端口一致；域名大小写和默认端口会统一处理。HTTPS 在代理处终止时，可信代理需要保留公网 `Host`（含非默认端口），并覆盖 `X-Forwarded-Proto` 为单个 `https` 或 `http` 值。不可信连接不能通过该头改变协议，含多个协议的转发链会被拒绝。托管平台无法提供明确可信的代理范围时，可显式设置 `RUSTDESK_ALLOWED_ORIGINS=https://你的公网域名`；白名单中的 Origin 不受内部请求地址限制。跨端口的回环 Origin 豁免只在开发模式启用，生产回环部署同样需要同源或显式白名单。
+
+Render 部署在 `RENDER=true` 且未配置 Origin 白名单时，自动使用平台提供的 HTTPS `RENDER_EXTERNAL_URL` 作为允许的 Origin。此地址来自 [Render 官方部署环境变量](https://render.com/docs/environment-variables)，不从请求头推断。自定义域名或额外网页来源需要设置 `RUSTDESK_ALLOWED_ORIGINS`，显式白名单会替换此默认值。
 
 Cloudflare 场景可继续使用默认的 `X-Forwarded-For` 信任链。如需直接使用 `CF-Connecting-IP`，设置 `RUSTDESK_CLIENT_IP_HEADER=cf-connecting-ip`，且只信任 Cloudflare 入口，或会校验 Cloudflare 来源并在每次请求中覆盖/清除该头的自有入口。仅透传该头的普通代理不满足这个条件。该头缺失或格式错误时使用 TCP 对端地址；不可信对端携带任何转发头都不能改变身份。
 

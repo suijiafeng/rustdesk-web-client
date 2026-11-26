@@ -1,24 +1,46 @@
 // Copyright (C) 2026 suijiafeng. Licensed under AGPL-3.0-only.
 
 import { BlockList, isIP } from 'node:net';
+import type { RuntimeConfig } from './config.ts';
 
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '::1']);
 
-/** Browser origins are limited to the request host, loopback dev, or an explicit allowlist. */
-export function originAllowed(origin: string, requestHost: string, allowlist: string, required = false): boolean {
+export function parseBrowserOrigin(value: string): URL | null {
+  if (!/^https?:\/\//i.test(value) || /[\s\\@?#]/.test(value)) return null;
+  try {
+    const url = new URL(value);
+    return (url.protocol === 'http:' || url.protocol === 'https:') && url.pathname === '/' ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+interface OriginRequestOptions {
+  protocol: 'http:' | 'https:' | null;
+  allowLoopback?: boolean;
+}
+
+/** Match scheme, normalized hostname and effective port, unless explicitly allowlisted. */
+export function originAllowed(
+  origin: string,
+  requestHost: string,
+  allowlist: string,
+  required = false,
+  { protocol, allowLoopback = false }: OriginRequestOptions = { protocol: 'http:' },
+): boolean {
   if (!origin) return !required;
+  const source = parseBrowserOrigin(origin);
+  if (!source) return false;
   const list = allowlist.split(',').map((item) => item.trim()).filter(Boolean);
   if (list.includes('*')) return true;
-  if (list.length > 0) return list.includes(origin);
-  let hostname = '';
-  try {
-    hostname = new URL(origin).hostname.replace(/^\[|\]$/g, '');
-  } catch {
-    return false;
-  }
-  const requestName = requestHost.match(/^\[([^\]]+)\]/)?.[1] ?? requestHost.split(':')[0];
-  if (hostname === requestName) return true;
-  return LOOPBACK.has(hostname) && LOOPBACK.has(requestName);
+  if (list.length > 0) return list.some((entry) => parseBrowserOrigin(entry)?.origin === source.origin);
+  if (!protocol || !requestHost || /[\s\\/@?#]/.test(requestHost)) return false;
+  const destination = parseBrowserOrigin(`${protocol}//${requestHost}`);
+  if (!destination) return false;
+  if (source.origin === destination.origin) return true;
+  return allowLoopback && source.protocol === destination.protocol &&
+    LOOPBACK.has(source.hostname.replace(/^\[|\]$/g, '')) &&
+    LOOPBACK.has(destination.hostname.replace(/^\[|\]$/g, ''));
 }
 
 export function productionTokenProblem(nodeEnv: string | undefined, token: string): string | null {
@@ -81,16 +103,11 @@ export function targetAddressAllowed(address: string, allowPrivate: boolean): bo
     (allowPrivate && privateV6.check(address, 'ipv6'));
 }
 
-export function privateTargetsAllowed(env: NodeJS.ProcessEnv): boolean {
-  const setting = env.RUSTDESK_ALLOW_PRIVATE_TARGETS?.trim().toLowerCase();
-  return setting ? setting === 'true' : env.NODE_ENV !== 'production';
-}
-
-export function targetPortAllowed(port: number, peerConnection: boolean, env: NodeJS.ProcessEnv): boolean {
+export function targetPortAllowed(
+  port: number,
+  peerConnection: boolean,
+  config: Pick<RuntimeConfig, 'production' | 'allowedTargetPorts'>,
+): boolean {
   if (!Number.isInteger(port) || port < 1 || port > 65535) return false;
-  if (peerConnection || env.NODE_ENV !== 'production' || (port >= 21114 && port <= 21119)) return true;
-  return (env.RUSTDESK_ALLOWED_TARGET_PORTS ?? '').split(',').some((value) => {
-    const entry = value.trim();
-    return /^\d+$/.test(entry) && Number(entry) === port;
-  });
+  return peerConnection || !config.production || (port >= 21114 && port <= 21119) || config.allowedTargetPorts.includes(port);
 }

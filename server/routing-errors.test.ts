@@ -7,6 +7,7 @@ import { humanizeError, selectCodecs } from './control.ts';
 import { decodeRendezvous, encodeRendezvous, PunchFailureValues } from './protos.ts';
 import { connectViaId } from './rustdeskClient.ts';
 import { formatConnectionError } from '../src/lib/errors.ts';
+import { parseRuntimeConfig, setRuntimeConfig } from './config.ts';
 
 const cases = [
   { name: 'omitted proto3 ID_NOT_EXIST default', response: {}, message: 'ID does not exist', title: 'Device ID Not Found' },
@@ -18,10 +19,7 @@ const cases = [
 
 for (const scenario of cases) {
   test(`ID routing preserves ${scenario.name}`, { timeout: 5_000 }, async t => {
-    const names = ['NODE_ENV', 'RUSTDESK_ALLOW_PRIVATE_TARGETS'] as const;
-    const saved = names.map(name => [name, process.env[name]] as const);
-    process.env.NODE_ENV = 'test';
-    process.env.RUSTDESK_ALLOW_PRIVATE_TARGETS = 'true';
+    t.after(setRuntimeConfig(parseRuntimeConfig({ NODE_ENV: 'test', RUSTDESK_ALLOW_PRIVATE_TARGETS: 'true' })));
     const sockets = new Set<net.Socket>();
     const tasks: Promise<void>[] = [];
     const errors: unknown[] = [];
@@ -44,10 +42,6 @@ for (const scenario of cases) {
       for (const socket of sockets) socket.destroy();
       await new Promise<void>(resolve => hbbs.close(() => resolve()));
       await Promise.all(tasks);
-      for (const [name, value] of saved) {
-        if (value === undefined) delete process.env[name];
-        else process.env[name] = value;
-      }
       assert.deepEqual(errors, []);
     });
     hbbs.listen(0, '127.0.0.1');

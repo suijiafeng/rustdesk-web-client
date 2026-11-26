@@ -7,6 +7,7 @@ import { EncryptedFramedStream } from './bytesCodec.ts';
 import { selectCodecs } from './control.ts';
 import { decodeMessage, decodeRendezvous, encodeAddrMangle, encodeMessage, encodeRendezvous } from './protos.ts';
 import { connectDirect, connectViaId } from './rustdeskClient.ts';
+import { parseRuntimeConfig, setRuntimeConfig } from './config.ts';
 
 type Route = 'direct' | 'relay';
 type Behavior = 'ready' | 'stall' | 'close';
@@ -20,11 +21,10 @@ function completion() {
 async function routingFixture(t: TestContext, options: {
   direct?: Behavior; relay?: Behavior; loginError?: string; defaultForceRelay?: boolean; directIp?: boolean;
 } = {}) {
-  const envNames = ['NODE_ENV', 'RUSTDESK_ALLOW_PRIVATE_TARGETS', 'RUSTDESK_DEFAULT_FORCE_RELAY'] as const;
-  const savedEnv = new Map(envNames.map((key) => [key, process.env[key]]));
-  process.env.NODE_ENV = 'test';
-  process.env.RUSTDESK_ALLOW_PRIVATE_TARGETS = 'true';
-  process.env.RUSTDESK_DEFAULT_FORCE_RELAY = String(options.defaultForceRelay ?? false);
+  t.after(setRuntimeConfig(parseRuntimeConfig({
+    NODE_ENV: 'test', RUSTDESK_ALLOW_PRIVATE_TARGETS: 'true',
+    RUSTDESK_DEFAULT_FORCE_RELAY: String(options.defaultForceRelay ?? false),
+  })));
   const sockets = new Set<net.Socket>();
   const tasks: Promise<void>[] = [];
   const errors: unknown[] = [];
@@ -114,10 +114,6 @@ async function routingFixture(t: TestContext, options: {
     for (const socket of sockets) socket.destroy();
     await Promise.all(servers.map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));
     await Promise.all(tasks);
-    for (const [name, value] of savedEnv) {
-      if (value === undefined) delete process.env[name];
-      else process.env[name] = value;
-    }
     assert.deepEqual(errors, [], 'protocol fixture handlers completed without errors');
   });
   for (const server of servers) {

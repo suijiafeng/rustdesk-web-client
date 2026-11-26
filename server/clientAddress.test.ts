@@ -1,7 +1,34 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { GatewayAdmissionLimiter } from './admission.ts';
-import { createClientAddressResolver } from './clientAddress.ts';
+import { createClientAddressResolver, createRequestProtocolResolver } from './clientAddress.ts';
+import { originAllowed } from './security.ts';
+
+test('forwarded protocol cannot change the origin scheme without a trusted TCP peer', () => {
+  const headers = { 'x-forwarded-proto': 'https' };
+  const resolve = createRequestProtocolResolver({ RUSTDESK_TRUSTED_PROXIES: '127.0.0.1' });
+  assert.equal(createRequestProtocolResolver({})('127.0.0.1', headers), 'http:');
+  assert.equal(resolve('192.0.2.1', headers), 'http:');
+  assert.equal(resolve('192.0.2.1', { 'x-forwarded-proto': 'http' }, true), 'https:');
+  assert.equal(resolve(undefined, headers), 'http:');
+  assert.equal(resolve('127.0.0.1', {}, true), 'https:');
+  assert.equal(originAllowed('https://desk.example', 'desk.example', '', true, {
+    protocol: resolve('192.0.2.1', headers),
+  }), false);
+});
+
+test('trusted proxy protocol preserves external HTTPS and rejects ambiguous header chains', () => {
+  const resolve = createRequestProtocolResolver({ RUSTDESK_TRUSTED_PROXIES: '127.0.0.1,2001:db8::/32' });
+  assert.equal(resolve('::ffff:127.0.0.1', { 'x-forwarded-proto': ' HTTPS ' }), 'https:');
+  assert.equal(resolve('2001:db8::1', { 'x-forwarded-proto': 'http' }), 'http:');
+  assert.equal(originAllowed('https://desk.example', 'DESK.EXAMPLE:443', '', true, {
+    protocol: resolve('127.0.0.1', { 'x-forwarded-proto': 'https' }),
+  }), true);
+  for (const forwarded of ['', 'wss', 'https:', 'https, http', 'http, https', ['https', 'https']]) {
+    assert.equal(resolve('127.0.0.1', { 'x-forwarded-proto': forwarded }), null);
+  }
+  assert.throws(() => createRequestProtocolResolver({ RUSTDESK_TRUSTED_PROXIES: '*' }), /RUSTDESK_TRUSTED_PROXIES/);
+});
 
 test('forwarded headers are ignored by default and for untrusted TCP peers', () => {
   const headers = { 'x-forwarded-for': '198.51.100.7', 'cf-connecting-ip': '198.51.100.8' };

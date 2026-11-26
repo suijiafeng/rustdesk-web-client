@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { getRuntimeConfig } from './config.ts';
 import {
   DEFAULT_DIRECT_PORT,
   RELAY_PORT,
@@ -371,7 +372,7 @@ export async function connectViaId(
 ): Promise<ConnectedHost> {
   const peerId = target.peerId.replace(/\s+/g, '');
   const idServer = target.idServer.trim();
-  const forceRelay = target.forceRelay || process.env.RUSTDESK_DEFAULT_FORCE_RELAY?.trim().toLowerCase() === 'true';
+  const forceRelay = target.forceRelay || getRuntimeConfig().defaultForceRelay;
   if (!peerId) throw new Error('peer id is empty');
   if (!idServer) throw new Error('id server is empty');
 

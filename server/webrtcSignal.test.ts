@@ -7,6 +7,7 @@ import { serveWebRtcSignal } from './webrtcSignal.ts';
 import { BytesFrameDecoder, encodeBytesFrame } from './bytesCodec.ts';
 import { decodeRendezvous, encodeRendezvous, PunchFailureValues } from './protos.ts';
 import { encodeEndpoint } from '../shared/webrtc.ts';
+import { parseRuntimeConfig, setRuntimeConfig } from './config.ts';
 
 test('signaling requires a token, excludes passwords and filters ICE by session', async () => {
   const fingerprint = 'sha-256 ' + Array(32).fill('B2').join(':');
@@ -93,8 +94,7 @@ const failures = [
 
 for (const scenario of failures) {
   test(`signaling reports ${scenario.name}`, { timeout: 5_000 }, async t => {
-    const previousPrivate = process.env.RUSTDESK_ALLOW_PRIVATE_TARGETS;
-    process.env.RUSTDESK_ALLOW_PRIVATE_TARGETS = 'true';
+    t.after(setRuntimeConfig(parseRuntimeConfig({ NODE_ENV: 'test', RUSTDESK_ALLOW_PRIVATE_TARGETS: 'true' })));
     const sockets = new Set<net.Socket>();
     const hbbs = net.createServer(socket => {
       sockets.add(socket);
@@ -115,8 +115,6 @@ for (const scenario of failures) {
         new Promise<void>(resolve => server.close(() => resolve())),
         new Promise<void>(resolve => hbbs.close(() => resolve())),
       ]);
-      if (previousPrivate === undefined) delete process.env.RUSTDESK_ALLOW_PRIVATE_TARGETS;
-      else process.env.RUSTDESK_ALLOW_PRIVATE_TARGETS = previousPrivate;
     });
     hbbs.listen(0, '127.0.0.1');
     await Promise.all([once(hbbs, 'listening'), once(server, 'listening')]);
