@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronDown, Keyboard, Settings2 } from 'lucide-react';
+import { ChevronDown, Keyboard, ListPlus } from 'lucide-react';
 import type { SoftKeyboardMode } from '../hooks/useKeyboardViewport';
 import { keyboardInset } from '../lib/gestures';
 import { SOFT_KEYBOARD_BAR_HEIGHT } from '../lib/keyboardViewport';
@@ -55,22 +55,43 @@ const EXTRA_KEYS: ReadonlyArray<{ label: string; control: string; aria?: string 
   { label: 'Del', control: 'Delete' },
 ] as const;
 
-const SHORTCUT_STORAGE_KEY = 'rd_web_soft_shortcuts';
+const SHORTCUT_STORAGE_KEY = 'rd_web_soft_function_keys';
+const PREVIOUS_SHORTCUT_STORAGE_KEY = 'rd_web_soft_shortcuts';
+const DEFAULT_FUNCTION_KEYS: SoftShortcut[] = [
+  ...STICKY_MODIFIERS.map(({ control }) => ({ key: control, modifiers: [] })),
+  { key: 'Escape', modifiers: [] },
+];
 const SHORTCUT_KEYS = [
   ...[...'abcdefghijklmnopqrstuvwxyz0123456789'].map(value => ({ value, label: value.toUpperCase(), aria: undefined })),
   ...EXTRA_KEYS.map(({ control, label, aria }) => ({ value: control, label, aria })),
 ];
 
+function shortcutId(shortcut: SoftShortcut): string {
+  return `${[...shortcut.modifiers].sort().join('-')}:${shortcut.key}`;
+}
+
 function readShortcuts(): SoftShortcut[] {
   try {
-    const saved: unknown = JSON.parse(window.localStorage.getItem(SHORTCUT_STORAGE_KEY) ?? '[]');
-    if (!Array.isArray(saved)) return [];
-    return saved.filter((entry): entry is SoftShortcut =>
-      typeof entry?.key === 'string' && SHORTCUT_KEYS.some(choice => choice.value === entry.key) &&
-      Array.isArray(entry.modifiers) && entry.modifiers.every((value: unknown) => typeof value === 'string' && isModifier(value)),
+    const current = window.localStorage.getItem(SHORTCUT_STORAGE_KEY);
+    const saved: unknown = JSON.parse(current ?? window.localStorage.getItem(PREVIOUS_SHORTCUT_STORAGE_KEY) ?? '[]');
+    if (!Array.isArray(saved)) return DEFAULT_FUNCTION_KEYS;
+    const keys = saved.filter((entry): entry is SoftShortcut =>
+      typeof entry?.key === 'string' &&
+      (SHORTCUT_KEYS.some(choice => choice.value === entry.key) || isModifier(entry.key)) &&
+      Array.isArray(entry.modifiers) &&
+      entry.modifiers.every((value: unknown) => typeof value === 'string' && isModifier(value)) &&
+      (!isModifier(entry.key) || entry.modifiers.length === 0),
     );
+    const visible = current === null ? [...DEFAULT_FUNCTION_KEYS, ...keys] : keys;
+    const seen = new Set<string>();
+    return visible.filter(key => {
+      const id = shortcutId(key);
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
   } catch {
-    return [];
+    return DEFAULT_FUNCTION_KEYS;
   }
 }
 
@@ -140,9 +161,10 @@ export function SoftKeyboardBar({
     control === 'Meta' ? metaLabel : control === 'Alt' ? altLabel : label;
 
   const shortcutModifiers = STICKY_MODIFIERS.map(mod => ({ value: mod.control, label: modifierLabel(mod.control, mod.label) }));
+  const shortcutChoices = [...SHORTCUT_KEYS, ...shortcutModifiers];
   const describeShortcut = (shortcut: SoftShortcut) => [
     ...shortcut.modifiers.map(control => shortcutModifiers.find(choice => choice.value === control)?.label ?? control),
-    SHORTCUT_KEYS.find(choice => choice.value === shortcut.key)?.label ?? shortcut.key,
+    shortcutChoices.find(choice => choice.value === shortcut.key)?.label ?? shortcut.key,
   ].join('+');
 
   const saveShortcuts = (next: SoftShortcut[]) => {
@@ -223,10 +245,26 @@ export function SoftKeyboardBar({
   };
 
   const sendShortcut = (shortcut: SoftShortcut) => {
+    if (shortcut.modifiers.length === 0 && isModifier(shortcut.key)) {
+      toggleModifier(shortcut.key);
+      return;
+    }
     const key = shortcut.key.length === 1 ? { chr: shortcut.key } : { control: shortcut.key };
+    if (shortcut.modifiers.length === 0) {
+      tapKey(key);
+      return;
+    }
     onSendChord(buildSoftKeyChord(shortcut.modifiers, key));
     setLatched([]);
     focusSystemInput();
+  };
+
+  const removeShortcut = (index: number) => {
+    const shortcut = shortcuts[index];
+    if (shortcut.modifiers.length === 0 && isModifier(shortcut.key)) {
+      setLatched(previous => previous.filter(value => value !== shortcut.key));
+    }
+    saveShortcuts(shortcuts.filter((_, position) => position !== index));
   };
 
   const changeKeyboardMode = (next: SoftKeyboardMode) => {
@@ -384,16 +422,16 @@ export function SoftKeyboardBar({
           <button type="button" className="softbar-icon" data-testid="soft-shortcut-toggle"
             aria-label={t(locale, 'softShortcutSettings')} aria-expanded={settingsOpen}
             onClick={() => setSettingsOpen(open => !open)}>
-            <Settings2 size={18} aria-hidden="true" />
+            <ListPlus size={18} aria-hidden="true" />
           </button>
           {settingsOpen && <SoftShortcutSettings
             locale={locale}
             modifiers={shortcutModifiers}
-            keys={SHORTCUT_KEYS}
+            keys={shortcutChoices}
             shortcuts={shortcuts}
             describe={describeShortcut}
             onAdd={shortcut => saveShortcuts([...shortcuts, shortcut])}
-            onRemove={index => saveShortcuts(shortcuts.filter((_, position) => position !== index))}
+            onRemove={removeShortcut}
             onClose={() => setSettingsOpen(false)}
           />}
         </div>
@@ -403,46 +441,25 @@ export function SoftKeyboardBar({
           role="toolbar"
           aria-label={t(locale, 'specialKeysAria')}
         >
-          {shortcuts.map((shortcut, index) => {
+          {shortcuts.map(shortcut => {
             const label = describeShortcut(shortcut);
-            const feedbackId = `shortcut-${index}`;
-            return <button key={feedbackId} type="button" className="soft-key-btn soft-shortcut-button"
-              data-testid="soft-shortcut" data-key-feedback={feedbackId} title={label}
-              data-key-pressed={pressedKey === feedbackId || undefined} onClick={() => sendShortcut(shortcut)}>
+            const isCombo = shortcut.modifiers.length > 0;
+            const modifier = isCombo ? undefined : STICKY_MODIFIERS.find(item => item.control === shortcut.key);
+            const isActive = modifier ? latched.includes(modifier.control) : undefined;
+            const feedbackId = `shortcut-${shortcutId(shortcut)}`;
+            const choice = shortcutChoices.find(item => item.value === shortcut.key);
+            return <button key={feedbackId} type="button"
+              className={`soft-key-btn${isCombo ? ' soft-shortcut-button' : ''}${isActive ? ' active' : ''}`}
+              data-testid={modifier ? `soft-mod-${modifier.label.toLowerCase()}` : isCombo ? 'soft-shortcut' : undefined}
+              data-function-key={!isCombo ? shortcut.key : undefined}
+              aria-label={!isCombo && choice && 'aria' in choice ? choice.aria : undefined}
+              aria-pressed={isActive}
+              data-key-feedback={feedbackId}
+              data-key-pressed={pressedKey === feedbackId || undefined}
+              onClick={() => sendShortcut(shortcut)}>
               {label}
             </button>;
           })}
-          {STICKY_MODIFIERS.map((mod) => {
-            const isActive = latched.includes(mod.control);
-            return (
-              <button
-                key={mod.control}
-                type="button"
-                aria-pressed={isActive}
-                data-testid={`soft-mod-${mod.label.toLowerCase()}`}
-                data-key-feedback={`modifier-${mod.control}`}
-                data-key-pressed={pressedKey === `modifier-${mod.control}` || undefined}
-                className={`soft-key-btn${isActive ? ' active' : ''}`}
-                onClick={() => toggleModifier(mod.control)}
-              >
-                {modifierLabel(mod.control, mod.label)}
-              </button>
-            );
-          })}
-          <span className="soft-key-divider" aria-hidden="true" />
-          {EXTRA_KEYS.map((item) => (
-            <button
-              key={item.control}
-              type="button"
-              aria-label={item.aria ?? item.label}
-              className="soft-key-btn"
-              data-key-feedback={`toolbar-${item.control}`}
-              data-key-pressed={pressedKey === `toolbar-${item.control}` || undefined}
-              onClick={() => tapKey({ control: item.control })}
-            >
-              {item.label}
-            </button>
-          ))}
         </div>
       </div>
 

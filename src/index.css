@@ -600,8 +600,7 @@ button:focus-visible {
 }
 
 .soft-shortcut-settings header,
-.soft-shortcut-footer,
-.soft-shortcut-list li {
+.soft-shortcut-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -641,8 +640,7 @@ button:focus-visible {
   margin-top: 6px;
 }
 
-.soft-shortcut-footer output,
-.soft-shortcut-list span {
+.soft-shortcut-footer output {
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -653,14 +651,32 @@ button:focus-visible {
 }
 
 .soft-shortcut-list {
-  margin: 6px 0 0;
-  padding: 0;
-  border-top: 1px solid #40454c;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 76px;
+  overflow-y: auto;
+  margin: 0 0 7px;
+  padding: 0 0 7px;
+  border-bottom: 1px solid #40454c;
   list-style: none;
 }
 
-.soft-shortcut-button {
-  border-color: #557698;
+.soft-shortcut-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border: 1px solid #40454c;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.soft-shortcut-chip:hover {
+  background: #383f49;
 }
 
 .soft-key-capture {
@@ -686,7 +702,6 @@ button:focus-visible {
   overscroll-behavior-x: contain;
   touch-action: pan-x;
   scrollbar-width: none;
-  padding-bottom: 1px;
 }
 
 .soft-key-strip::-webkit-scrollbar {
@@ -709,6 +724,18 @@ button:focus-visible {
   white-space: nowrap;
   flex-shrink: 0;
   transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.soft-key-strip .soft-key-btn {
+  min-height: 29px;
+  min-width: 34px;
+  padding: 3px 7px;
+  border-color: transparent;
+  background: #2c323a;
+}
+
+.soft-key-strip .soft-shortcut-button {
+  border-color: #557698;
 }
 
 .soft-key-btn.active {
@@ -771,13 +798,6 @@ button:focus-visible {
 .virtual-key-alternate {
   font-size: 0.72em;
   opacity: 0.75;
-}
-
-.soft-key-divider {
-  width: 1px;
-  height: 20px;
-  background: #40454c;
-  flex-shrink: 0;
 }
 
 .rd-session-tabs {
@@ -2217,9 +2237,6 @@ input.ui-switch:disabled { cursor:default; opacity:.5; }
 .tool-options button[aria-pressed=true] { background:transparent; color:#8bcaff; box-shadow:inset 0 -2px currentColor; }
 .tool-options button[aria-pressed=true] svg { color:inherit; }
 .remote-menu-panel h2 { font-size:15px; }
-.soft-key-strip { scrollbar-width:thin; scrollbar-color:#697483 transparent; padding-bottom:3px; }
-.soft-key-strip::-webkit-scrollbar { display:block; height:3px; }
-.soft-key-strip::-webkit-scrollbar-thumb { background:#697483; border-radius:3px; }
 .rd-settings-card { background:transparent; border:0; border-radius:0; padding:0 0 16px; border-bottom:1px solid var(--rd-divider); box-shadow:none; }
 .rd-settings-card:last-child { border-bottom:0; }
 .rd-settings-card-title { font-size:14px; color:var(--ink-soft); margin-bottom:6px; }

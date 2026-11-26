@@ -230,6 +230,10 @@ try {
     };
   })()`);
   const fullHeight = await evaluate('window.visualViewport.height');
+  await evaluate(`(() => {
+    localStorage.removeItem('rd_web_soft_function_keys');
+    localStorage.setItem('rd_web_soft_shortcuts', JSON.stringify([{ key: 'Escape', modifiers: [] }]));
+  })()`);
   await tapElement(select('dock-keyboard'));
   await until(`${softbar}?.dataset.keyboardMode === 'system'`);
   assert.equal(await evaluate('document.activeElement === ' + select('soft-input')), true);
@@ -310,13 +314,25 @@ try {
   const settingsButton = select('soft-shortcut-toggle');
   const shortcutSettings = select('soft-shortcut-settings');
   const shortcutButton = select('soft-shortcut');
+  const functionStrip = select('soft-key-strip');
+  const functionKey = key => `${functionStrip}.querySelector('[data-function-key="${key}"]')`;
+  const pickedKey = key => `${shortcutSettings}.querySelector('[data-shortcut-key="${key}"]')`;
+  const removeKey = key => `${shortcutSettings}.querySelector('[data-remove-key="${key}"]')`;
   assert.ok(await evaluate(`${functionRow}.firstElementChild.contains(${settingsButton})`));
+  assert.deepEqual(await evaluate(`Array.from(${functionStrip}.children, key => key.dataset.functionKey)`),
+    ['Control', 'Alt', 'Shift', 'Meta', 'Escape']);
+  assert.equal(await evaluate(`getComputedStyle(${functionStrip}).scrollbarWidth`), 'none');
   await tapElement(settingsButton);
   await until(shortcutSettings);
   await tapElement(`${shortcutSettings}.querySelector('[data-shortcut-modifier="Control"]')`);
-  await tapElement(`${shortcutSettings}.querySelector('[data-shortcut-key="a"]')`);
+  await tapElement(pickedKey('a'));
   await tapElement(select('soft-shortcut-add'));
   assert.equal(await evaluate(shortcutButton + '.textContent'), 'Ctrl+A');
+  await tapElement(removeKey('Escape'));
+  assert.equal(await evaluate(functionKey('Escape') + ' === null'), true);
+  await evaluate(pickedKey('Tab') + '.click()');
+  await evaluate(select('soft-shortcut-add') + '.click()');
+  assert.ok(await evaluate('Boolean(' + functionKey('Tab') + ')'));
   await tapElement(settingsButton);
   const beforeShortcut = await evaluate(keyEvents + '.length');
   await tapElement(shortcutButton);
@@ -347,11 +363,17 @@ try {
   await until(select('soft-mod-win'));
   assert.equal(await evaluate(shortcutButton + '.textContent'), 'Ctrl+A');
   await evaluate(settingsButton + '.click()');
-  await until(select('soft-shortcut-remove'));
-  await evaluate(select('soft-shortcut-remove') + '.click()');
+  await until(removeKey('a'));
+  assert.equal(await evaluate(functionKey('Escape') + ' === null'), true);
+  assert.ok(await evaluate('Boolean(' + functionKey('Tab') + ')'));
+  await evaluate(removeKey('a') + '.click()');
+  await evaluate(removeKey('Tab') + '.click()');
+  await evaluate(pickedKey('Escape') + '.click()');
+  await evaluate(select('soft-shortcut-add') + '.click()');
   assert.equal(await evaluate(shortcutButton + ' === null'), true);
+  assert.ok(await evaluate('Boolean(' + functionKey('Escape') + ')'));
   await evaluate(settingsButton + '.click()');
-  console.log('Keyboard toolbars: alignment, adding, sending, persisting and removing a shortcut verified.');
+  console.log('Function row: hidden scrollbar, editable default keys, shortcut dispatch and persistence verified.');
   assert.equal(await evaluate(select('soft-mod-win') + '.textContent'), 'Win');
   assert.equal(await evaluate(select('soft-mod-alt') + '.textContent'), 'Alt');
   await evaluate(select('soft-hide') + '.click()');
@@ -393,7 +415,10 @@ try {
   console.log('macOS: Command and Option labels and Command+C events verified.');
 
   assert.equal(await evaluate(select('soft-chord-toggle') + ' === null'), true);
-  assert.ok(await evaluate(`${select('soft-key-strip')}.querySelector('button[aria-label="Page Down"]') !== null`));
+  assert.equal(await evaluate(functionKey('PageDown') + ' === null'), true);
+  await evaluate(settingsButton + '.click()');
+  await until(pickedKey('PageDown'));
+  await evaluate(settingsButton + '.click()');
   await evaluate(select('soft-hide') + '.click()');
 } finally {
   socket.close();

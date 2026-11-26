@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import { useState } from 'react';
+import { isModifier } from '../lib/keys';
 import { t, type Locale } from '../lib/i18n';
 
 export interface SoftShortcut {
@@ -27,6 +28,7 @@ export function SoftShortcutSettings({
 }) {
   const [selectedModifiers, setSelectedModifiers] = useState<string[]>([]);
   const [key, setKey] = useState('');
+  const canCombine = !isModifier(key);
   const draft = { modifiers: modifiers.filter(choice => selectedModifiers.includes(choice.value)).map(choice => choice.value), key };
   const alreadyAdded = shortcuts.some(shortcut => shortcut.key === key &&
     shortcut.modifiers.length === draft.modifiers.length &&
@@ -48,9 +50,24 @@ export function SoftShortcutSettings({
           <X size={17} aria-hidden="true" />
         </button>
       </header>
+      {shortcuts.length > 0 && (
+        <ul className="soft-shortcut-list" aria-label={t(locale, 'softVisibleKeys')}>
+          {shortcuts.map((shortcut, index) => {
+            const label = describe(shortcut);
+            return <li key={label}>
+              <button type="button" className="soft-shortcut-chip" data-testid="soft-shortcut-remove"
+                data-remove-key={shortcut.key}
+                aria-label={`${t(locale, 'softShortcutRemove')} ${label}`} onClick={() => onRemove(index)}>
+                <span>{label}</span><X size={13} aria-hidden="true" />
+              </button>
+            </li>;
+          })}
+        </ul>
+      )}
       <div className="soft-shortcut-modifiers" role="group" aria-label={t(locale, 'softShortcutModifiers')}>
         {modifiers.map(choice => <button key={choice.value} type="button" className="soft-key-btn"
           data-shortcut-modifier={choice.value} aria-pressed={selectedModifiers.includes(choice.value)}
+          disabled={!canCombine}
           onClick={() => setSelectedModifiers(previous => previous.includes(choice.value)
             ? previous.filter(value => value !== choice.value) : [...previous, choice.value])}>
           {choice.label}
@@ -59,7 +76,10 @@ export function SoftShortcutSettings({
       <div className="soft-shortcut-keys" role="group" aria-label={t(locale, 'softShortcutKey')}>
         {keys.map(choice => <button key={choice.value} type="button" className="soft-key-btn"
           data-shortcut-key={choice.value} aria-label={choice.aria}
-          aria-pressed={key === choice.value} onClick={() => setKey(choice.value)}>
+          aria-pressed={key === choice.value} onClick={() => {
+            setKey(choice.value);
+            if (isModifier(choice.value)) setSelectedModifiers([]);
+          }}>
           {choice.label}
         </button>)}
       </div>
@@ -68,17 +88,7 @@ export function SoftShortcutSettings({
         <button type="button" className="soft-key-btn" data-testid="soft-shortcut-add"
           disabled={!key || alreadyAdded} onClick={addShortcut}>{t(locale, 'softShortcutAdd')}</button>
       </div>
-      {shortcuts.length > 0 && (
-        <ul className="soft-shortcut-list">
-          {shortcuts.map((shortcut, index) => <li key={describe(shortcut)}>
-            <span>{describe(shortcut)}</span>
-            <button type="button" className="softbar-icon" data-testid="soft-shortcut-remove"
-              aria-label={`${t(locale, 'softShortcutRemove')} ${describe(shortcut)}`} onClick={() => onRemove(index)}>
-              <X size={16} aria-hidden="true" />
-            </button>
-          </li>)}
-        </ul>
-      )}
+
     </section>
   );
 }
