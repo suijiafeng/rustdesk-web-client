@@ -85,6 +85,7 @@ export async function readUntilHash(
   const msg = decodeMessage(raw);
 
   if (msg.hash) {
+    if (peerSignPk) throw new Error('peer signature is required before the Hash challenge');
     return {
       hash: {
         salt: String(msg.hash.salt ?? ''),
@@ -99,17 +100,18 @@ export async function readUntilHash(
     let opened: { id: string; pk: Uint8Array; kx_version: number } | null = null;
 
     if (peerSignPk) {
+      if (peerSignPk.length !== 32) throw new Error('peer sign public key length is invalid');
       const verified = nacl.sign.open(signedBytes, peerSignPk);
-      if (verified) {
-        const parsed = decodeIdPk(verified);
-        if (parsed.pk.length === 32 && (!expectedId || parsed.id === expectedId)) {
-          opened = parsed;
-        }
-      }
+      if (!verified) throw new Error('peer signature verification failed');
+      const parsed = decodeIdPk(verified);
+      if (parsed.pk.length !== 32) throw new Error('peer signed public key length is invalid');
+      if (expectedId && parsed.id !== expectedId) throw new Error('peer signed identity does not match the requested ID');
+      opened = parsed;
     }
 
     if (!opened) {
-      // Matches desktop client behavior: send empty PublicKey and continue unencrypted
+      // Preserve legacy direct connections without a trusted peer key. A failed
+      // check against an existing key must never reach this compatibility path.
       await stream.sendRaw(encodeMessage({ public_key: {} }));
       const hash = await recvHash(stream, permissions);
       return { hash, encrypted: false };
@@ -149,10 +151,9 @@ export function peerSignKey(
   signedPk: Uint8Array | undefined,
   expectedPeerId: string,
 ): Uint8Array | null {
-  if (!serverKeyB64.trim() || !signedPk || signedPk.length === 0) {
-    return null;
-  }
+  if (!serverKeyB64.trim()) return null;
   const rsPk = rsPublicKey(serverKeyB64);
+  if (!signedPk?.length) throw new Error('identity server did not provide a signed peer public key');
   const verified = nacl.sign.open(signedPk, rsPk);
   if (!verified) {
     throw new Error('identity server signature verification failed');
