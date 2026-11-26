@@ -1,6 +1,13 @@
-import { CODEC_AV1, CODEC_H264, CODEC_H265, CODEC_VP8, CODEC_VP9 } from './video.ts';
+import { buildRefreshVideoMessage, buildVideoReceivedMessage, humanizeError } from './control.ts';
+import { encodeMessage } from './protos.ts';
+import type { ConnectedHost } from './rustdeskClient.ts';
+import type { SessionContext } from './sessionState.ts';
+import {
+  CODEC_AV1, CODEC_H264, CODEC_H265, CODEC_VP8, CODEC_VP9,
+  HEADER_LEN, encodeRdv1Frame, vp8KeyframeSize,
+} from './video.ts';
 
-export function isH264AnnexBKeyframe(data: Uint8Array): boolean {
+function isH264AnnexBKeyframe(data: Uint8Array): boolean {
   const limit = Math.min(data.length, 4096);
   for (let i = 0; i + 4 < limit; i++) {
     if (data[i] === 0 && data[i + 1] === 0) {
@@ -19,7 +26,7 @@ export function isH264AnnexBKeyframe(data: Uint8Array): boolean {
   return false;
 }
 
-export function isVp9Keyframe(data: Uint8Array): boolean {
+function isVp9Keyframe(data: Uint8Array): boolean {
   if (data.length < 4) return false;
   const b0 = data[0];
   // VP9 uncompressed header: frame_marker (2 bits) == 0b10
@@ -35,7 +42,7 @@ export function isVp9Keyframe(data: Uint8Array): boolean {
   return false;
 }
 
-export function extractEncodedFrames(
+function extractEncodedFrames(
   vf: Record<string, any>,
 ): { codec: number; frames: any[] } | null {
   if (vf.vp8s?.frames?.length) return { codec: CODEC_VP8, frames: vf.vp8s.frames };
@@ -46,3 +53,83 @@ export function extractEncodedFrames(
   return null;
 }
 
+export interface VideoFrameHandler {
+  handleFrame: (conn: ConnectedHost, vf: Record<string, any>) => void;
+  dispose: () => void;
+}
+
+export function createVideoFrameHandler(context: SessionContext): VideoFrameHandler {
+  const { state, ws, videoBuffer, sendJson, sendBinary, cleanup } = context;
+  let recoveryTimer: ReturnType<typeof setTimeout> | undefined;
+  let warnedRawVideo = false;
+
+  const scheduleVideoRecovery = (conn: ConnectedHost) => {
+    if (recoveryTimer || !videoBuffer.needsRefresh) return;
+    recoveryTimer = setTimeout(() => {
+      recoveryTimer = undefined;
+      if (state.phase !== 'live' || state.hostConn !== conn || !videoBuffer.needsRefresh) return;
+      if (videoBuffer.shouldRequestRefresh(ws.bufferedAmount, performance.now())) {
+        void conn.stream.sendRaw(encodeMessage(buildRefreshVideoMessage())).catch((err) => {
+          if (state.phase === 'live' && state.hostConn === conn) {
+            sendJson({ type: 'status', state: 'error', detail: humanizeError(err) });
+            cleanup(false);
+          }
+        });
+      }
+      scheduleVideoRecovery(conn);
+    }, 250);
+    recoveryTimer.unref?.();
+  };
+
+  const handleFrame = (conn: ConnectedHost, vf: Record<string, any>) => {
+    if ((vf.rgb || vf.yuv) && !warnedRawVideo) {
+      warnedRawVideo = true;
+      sendJson({
+        type: 'error',
+        message:
+          'the host sent uncompressed video; this client only decodes vp8, vp9, h264, h265, and av1',
+      });
+    }
+
+    const extracted = extractEncodedFrames(vf);
+    if (extracted) {
+      const display = Math.max(0, Number(vf.display ?? 0));
+      const nowMs = BigInt(Date.now());
+      for (const f of extracted.frames) {
+        const payload = f.data ? new Uint8Array(f.data) : new Uint8Array(0);
+        const isKey =
+          Boolean(f.key) ||
+          (extracted.codec === CODEC_H264 && isH264AnnexBKeyframe(payload)) ||
+          (extracted.codec === CODEC_VP9 && isVp9Keyframe(payload));
+        if (extracted.codec === CODEC_VP8 && isKey) {
+          const parsedSize = vp8KeyframeSize(payload);
+          if (parsedSize) {
+            state.currentSize = parsedSize;
+          }
+        }
+        if (!videoBuffer.shouldForward(display, isKey, payload.byteLength + HEADER_LEN, ws.bufferedAmount)) {
+          scheduleVideoRecovery(conn);
+          continue;
+        }
+        const pts = BigInt(f.pts ?? 0);
+        const packet = encodeRdv1Frame({
+          codec: extracted.codec,
+          key: isKey,
+          display,
+          width: state.currentSize.width,
+          height: state.currentSize.height,
+          pts,
+          gatewayUnixMs: nowMs,
+          data: payload,
+        });
+        sendBinary(packet);
+      }
+      // RustDesk 1.5 QoS ACK once per message containing video frames (non-blocking)
+      void conn.stream
+        .sendRaw(encodeMessage(buildVideoReceivedMessage()))
+        .catch(() => {});
+    }
+  };
+
+  return { handleFrame, dispose: () => clearTimeout(recoveryTimer) };
+}
