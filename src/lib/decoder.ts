@@ -135,6 +135,8 @@ export interface DecoderMetrics {
   decodedCount: number;
   renderedCount: number;
   droppedCount: number;
+  /** Actual backlog-driven codec replacements; excludes ordinary pending-paint drops. */
+  backlogRecoveryCount: number;
   decodeQueueSize: number;
   inFlightFrames: number;
   oldestFrameAgeMs: number;
@@ -172,6 +174,7 @@ export class RemoteDecoder {
   private decodedCount = 0;
   private renderedCount = 0;
   private droppedCount = 0;
+  private backlogRecoveryCount = 0;
   private readonly cb: RemoteDecoderCallbacks;
 
   constructor(cb: RemoteDecoderCallbacks) {
@@ -183,6 +186,7 @@ export class RemoteDecoder {
       decodedCount: this.decodedCount,
       renderedCount: this.renderedCount,
       droppedCount: this.droppedCount,
+      backlogRecoveryCount: this.backlogRecoveryCount,
       decodeQueueSize: this.decoder?.state === 'configured' ? this.decoder.decodeQueueSize : 0,
       inFlightFrames: this.inFlight.size,
       oldestFrameAgeMs: this.oldestFrameAge(performance.now()),
@@ -251,6 +255,7 @@ export class RemoteDecoder {
       // and allowing every keyframe through makes the queue unbounded.
       this.droppedCount += queueSize;
       if (!this.configure(packet.codecName, packet.width, packet.height)) return;
+      this.backlogRecoveryCount++;
     }
 
     if (this.waitKey && !packet.key) {
@@ -484,5 +489,6 @@ export class RemoteDecoder {
     this.decodedCount = 0;
     this.renderedCount = 0;
     this.droppedCount = 0;
+    this.backlogRecoveryCount = 0;
   }
 }

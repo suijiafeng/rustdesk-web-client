@@ -108,12 +108,13 @@ export default function App() {
     }
   }, []);
 
-  const video = useVideoPipeline({ phase, send });
+  const [quality, setQuality] = useState<QualityLevel>(displayPrefs.qualityPreset);
+  const [targetFps, setTargetFps] = useState(displayPrefs.targetFps);
+  const video = useVideoPipeline({ phase, send, targetFps,
+    settingsKey: `${quality}:${displayPrefs.customBitrate}:${displayPrefs.codec}` });
   const { statsStore, videoLayout, decoderRef, sizeRef } = video;
   const [rtt, setRtt] = useState(0);
   const [gatewayVideo, setGatewayVideo] = useState<Extract<ServerMessage, { type: 'pong' }>['gatewayVideo']>();
-  const [quality, setQuality] = useState<QualityLevel>(displayPrefs.qualityPreset);
-  const [targetFps, setTargetFps] = useState(displayPrefs.targetFps);
   const [sessionTip, setSessionTip] = useState<{ text: string; error: boolean } | null>(null);
   const [webRtcFallbackReason, setWebRtcFallbackReason] = useState<string | null>(null);
   const showSessionTip = useCallback((text: string, error = false) => {
@@ -406,6 +407,12 @@ export default function App() {
         delayMs: rtt || stats.delayMs,
         bitrate: stats.bitrate,
         decoded: stats.decoded,
+        rxFps: stats.rxFps,
+        renderFps: stats.renderFps,
+        inFlightFrames: stats.inFlightFrames ?? 0,
+        oldestFrameAgeMs: stats.oldestFrameAgeMs ?? 0,
+        decodeLatencyMs: stats.decodeLatencyMs ?? 0,
+        effectiveFps: stats.effectiveFps ?? 0,
         cursorX: Math.round(cursorRef.current.x),
         cursorY: Math.round(cursorRef.current.y),
         touchMode,

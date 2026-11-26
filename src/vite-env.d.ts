@@ -10,6 +10,12 @@ export interface RdRuntimeState {
   delayMs: number;
   bitrate: number;
   decoded: number;
+  rxFps?: number;
+  renderFps?: number;
+  inFlightFrames?: number;
+  oldestFrameAgeMs?: number;
+  decodeLatencyMs?: number;
+  effectiveFps?: number;
   cursorX: number;
   cursorY: number;
   touchMode: boolean;

@@ -151,7 +151,7 @@ export type ClientMessage =
   | { type: 'lockAfterSessionEnd'; enabled: boolean }
   | { type: 'switchDisplay'; display: number }
   | { type: 'refresh' }
-  | { type: 'quality'; quality: QualityLevel; customQuality?: number; fps: number; codec?: string }
+  | { type: 'quality'; quality?: QualityLevel; customQuality?: number; fps: number; codec?: string }
   | { type: 'ping'; seq: number; clientTs: number }
   | { type: 'disconnect' };
 

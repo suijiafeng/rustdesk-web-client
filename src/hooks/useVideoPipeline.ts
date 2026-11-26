@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createSessionStatsStore } from '../lib/sessionStats';
+import { advanceVideoPacing, createVideoPacing, type VideoPacingState } from '../lib/videoPacing';
 import type { ConnectionPhase } from '../types';
 import { RemoteDecoder, webCodecsStatus } from '../lib/decoder';
 import type { ClientMessage } from '../lib/protocol';
@@ -13,15 +14,19 @@ export { EMPTY_STATS } from '../lib/sessionStats';
 interface Options {
   phase: ConnectionPhase;
   send: (message: ClientMessage) => void;
+  targetFps?: number;
+  /** Explicit quality/codec changes also restore the host's user-selected FPS cap. */
+  settingsKey?: string;
 }
 
-export function useVideoPipeline({ phase, send }: Options) {
+export function useVideoPipeline({ phase, send, targetFps, settingsKey }: Options) {
   const initialWebCodecs = webCodecsStatus();
   const [statsStore] = useState(createSessionStatsStore);
   const { setStats } = statsStore;
   const videoLayout = useSyncExternalStore(statsStore.subscribeLayout, statsStore.getLayoutSnapshot, statsStore.getLayoutSnapshot);
   const [decoderError, setDecoderError] = useState(initialWebCodecs.ok ? '' : initialWebCodecs.reason);
   const decoderRef = useRef<RemoteDecoder | null>(null);
+  const pacingRef = useRef<VideoPacingState | null>(null);
   const sizeRef = useRef({ width: 1280, height: 720 });
 
   // Frame sampling-rate telemetry refs (avoiding 60Hz React setState per frame)
@@ -42,6 +47,10 @@ export function useVideoPipeline({ phase, send }: Options) {
     const decoded = decMetrics ? decMetrics.renderedCount : acc.decoded;
     const dropped = decMetrics ? decMetrics.droppedCount : acc.dropped;
     const decodeQueueSize = decMetrics?.decodeQueueSize ?? 0;
+    const inFlightFrames = decMetrics?.inFlightFrames ?? 0;
+    const oldestFrameAgeMs = Math.round(decMetrics?.oldestFrameAgeMs ?? 0);
+    const decodeLatencyMs = Math.round(decMetrics?.decodeLatencyMs ?? 0);
+    const effectiveFps = pacingRef.current?.effectiveFps;
     setStats((prev) => {
       const nextWidth = acc.width > 0 ? acc.width : prev.width;
       const nextHeight = acc.height > 0 ? acc.height : prev.height;
@@ -54,6 +63,10 @@ export function useVideoPipeline({ phase, send }: Options) {
         prev.rxFps === rates.rxFps &&
         prev.renderFps === rates.renderFps &&
         prev.decodeQueueSize === decodeQueueSize &&
+        prev.inFlightFrames === inFlightFrames &&
+        prev.oldestFrameAgeMs === oldestFrameAgeMs &&
+        prev.decodeLatencyMs === decodeLatencyMs &&
+        prev.effectiveFps === effectiveFps &&
         prev.bitrate === rates.bitrate &&
         prev.delayMs === acc.lastDelayMs &&
         prev.decoded === decoded &&
@@ -70,6 +83,10 @@ export function useVideoPipeline({ phase, send }: Options) {
         rxFps: rates.rxFps,
         renderFps: rates.renderFps,
         decodeQueueSize,
+        inFlightFrames,
+        oldestFrameAgeMs,
+        decodeLatencyMs,
+        effectiveFps,
         delayMs: acc.lastDelayMs,
         bitrate: rates.bitrate,
         decoded,
@@ -130,10 +147,24 @@ export function useVideoPipeline({ phase, send }: Options) {
   useEffect(() => {
     if (phase !== 'live') return;
     const timer = window.setInterval(() => {
-      publishStatsSnapshot(performance.now());
+      const nowMs = performance.now();
+      const visible = document.visibilityState !== 'hidden';
+      if (visible) decoderRef.current?.checkStall();
+      const metrics = decoderRef.current?.getMetrics();
+      if (metrics && pacingRef.current) {
+        const next = advanceVideoPacing(pacingRef.current, { ...metrics, nowMs, visible });
+        pacingRef.current = next.state;
+        // FPS-only updates preserve host bitrate/codec choices and do not request a keyframe.
+        if (next.fps !== undefined) send({ type: 'quality', fps: next.fps });
+      }
+      publishStatsSnapshot(nowMs);
     }, 250);
     return () => window.clearInterval(timer);
-  }, [phase, publishStatsSnapshot]);
+  }, [phase, publishStatsSnapshot, send]);
+
+  useEffect(() => {
+    pacingRef.current = phase === 'live' && targetFps !== undefined ? createVideoPacing(targetFps) : null;
+  }, [phase, targetFps, settingsKey]);
 
   return {
     statsStore, videoLayout, setStats, decoderError, setDecoderError,

@@ -9,6 +9,10 @@ export interface SessionStats {
   rxFps: number;
   renderFps: number;
   decodeQueueSize: number;
+  inFlightFrames?: number;
+  oldestFrameAgeMs?: number;
+  decodeLatencyMs?: number;
+  effectiveFps?: number;
   delayMs: number;
   bitrate: number;
   decoded: number;
@@ -19,6 +23,7 @@ export interface SessionStats {
 export const EMPTY_STATS: SessionStats = {
   codec: '—', width: 0, height: 0, fps: 0, rxFps: 0, renderFps: 0,
   decodeQueueSize: 0, delayMs: 0, bitrate: 0, decoded: 0, dropped: 0, streamState: 'waiting',
+  inFlightFrames: 0, oldestFrameAgeMs: 0, decodeLatencyMs: 0, effectiveFps: 0,
 };
 export type VideoLayout = Pick<SessionStats, 'width' | 'height' | 'codec'>;
 

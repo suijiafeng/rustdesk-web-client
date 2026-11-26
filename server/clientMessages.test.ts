@@ -172,6 +172,19 @@ test('continuous quality updates preserve FPS, switch back to presets and reject
   assert.deepEqual(f.closed, []);
 });
 
+test('receiver FPS feedback preserves quality and codec without requesting another keyframe', async t => {
+  const f = fixture(t);
+  await f.send({ type: 'quality', fps: 18 });
+  assert.equal(f.writes.length, 1, 'FPS feedback sends one option message and no refresh');
+  const option = f.writes[0].misc?.option;
+  assert.ok(option);
+  assert.equal(option.custom_fps, 18);
+  assert.equal(option.image_quality ?? 0, 0, 'NotSet leaves native image quality unchanged');
+  assert.equal(option.custom_image_quality, undefined);
+  assert.equal(option.supported_decoding, undefined);
+  assert.equal(f.state.preferredCodec, 'vp8');
+});
+
 
 test('session-end lock settings reach the host before disconnect and reject non-boolean values', async t => {
   const f = fixture(t);
