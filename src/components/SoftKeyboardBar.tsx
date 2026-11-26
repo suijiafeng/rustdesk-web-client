@@ -50,6 +50,7 @@ const EXTRA_KEYS: ReadonlyArray<{ label: string; control: string; aria?: string 
   { label: 'Del', control: 'Delete' },
 ] as const;
 
+const KEY_FEEDBACK_MS = 140;
 const CHAR_ROWS = ['1234567890', 'qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
 
 const VIRTUAL_CONTROLS = EXTRA_KEYS.filter(key =>
@@ -73,6 +74,19 @@ export function SoftKeyboardBar({
   const composingRef = useRef(false);
   const lastSentRef = useRef('');
   const [latched, setLatched] = useState<string[]>([]);
+  const [pressedKey, setPressedKey] = useState<string | null>(null);
+  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => () => clearTimeout(feedbackTimer.current), []);
+
+  const showKeyFeedback = (target: EventTarget) => {
+    if (!(target instanceof Element)) return;
+    const key = target.closest<HTMLButtonElement>('button[data-key-feedback]')?.dataset.keyFeedback;
+    if (!key) return;
+    clearTimeout(feedbackTimer.current);
+    setPressedKey(key);
+    feedbackTimer.current = setTimeout(() => setPressedKey(null), KEY_FEEDBACK_MS);
+  };
   const modifierLabel = (control: string, label: string) =>
     control === 'Meta' ? metaLabel : control === 'Alt' ? altLabel : label;
 
@@ -248,7 +262,11 @@ export function SoftKeyboardBar({
       data-testid="softbar"
       data-keyboard-mode={mode}
       style={{ '--soft-key-space': `${reservedSpace}px` } as React.CSSProperties}
-      onPointerDown={(e) => e.stopPropagation()}
+      onPointerDown={e => {
+        showKeyFeedback(e.target);
+        e.stopPropagation();
+      }}
+      onClickCapture={e => showKeyFeedback(e.target)}
       onMouseDown={(e) => {
         if (e.target instanceof Element && e.target.closest('button')) {
           e.preventDefault();
@@ -269,6 +287,8 @@ export function SoftKeyboardBar({
               type="button"
               aria-pressed={isActive}
               data-testid={`soft-mod-${mod.label.toLowerCase()}`}
+              data-key-feedback={`modifier-${mod.control}`}
+              data-key-pressed={pressedKey === `modifier-${mod.control}` || undefined}
               className={`soft-key-btn${isActive ? ' active' : ''}`}
               onClick={() => toggleModifier(mod.control)}
             >
@@ -283,6 +303,8 @@ export function SoftKeyboardBar({
             type="button"
             aria-label={item.aria ?? item.label}
             className="soft-key-btn"
+            data-key-feedback={`toolbar-${item.control}`}
+            data-key-pressed={pressedKey === `toolbar-${item.control}` || undefined}
             onClick={() => tapKey({ control: item.control })}
           >
             {item.label}
@@ -312,11 +334,15 @@ export function SoftKeyboardBar({
           role="group" aria-label={t(locale, 'softVirtualKeyboard')} inert={reservedSpace < 80}>
           {CHAR_ROWS.map(row => <div className="virtual-keyboard-row" key={row}>
             {[...row].map(chr => <button type="button" className="soft-key-btn" key={chr}
+              data-key-feedback={`letter-${chr}`}
+              data-key-pressed={pressedKey === `letter-${chr}` || undefined}
               onClick={() => tapKey({ chr })}>{chr.toUpperCase()}</button>)}
           </div>)}
           <div className="virtual-keyboard-row">
             {VIRTUAL_CONTROLS.map(key => <button type="button" className="soft-key-btn" key={key.control}
               data-key={key.control} aria-label={key.aria ?? key.label}
+              data-key-feedback={`virtual-${key.control}`}
+              data-key-pressed={pressedKey === `virtual-${key.control}` || undefined}
               onClick={() => tapKey({ control: key.control })}>
               {key.control === 'Backspace' ? '⌫' : key.label}
             </button>)}

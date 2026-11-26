@@ -237,7 +237,18 @@ try {
 
   const keyEvents = "window.sent.filter(event => event.type === 'key')";
   const firstVirtualEvent = await evaluate(keyEvents + '.length');
-  await tapElement(`${virtualKeyboard}.querySelector('.virtual-keyboard-row:nth-child(3) button')`);
+  const letterA = `${virtualKeyboard}.querySelector('[data-key-feedback="letter-a"]')`;
+  const letterPoint = await evaluate(`(() => {
+    const rect = ${letterA}.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  })()`);
+  const idleColor = await evaluate(`getComputedStyle(${letterA}).backgroundColor`);
+  await touch('touchStart', [letterPoint]);
+  assert.equal(await evaluate(letterA + '.dataset.keyPressed'), 'true');
+  assert.notEqual(await evaluate(`getComputedStyle(${letterA}).backgroundColor`), idleColor);
+  await touch('touchEnd');
+  assert.equal(await evaluate(letterA + '.dataset.keyPressed'), 'true');
+  await until(letterA + '.dataset.keyPressed === undefined');
   await tapElement(select('soft-mod-ctrl'));
   await tapElement(select('soft-mod-shift'));
   await tapElement(`${virtualKeyboard}.querySelector('[data-key="Enter"]')`);

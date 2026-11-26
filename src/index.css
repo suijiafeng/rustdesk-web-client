@@ -572,6 +572,14 @@ button:focus-visible {
   color: #8bcaff;
 }
 
+.soft-key-btn[data-key-feedback]:is(:active, [data-key-pressed="true"]) {
+  background: #356597;
+  border-color: #8bcaff;
+  box-shadow: inset 0 2px 3px #0004;
+  color: #fff;
+  transition: none;
+}
+
 .virtual-keyboard {
   position: absolute;
   inset-inline: 0;
