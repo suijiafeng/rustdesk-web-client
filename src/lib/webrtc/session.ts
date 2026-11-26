@@ -1,4 +1,5 @@
 import { type PeerInfo, canRestart, permissions, peerToJson, initialDisplaySize, HostPermission, PrivacyState, privacyResult, supportsModernDisplayControls, supportedResolutions } from '../../../shared/peer.ts';
+import { errorPayload } from '../../../shared/errors';
 import { decodeClipboard } from '../../../shared/clipboard.ts';
 import { Buffer } from 'buffer';
 import { type ClientMessage, type CodecCaps, buildRefreshVideoMessage, buildVideoReceivedMessage, decodingPreferenceChanged, humanizeError, toHostMessage } from '../../../shared/control.ts';
@@ -43,7 +44,7 @@ export function createNativeSession(
     onClose();
   };
   const fail = (error: unknown) => {
-    sendJson({ type: 'status', state: 'error', detail: humanizeError(error) });
+    sendJson({ type: 'status', state: 'error', ...errorPayload(error) });
     cleanup();
   };
   const startHostPump = async (conn: NativeConnection) => {
@@ -112,7 +113,7 @@ export function createNativeSession(
           }
           if (msg.misc.close_reason) {
             const reason = String(msg.misc.close_reason);
-            sendJson({ type: 'status', state: 'error', detail: humanizeError(reason) });
+            sendJson({ type: 'status', state: 'error', ...errorPayload(reason) });
             // Appendix B fix #8: actively close the stream on close_reason
             cleanup(false);
             return;
@@ -238,7 +239,7 @@ export function createNativeSession(
       }
     } catch (err) {
       if (state === 'live') {
-        sendJson({ type: 'status', state: 'error', detail: humanizeError(err) });
+        sendJson({ type: 'status', state: 'error', ...errorPayload(err) });
         cleanup(false);
       }
     }
@@ -309,7 +310,7 @@ export function createNativeSession(
           hostMsg = toHostMessage(refreshVideo ? parsed : { ...parsed, codec: undefined }, sessionCodecs);
           if (refreshVideo) preferredCodec = parsed.codec;
         } catch (error) {
-          sendJson({ type: 'error', message: humanizeError(error) });
+          sendJson({ type: 'error', message: humanizeError(error), ...errorPayload(error) });
           return;
         }
       } else {
@@ -319,7 +320,7 @@ export function createNativeSession(
         const activeHost = hostConn;
         void activeHost.stream.sendRaw(encodeMessage(hostMsg)).catch((err) => {
           if (state === 'live') {
-            sendJson({ type: 'status', state: 'error', detail: humanizeError(err) });
+            sendJson({ type: 'status', state: 'error', ...errorPayload(err) });
             cleanup(false);
           }
         });

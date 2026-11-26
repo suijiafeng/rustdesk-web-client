@@ -1,3 +1,4 @@
+import type { ErrorPayload } from '../../shared/errors';
 import { useMemo, useState } from 'react';
 import {
   Clock,
@@ -51,6 +52,7 @@ interface RustDeskShellProps {
   gatewayTokenReadFailed: boolean;
   onSaveGatewayToken: (value: string) => Promise<boolean>;
   detail: string;
+  connectionError?: ErrorPayload;
   decoderError: string;
   touchMode: boolean;
   diagnosticsOpen: boolean;
@@ -100,6 +102,7 @@ export function RustDeskShell({
   gatewayTokenReadFailed,
   onSaveGatewayToken,
   detail,
+  connectionError,
   decoderError,
   touchMode,
   diagnosticsOpen,
@@ -169,6 +172,7 @@ export function RustDeskShell({
     gatewayToken,
     gatewayTokenNeedsInput,
     detail,
+  connectionError,
     decoderError,
     savedPasswords,
     onChangeMode,

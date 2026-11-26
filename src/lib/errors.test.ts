@@ -187,3 +187,16 @@ test('classifies non-RustDesk HTTP and protobuf wire-type errors cleanly in zh a
   assert.match(httpEn.message, /HTTP/);
 });
 
+
+test('structured error codes select localized guidance independently of backend wording', () => {
+  const failure = { code: 'TARGET_ADDRESS_BLOCKED', stage: 'transport', detail: 'Wrong password' } as const;
+  assert.equal(formatConnectionError('en', failure).title, formatConnectionError('en', 'That target address is not allowed.').title);
+  assert.equal(formatConnectionError('zh', { ...failure, code: 'GATEWAY_TOKEN_INVALID' }).title, '网关令牌无效');
+});
+
+test('native 2FA responses and malformed JSON do not masquerade as password or token failures', () => {
+  for (const detail of ['2FA Required', 'Wrong 2FA Code']) {
+    assert.equal(formatConnectionError('en', detail).title, 'Two-Factor Authentication Required');
+  }
+  assert.equal(formatConnectionError('en', 'Unexpected token in JSON').kind, 'generic');
+});

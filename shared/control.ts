@@ -1,3 +1,4 @@
+import { asAppError } from './errors.ts';
 import { Buffer } from 'buffer';
 import type { HostMessage, OptionMessage, ProtoInput, rustdesk } from './protoTypes.ts';
 import {
@@ -431,65 +432,22 @@ export function punchHoleFailureMessage(response: { failure?: number; other_fail
  * Converts low-level network/auth errors into clear plain-language guidance matching spec §4.12.
  */
 export function humanizeError(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err ?? '');
-  const lower = raw.toLowerCase();
-
-  if (lower.includes('wrong password')) {
-    return 'The host rejected the password. Check the permanent password and connect again.';
-  }
-  if (lower.includes('empty password') || lower.includes('no password access')) {
-    return 'The host requires a password. Enter the permanent password set on the desktop and connect again.';
-  }
-  if (
-    lower.includes('dns lookup') ||
-    lower.includes('enotfound') ||
-    lower.includes('eai_again') ||
-    lower.includes('eai_nodata') ||
-    lower.includes('eai_noname') ||
-    lower.includes('eservfail')
-  ) {
-    const match = raw.match(/DNS lookup (?:failed|timed out) for "([^"]+)"/i);
-    if (match?.[1]) {
-      return `DNS lookup failed for "${match[1]}". Check the domain spelling, remove any http:// prefix, and verify DNS records.`;
+  const { code, detail } = asAppError(err);
+  switch (code) {
+    case 'PASSWORD_INVALID': return 'The host rejected the password. Check the permanent password and connect again.';
+    case 'PASSWORD_REQUIRED': return 'The host requires a password. Enter the permanent password set on the desktop and connect again.';
+    case 'DNS_FAILED': {
+      const domain = detail.match(/DNS lookup (?:failed|timed out) for "([^"]+)"/i)?.[1];
+      return domain ? `DNS lookup failed for "${domain}". Check the domain spelling, remove any http:// prefix, and verify DNS records.`
+        : 'DNS lookup failed. Check the server domain spelling and network DNS settings.';
     }
-    return 'DNS lookup failed. Check the server domain spelling and network DNS settings.';
+    case 'PEER_NOT_FOUND': return 'ID does not exist. Check the device ID and that both devices use the same ID server.';
+    case 'PEER_OFFLINE': return 'The remote desktop is offline. Check that it is powered on, connected to the network, and running RustDesk.';
+    case 'UNREACHABLE': return 'Cannot reach the server or host. Check the address, port, and firewall settings.';
+    case 'TIMEOUT': return 'The host did not answer in time. It may be offline, or a firewall is blocking the port.';
+    case 'PROTOCOL_HTTP': return 'Not a RustDesk ID server: the target returned an HTTP/HTTPS response. Check the server address and port (default 21116 / direct 21118).';
+    case 'PROTOCOL_INVALID': return 'Not a RustDesk server: the target returned invalid protocol data. Check the server address and port (default 21116 / direct 21118).';
+    case 'GATEWAY_TOKEN_INVALID': return 'The gateway access token is missing or incorrect.';
+    default: return detail || 'The session ended unexpectedly.';
   }
-  if (lower.includes('id does not exist')) {
-    return 'ID does not exist. Check the device ID and that both devices use the same ID server.';
-  }
-  if (lower.includes('offline')) {
-    return 'The remote desktop is offline. Check that it is powered on, connected to the network, and running RustDesk.';
-  }
-  if (
-    lower.includes('connection refused') ||
-    lower.includes('econnrefused') ||
-    lower.includes('failed to connect') ||
-    lower.includes('os error 111') ||
-    lower.includes('network is unreachable') ||
-    lower.includes('enetunreach') ||
-    lower.includes('ehostunreach')
-  ) {
-    return 'Cannot reach the server or host. Check the address, port, and firewall settings.';
-  }
-  if (lower.includes('timed out') || lower.includes('timeout') || lower.includes('etimedout')) {
-    return 'The host did not answer in time. It may be offline, or a firewall is blocking the port.';
-  }
-  if (
-    lower.includes('not a rustdesk') ||
-    lower.includes('received an http response') ||
-    lower.includes('received a tls/https response') ||
-    lower.includes('ssh service') ||
-    lower.includes('invalid wire type') ||
-    lower.includes('index out of range') ||
-    lower.includes('frame overflow')
-  ) {
-    if (lower.includes('http response') || lower.includes('tls/https')) {
-      return 'Not a RustDesk ID server: the target returned an HTTP/HTTPS response. Check the server address and port (default 21116 / direct 21118).';
-    }
-    return 'Not a RustDesk server: the target returned invalid protocol data. Check the server address and port (default 21116 / direct 21118).';
-  }
-  if (lower.includes('gateway access token')) {
-    return 'The gateway access token is missing or incorrect.';
-  }
-  return raw || 'The session ended unexpectedly.';
 }

@@ -1,5 +1,7 @@
 import crypto from 'node:crypto';
 import net from 'node:net';
+import { AppError } from '../shared/errors.ts';
+import type { GatewayAdmission } from './admission.ts';
 
 export const RENDEZVOUS_PORT = 21116;
 export const RELAY_PORT = 21117;
@@ -136,6 +138,17 @@ export function tokenMatches(expected: string | undefined | null, given: string)
   const b = Buffer.from((given ?? '').trim(), 'utf8');
   if (a.length !== b.length) return false;
   return crypto.timingSafeEqual(a, b);
+}
+
+/** Both WebSocket entry points apply the same token/backoff policy exactly once per attempt. */
+export function authenticateGateway(expected: string, given: unknown, admission?: GatewayAdmission): void {
+  if (admission && !admission.canAuthenticate()) {
+    throw new AppError('RATE_LIMITED', 'admission', 'Too many failed attempts. Try again shortly.');
+  }
+  if (!tokenMatches(expected, typeof given === 'string' ? given : '')) {
+    admission?.recordTokenFailure();
+    throw new AppError('GATEWAY_TOKEN_INVALID', 'admission', 'The gateway access token is missing or incorrect.');
+  }
 }
 
 export function isValidRelayUuid(uuid: string): boolean {

@@ -1,6 +1,7 @@
+import { AppError, errorPayload } from '../shared/errors.ts';
 import type { WebSocket } from 'ws';
 import type { GatewayAdmission } from './admission.ts';
-import { checkPort, RENDEZVOUS_PORT, tokenMatches } from './auth.ts';
+import { checkPort, RENDEZVOUS_PORT, authenticateGateway } from './auth.ts';
 import { EncryptedFramedStream } from './bytesCodec.ts';
 import { punchHoleFailureMessage } from '../shared/control.ts';
 import { secureRendezvous } from './handshake.ts';
@@ -32,7 +33,7 @@ export function serveWebRtcSignal(ws: WebSocket, token: string, admission?: Gate
   };
   const fail = (error: unknown) => {
     if (state === 'closed') return;
-    send({ type: 'error', message: error instanceof Error ? error.message : 'WebRTC signaling failed' });
+    send({ type: 'error', message: error instanceof Error ? error.message : 'WebRTC signaling failed', ...errorPayload(error, 'signaling') });
     close();
   };
   const deadline = setTimeout(() => fail(new Error('WebRTC signaling timed out')), 20_000);
@@ -43,18 +44,20 @@ export function serveWebRtcSignal(ws: WebSocket, token: string, admission?: Gate
     void (async () => {
       if (state === 'closed') return;
       if (binary || Buffer.byteLength(data as Buffer) > 48 * 1024) throw new Error('Invalid signaling message');
-      const message = JSON.parse(data.toString());
+      let message: Record<string, unknown>;
+      try {
+        message = JSON.parse(data.toString());
+        if (!message || typeof message !== 'object' || Array.isArray(message)) throw new Error();
+      } catch {
+        throw new AppError('INVALID_REQUEST', 'input', 'Invalid signaling message');
+      }
       if (state === 'waiting') {
         if (message.type !== 'offer') throw new Error('Send a WebRTC offer first');
-        if (admission && !admission.canAuthenticate()) throw new Error('Too many failed attempts. Try again shortly.');
-        if (typeof message.token !== 'string' || !tokenMatches(token, message.token)) {
-          admission?.recordTokenFailure();
-          throw new Error('The gateway access token is missing or incorrect.');
-        }
+        authenticateGateway(token, message.token, admission);
         if (typeof message.peerId !== 'string' || !/^\d{6,16}$/.test(message.peerId) ||
             typeof message.idServer !== 'string' || !message.idServer.trim() || message.idServer.length > 512 ||
-            typeof message.key !== 'string' || message.key.length > 256) {
-          throw new Error('Invalid ID server or peer ID');
+            typeof message.key !== 'string' || message.key.length > 256 || typeof message.offer !== 'string') {
+          throw new AppError('INVALID_REQUEST', 'signaling', 'Invalid ID server or peer ID');
         }
         const offer = decodeEndpoint(message.offer, 'offer');
         sessionKey = sdpFingerprint(offer.sdp);

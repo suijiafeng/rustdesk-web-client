@@ -1,3 +1,4 @@
+import { AppError, errorPayload, mayFallbackFromWebRtc, readErrorPayload } from '../../shared/errors';
 import type { ClientMessage } from '../../shared/control.ts';
 import type { createNativeSession } from './webrtc/session';
 
@@ -67,11 +68,12 @@ export class RemoteSocket {
         this.session = createNativeSession(conn, selectCodecs(message.codecs),
           value => this.onmessage?.(new MessageEvent('message', { data: value })), () => this.close(), message.codec);
         this.session.start();
-      })().catch(error => {
+      })().catch(cause => {
         if (abort.signal.aborted || this.mode === 'closed') return;
-        if (error?.name === 'WebRtcLoginError' || error?.name === 'WebRtcTerminalError' || this.mode === 'webrtc') {
+        const error = readErrorPayload(cause) ? cause : new AppError('WEBRTC_UNAVAILABLE', 'transport', 'WebRTC browser setup failed');
+        if (error?.name === 'WebRtcLoginError' || !mayFallbackFromWebRtc(error) || this.mode === 'webrtc') {
           this.onmessage?.(new MessageEvent('message', { data: JSON.stringify({
-            type: 'status', state: 'error', detail: error.message,
+            type: 'status', state: 'error', ...errorPayload(error),
           }) }));
           this.close();
           return;

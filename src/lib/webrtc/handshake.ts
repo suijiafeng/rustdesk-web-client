@@ -1,4 +1,5 @@
 import { HostPermission } from '../../../shared/peer.ts';
+import { AppError, asAppError } from '../../../shared/errors';
 import { Buffer } from 'buffer';
 import nacl from 'tweetnacl';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -10,20 +11,22 @@ import type { DataChannelStream } from './stream';
 import type { NativeConnection } from './session';
 
 export type ConnectRequest = Extract<ClientMessage, { type: 'connect' }>;
-export class LoginError extends Error { name = 'WebRtcLoginError'; }
+export class LoginError extends AppError {
+  constructor(raw: string) { super(asAppError(raw).code, 'login', raw); this.name = 'WebRtcLoginError'; }
+}
 const PUBLIC_SERVER_KEY = 'OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=';
 
 function openIdentity(signed: Uint8Array, key: Uint8Array, expectedId: string) {
-  if (key.length !== 32) throw new Error('Invalid identity server key');
+  if (key.length !== 32) throw new AppError('IDENTITY_INVALID', 'identity', 'Invalid identity server key');
   const opened = nacl.sign.open(signed, key);
-  if (!opened) throw new Error('WebRTC peer signature verification failed');
+  if (!opened) throw new AppError('IDENTITY_INVALID', 'identity', 'WebRTC peer signature verification failed');
   let identity: DecodedProto<rustdesk.IIdPk>;
   try {
     identity = IdPkProto.toObject(IdPkProto.decode(opened), { bytes: Uint8Array, defaults: true });
   } catch {
-    throw new Error('WebRTC peer identity is malformed');
+    throw new AppError('IDENTITY_INVALID', 'identity', 'WebRTC peer identity is malformed');
   }
-  if (identity.id !== expectedId || identity.pk?.length !== 32) throw new Error('WebRTC peer identity mismatch');
+  if (identity.id !== expectedId || identity.pk?.length !== 32) throw new AppError('IDENTITY_INVALID', 'identity', 'WebRTC peer identity mismatch');
   return { id: identity.id, pk: identity.pk, dtls_fingerprint: identity.dtls_fingerprint };
 }
 
@@ -35,7 +38,7 @@ export function verifiedPeerKey(signedPk: string, serverKey: string, peerId: str
 export function verifyFingerprint(signedId: Uint8Array, peerKey: Uint8Array, peerId: string, fingerprint: string): Uint8Array {
   const identity = openIdentity(signedId, peerKey, peerId);
   if (!identity.dtls_fingerprint || identity.dtls_fingerprint.trim().toLowerCase() !== fingerprint.trim().toLowerCase()) {
-    throw new Error('WebRTC certificate does not match the signed peer identity');
+    throw new AppError('IDENTITY_INVALID', 'identity', 'WebRTC certificate does not match the signed peer identity');
   }
   return identity.pk;
 }
@@ -48,7 +51,7 @@ export async function loginWebRtc(
   const first = await stream.next(5000);
   if (!first) throw new Error('WebRTC peer closed during identity verification');
   const identity = decodeMessage(first);
-  if (!identity.signed_id?.id) throw new Error('WebRTC peer did not provide its signed identity');
+  if (!identity.signed_id?.id) throw new AppError('IDENTITY_INVALID', 'identity', 'WebRTC peer did not provide its signed identity');
   const publicKey = verifyFingerprint(identity.signed_id.id, peerKey, peerId, fingerprint);
   const pair = nacl.box.keyPair();
   const key = nacl.randomBytes(32);

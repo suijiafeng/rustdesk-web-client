@@ -1,3 +1,4 @@
+import { AppError, asAppError, mayFallbackFromWebRtc, readErrorPayload, type ErrorStage } from '../../../shared/errors';
 import { selectCodecs } from '../../../shared/control.ts';
 import { decodeEndpoint, encodeEndpoint, MAX_CANDIDATES, sdpFingerprint, validateCandidate } from '../../../shared/webrtc';
 import { loginWebRtc, verifiedPeerKey, type ConnectRequest } from './handshake';
@@ -8,7 +9,7 @@ const ROUTE_STATS_TIMEOUT_MS = 300;
 const DIRECT_CANDIDATE_TYPES = new Set(['host', 'srflx', 'prflx']);
 // These failures will also reject the gateway route. Never repeat credentials or
 // downgrade identity verification by trying a second transport after them.
-const TERMINAL_FAILURE_REASONS = new Set([
+const SAFE_FAILURE_REASONS = new Set([
   'The gateway access token is missing or incorrect.', 'Too many failed attempts. Try again shortly.',
   'Invalid ID server or peer ID', 'ID does not exist', 'remote desktop is offline', 'key mismatch', 'key overuse',
   'That target address is not allowed.', 'That target port is not allowed.',
@@ -20,10 +21,7 @@ const TERMINAL_FAILURE_REASONS = new Set([
   'WebRTC peer identity is malformed',
   'WebRTC peer identity mismatch', 'WebRTC certificate does not match the signed peer identity',
   'Invalid WebRTC certificate fingerprint',
-]);
-// Only fixed protocol errors are safe to include; browser SDP errors and server text may contain addresses or credentials.
-const SAFE_FAILURE_REASONS = new Set([
-  ...TERMINAL_FAILURE_REASONS,
+  // Only fixed protocol errors are safe to include; never expose SDP or credentials.
   'WebRTC connection timed out', 'WebRTC connection failed',
   'WebRTC signaling unavailable', 'WebRTC signaling closed', 'WebRTC signaling failed', 'WebRTC signaling timed out',
   'WebRTC peer response timed out', 'WebRTC peer closed during identity verification',
@@ -130,8 +128,11 @@ export function connectWebRtc(url: string, request: ConnectRequest, abort: Abort
       if (signalServerError) context.push('signaling server error received');
       if (signalTransportError) context.push('signaling transport error');
       if (signalCloseCode !== undefined) context.push(`signaling close code=${signalCloseCode}`);
-      const diagnostic = new Error(`${reason} [${context.join('; ')}]`);
-      if ((source && TERMINAL_FAILURE_REASONS.has(source.message)) || phase === 'answer identity') {
+      const errorStage: ErrorStage = phase === 'answer identity' ? 'identity' : loggingIn ? (verified ? 'login' : 'identity') : 'transport';
+      const typed = asAppError(error, errorStage);
+      const code = unsafeEval ? 'WEBRTC_CSP' : typed.code === 'UNKNOWN' && !signalServerError ? 'WEBRTC_FAILED' : typed.code;
+      const diagnostic = new AppError(code, typed.stage, `${reason} [${context.join('; ')}]`);
+      if (!mayFallbackFromWebRtc(diagnostic)) {
         diagnostic.name = 'WebRtcTerminalError';
       }
       return diagnostic;
@@ -211,7 +212,8 @@ export function connectWebRtc(url: string, request: ConnectRequest, abort: Abort
         if (message.type === 'error') {
           signalServerError = true;
           if (answered) return;
-          throw new Error(message.message || 'WebRTC signaling failed');
+          const payload = readErrorPayload(message);
+          throw payload ? asAppError(payload) : asAppError(message.message || 'WebRTC signaling failed', 'signaling');
         }
         if (message.type === 'ready') {
           signalingReady = true;

@@ -1,3 +1,4 @@
+import type { ErrorPayload } from '../../shared/errors';
 export const HEADER_LEN = 32;
 
 export const CODEC_NAMES: Record<number, string> = {
@@ -80,7 +81,7 @@ export type ServerMessage =
   | { type: 'focusedDisplay'; display: number }
   | { type: 'resolutions'; display: number; sizes: { width: number; height: number }[] }
   | { type: 'hello'; service: string }
-  | { type: 'status'; state: string; detail?: string; username?: string }
+  | ({ type: 'status'; state: string; detail?: string; username?: string } & Partial<ErrorPayload>)
   | PeerMessage
   | {
       type: 'display';
@@ -95,7 +96,7 @@ export type ServerMessage =
   | { type: 'clipboard'; text: string }
   | { type: 'cursor'; x: number; y: number }
   | { type: 'cursorShape'; shape: CursorShape | null }
-  | { type: 'error'; message: string }
+  | ({ type: 'error'; message: string } & Partial<ErrorPayload>)
   | { type: 'rtt'; ms: number }
   | { type: 'pong'; seq: number; clientTs: number; serverTs: number; gatewayVideo?: GatewayVideoStats };
 

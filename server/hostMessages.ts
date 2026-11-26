@@ -1,3 +1,4 @@
+import { errorPayload } from '../shared/errors.ts';
 import { decodeClipboard } from '../shared/clipboard.ts';
 import { humanizeError } from '../shared/control.ts';
 import { CursorShapes } from './cursor.ts';
@@ -75,7 +76,7 @@ export async function startHostPump(
         }
         if (msg.misc.close_reason) {
           const reason = String(msg.misc.close_reason);
-          sendJson({ type: 'status', state: 'error', detail: humanizeError(reason) });
+          sendJson({ type: 'status', state: 'error', ...errorPayload(reason) });
           // Appendix B fix #8: actively close the stream on close_reason
           cleanup(false);
           return;
@@ -161,7 +162,7 @@ export async function startHostPump(
     }
   } catch (err) {
     if (state.phase === 'live') {
-      sendJson({ type: 'status', state: 'error', detail: humanizeError(err) });
+      sendJson({ type: 'status', state: 'error', ...errorPayload(err) });
       cleanup(false);
     }
   }

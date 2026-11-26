@@ -1,3 +1,4 @@
+import type { ErrorPayload } from '../shared/errors';
 import { EMPTY_STATS, useVideoPipeline } from './hooks/useVideoPipeline';
 import type { SoftKeyboardMode } from './hooks/useKeyboardViewport';
 import { useClipboardSync } from './hooks/useClipboardSync';
@@ -86,8 +87,10 @@ export default function App() {
   const [phase, setPhase] = useState<ConnectionPhase>('idle');
   const [detailKey, setDetailKey] = useState<I18nKey | null>('detailIdle');
   const [rawDetail, setRawDetail] = useState('');
+  const [connectionError, setConnectionError] = useState<ErrorPayload>();
   const detail = detailKey ? t(locale, detailKey) : rawDetail;
-  const setStatusDetail = useCallback((key: I18nKey | null, customText = '') => {
+  const setStatusDetail = useCallback((key: I18nKey | null, customText = '', error?: ErrorPayload) => {
+    setConnectionError(error);
     setDetailKey(key);
     setRawDetail(customText);
   }, []);
@@ -595,7 +598,7 @@ export default function App() {
         pointer={pointer}
         gateway={gateway}
         clipboard={clipboard}
-        connection={{ phase, detail, peer, password, setPassword, authRequired, handleSelectDevice, handleUpdateDisplayPrefs }}
+        connection={{ phase, detail, connectionError, peer, password, setPassword, authRequired, handleSelectDevice, handleUpdateDisplayPrefs }}
         controls={{ send, display, setDisplay, resolutionOptions, quality, setQuality, targetFps, setTargetFps,
           privacyEnabled, privacyPending, setPrivacyPending, clipboardSync, clipboardAllowed, toggleClipboardSync,
           audioEnabled, toggleAudio, showCtrlAltDel }}

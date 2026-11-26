@@ -102,7 +102,7 @@ window.WebSocket = class extends EventTarget {
       if (message.type === 'offer') {
         window.webRtcOffer = message;
         window.rejectWebRtcOffer = (reason = 'Incompatible ID server') => this.onmessage?.({
-          data: JSON.stringify({ type: 'error', message: reason }),
+          data: JSON.stringify(typeof reason === 'string' ? { type: 'error', message: reason } : { type: 'error', ...reason }),
         });
       }
       return;
@@ -789,6 +789,19 @@ try {
     } else {
       assert.ok((await evaluate(select('error-technical-details') + '.textContent')).includes(reason), reason);
     }
+  }
+  for (const failure of [
+    { code: 'GATEWAY_TOKEN_INVALID', stage: 'admission', detail: 'different server wording', title: /Invalid Gateway Token|网关令牌无效/ },
+    { code: 'RATE_LIMITED', stage: 'admission', detail: 'WebRTC connection timed out', title: /Too Many Attempts|尝试次数过多/ },
+    { code: 'TARGET_PORT_BLOCKED', stage: 'transport', detail: 'Wrong password', title: /Target Blocked by Gateway|目标被网关策略拦截/ },
+  ]) {
+    await beginWebRtcTest();
+    await until('window.webRtcOffer');
+    await evaluate(`window.rejectWebRtcOffer(${JSON.stringify(failure)})`);
+    await until("window.__rd?.state === 'error'");
+    assert.deepEqual(await evaluate('window.openedConnections'), ['/ws/webrtc']);
+    assert.equal(await evaluate(fallbackTip), null);
+    assert.match(await evaluate(select('error-title') + '.textContent'), failure.title);
   }
   console.log('WebRTC terminal failures: authentication, backoff, offline/unknown IDs, key and target policies never open a second gateway connection.');
 

@@ -1,3 +1,4 @@
+import type { ErrorPayload } from '../../shared/errors';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, HelpCircle, Loader2, X } from 'lucide-react';
 import { deviceKeyFor, formatPeerId, type SavedDevice } from '../lib/devices';
@@ -24,6 +25,7 @@ interface ConnectFormProps {
   gatewayToken: string;
   gatewayTokenNeedsInput: boolean;
   detail: string;
+  connectionError?: ErrorPayload;
   decoderError: string;
   savedPasswords: SavedPasswordMap;
   onChangeMode: (mode: ConnectionMode) => void;
@@ -250,6 +252,7 @@ export function ConnectForm({ model }: { model: ConnectFormModel }) {
     locale,
     phase,
     detail,
+    connectionError,
     decoderError,
     peerId,
     host,
@@ -524,6 +527,7 @@ export function ConnectForm({ model }: { model: ConnectFormModel }) {
           <ErrorBanner
             locale={locale}
             rawError={decoderError || detail}
+            error={connectionError}
             onDismiss={onDismissError}
             onRetry={retryConnection}
             onOpenNetworkSettings={

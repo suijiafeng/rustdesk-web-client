@@ -1,3 +1,4 @@
+import { mayFallbackFromWebRtc } from '../../shared/errors';
 import assert from 'node:assert/strict';
 import test, { type TestContext } from 'node:test';
 import nacl from 'tweetnacl';
@@ -245,9 +246,9 @@ for (const reason of [
     const text = errorText(f);
     assert.ok(text.startsWith(`${reason} [stage=waiting answer;`));
     assert.match(text, /signaling server error received/);
-    const shouldFallback = ['WebRTC signaling timed out', 'punch hole failed',
+    const shouldFallback = ['WebRTC signaling timed out',
       'This peer or ID server did not offer WebRTC', 'Incompatible ID server'].includes(reason);
-    assert.equal((f.failure() as Error).name, shouldFallback ? 'Error' : 'WebRtcTerminalError');
+    assert.equal(mayFallbackFromWebRtc(f.failure()), shouldFallback);
   });
 }
 
@@ -397,3 +398,21 @@ test('WebRTC forwards custom quality in login and live updates without changing 
   assert.match(replies.at(-1) ?? '', /even percentage/);
   session.close();
 });
+
+for (const scenario of [
+  { code: 'GATEWAY_TOKEN_INVALID', stage: 'admission', detail: 'localized rejection without English keywords', fallback: false },
+  { code: 'RATE_LIMITED', stage: 'admission', detail: 'WebRTC connection timed out', fallback: false },
+  { code: 'IDENTITY_INVALID', stage: 'identity', detail: 'WebRTC connection failed', fallback: false },
+  { code: 'UNKNOWN', stage: 'signaling', detail: 'WebRTC connection timed out', fallback: false },
+  { code: 'TIMEOUT', stage: 'signaling', detail: 'localized transport failure', fallback: true },
+]) {
+  test(`structured ${scenario.code} uses its code instead of guessing from the description`, async t => {
+    const f = fixture(t);
+    await f.openSignal();
+    f.signal.message({ type: 'error', ...scenario, message: scenario.detail });
+    await f.outcome;
+    assert.equal((f.failure() as { code: string }).code, scenario.code);
+    assert.equal(mayFallbackFromWebRtc(f.failure()), scenario.fallback);
+    assert.equal(f.pc.closeCalls, 1);
+  });
+}

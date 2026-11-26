@@ -1,3 +1,4 @@
+import type { ErrorPayload } from '../../shared/errors';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import type { useClipboardSync } from '../hooks/useClipboardSync';
 import type { useGatewaySession } from '../hooks/useGatewaySession';
@@ -36,6 +37,7 @@ interface SessionPanelsProps {
   connection: {
     phase: ConnectionPhase;
     detail: string;
+  connectionError?: ErrorPayload;
     peer: PeerMessage | null;
     password: string;
     setPassword: Setter<string>;
@@ -126,7 +128,7 @@ export function SessionPanels({
   const { sendText, sendChord, handleQuickKey } = keyboard;
   const { touchMode, handleToggleTouchMode } = pointer;
   const { connectSession, disconnect, requestRestart, handleDismissError } = gateway;
-  const { phase, detail, peer, password, setPassword, authRequired, handleSelectDevice, handleUpdateDisplayPrefs } = connection;
+  const { phase, detail, connectionError, peer, password, setPassword, authRequired, handleSelectDevice, handleUpdateDisplayPrefs } = connection;
   const {
     send, display, setDisplay, resolutionOptions, quality, setQuality, targetFps, setTargetFps,
     privacyEnabled, privacyPending, setPrivacyPending, clipboardSync, clipboardAllowed,
@@ -298,6 +300,7 @@ export function SessionPanels({
           gatewayTokenReadFailed={gatewayTokenReadFailed}
           onSaveGatewayToken={saveGatewayToken}
           detail={detail}
+          connectionError={connectionError}
           decoderError={decoderError}
           touchMode={touchMode}
           diagnosticsOpen={diagnosticsOpen}

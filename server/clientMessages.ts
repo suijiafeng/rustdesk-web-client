@@ -1,5 +1,6 @@
+import { AppError, errorPayload } from '../shared/errors.ts';
 import type { RawData } from 'ws';
-import { tokenMatches } from './auth.ts';
+import { authenticateGateway } from './auth.ts';
 import {
   type ClientMessage,
   buildRefreshVideoMessage,
@@ -38,7 +39,7 @@ export function createClientMessageHandler(context: ClientMessageContext) {
     if (hostMsg && activeHost) {
       void activeHost.stream.sendRaw(encodeMessage(hostMsg)).catch((err) => {
         if (state.phase === 'live') {
-          sendJson({ type: 'status', state: 'error', detail: humanizeError(err) });
+          sendJson({ type: 'status', state: 'error', ...errorPayload(err) });
           cleanup(false);
         }
       });
@@ -82,17 +83,10 @@ export function createClientMessageHandler(context: ClientMessageContext) {
       }
 
       clearConnectDeadline();
-      const canAuthenticate = config.admission?.canAuthenticate() ?? true;
-      const givenToken = typeof parsed.token === 'string' ? parsed.token : '';
-      if (!canAuthenticate || !tokenMatches(config.token, givenToken)) {
-        if (canAuthenticate) config.admission?.recordTokenFailure();
-        sendJson({
-          type: 'status',
-          state: 'error',
-          detail: canAuthenticate
-            ? 'The gateway access token is missing or incorrect.'
-            : 'Too many failed attempts. Try again shortly.',
-        });
+      try {
+        authenticateGateway(config.token, parsed.token, config.admission);
+      } catch (error) {
+        sendJson({ type: 'status', state: 'error', ...errorPayload(error) });
         cleanup(false);
         return;
       }
@@ -102,7 +96,7 @@ export function createClientMessageHandler(context: ClientMessageContext) {
         sendJson({
           type: 'status',
           state: 'error',
-          detail: 'This browser cannot decode VP8, VP9, H.264, HEVC, or AV1.',
+          ...errorPayload(new AppError('CODEC_UNSUPPORTED', 'codec', 'This browser cannot decode VP8, VP9, H.264, HEVC, or AV1.')),
         });
         cleanup(false);
         return;
@@ -157,7 +151,7 @@ export function createClientMessageHandler(context: ClientMessageContext) {
         void startHostPump(conn);
       } catch (err) {
         if ((state.phase as string) !== 'closed') {
-          sendJson({ type: 'status', state: 'error', detail: humanizeError(err) });
+          sendJson({ type: 'status', state: 'error', ...errorPayload(err) });
           cleanup(false);
         }
       }
@@ -229,7 +223,7 @@ export function createClientMessageHandler(context: ClientMessageContext) {
         if (refreshVideo) state.preferredCodec = parsed.codec;
         forwardToHost(hostMsg, refreshVideo);
       } catch (error) {
-        sendJson({ type: 'error', message: humanizeError(error) });
+        sendJson({ type: 'error', message: humanizeError(error), ...errorPayload(error) });
       }
     },
     mouse: forwardControl,
@@ -253,8 +247,8 @@ export function createClientMessageHandler(context: ClientMessageContext) {
         throw new Error('missing type field');
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      sendJson({ type: 'error', message: `bad message: ${msg}` });
+      const failure = new AppError('INVALID_REQUEST', 'input', 'Invalid client message');
+      sendJson({ type: 'error', message: failure.message, ...errorPayload(failure) });
       return;
     }
 

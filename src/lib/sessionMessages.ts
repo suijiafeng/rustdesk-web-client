@@ -1,3 +1,4 @@
+import { asAppError, readErrorPayload, type ErrorPayload } from '../../shared/errors';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import type { MobilePanel } from '../components/MobileSessionPanel';
 import type { SessionStats } from '../components/SessionMenu';
@@ -69,7 +70,7 @@ export interface SessionMessageContext {
   setRtt: Setter<number>;
   setGatewayVideo: Setter<Extract<ServerMessage, { type: 'pong' }>['gatewayVideo']>;
   setDiagSummary: Setter<DiagnosticsSummary>;
-  setStatusDetail: (key: I18nKey | null, customText?: string) => void;
+  setStatusDetail: (key: I18nKey | null, customText?: string, error?: ErrorPayload) => void;
   rememberDevicePassword: (key: string, password: string) => void;
   handleClearSavedPassword: (key: string) => void;
   focusDesktopCapture: () => void;
@@ -196,22 +197,23 @@ export function createSessionMessageHandler(context: SessionMessageContext) {
           setStatusDetail('connecting');
         }
       } else if (msg.state === 'error') {
-        if (msg.detail && /password|token|two.factor/i.test(msg.detail)) setRestartState(null);
+        const failure = readErrorPayload(msg) ?? asAppError(msg.detail);
+        if (['PASSWORD_INVALID', 'PASSWORD_REQUIRED', 'GATEWAY_TOKEN_INVALID', 'TWO_FACTOR_REQUIRED'].includes(failure.code)) setRestartState(null);
         onTerminalError();
         phaseRef.current = 'error';
         setPhase('error');
         setConnectDialog(true);
         setMenuOpen(false);
-        if (msg.detail && /password/i.test(msg.detail)) {
+        if (failure.code === 'PASSWORD_INVALID' || failure.code === 'PASSWORD_REQUIRED') {
           // Clear stale remembered password so the next attempt prompts cleanly
           handleClearSavedPassword(targetDeviceKey);
         }
-        if (msg.detail && /token/i.test(msg.detail)) {
+        if (failure.code === 'GATEWAY_TOKEN_INVALID') {
           setAuthRequired(true);
           setGatewayTokenRejected(true);
-          setStatusDetail('detailTokenError');
-        } else if (msg.detail) {
-          setStatusDetail(null, msg.detail);
+          setStatusDetail('detailTokenError', '', failure);
+        } else if (msg.detail || readErrorPayload(msg)) {
+          setStatusDetail(null, failure.detail, failure);
         } else {
           setStatusDetail('detailHostRejected');
         }
@@ -351,9 +353,10 @@ export function createSessionMessageHandler(context: SessionMessageContext) {
     },
     error(msg) {
       setDecoderError(msg.message);
-      setStatusDetail(null, msg.message);
+      const failure = readErrorPayload(msg) ?? asAppError(msg.message);
+      setStatusDetail(null, msg.message, failure);
       if (phaseRef.current === 'connecting') {
-        if (/password|token|two.factor/i.test(msg.message)) setRestartState(null);
+        if (['PASSWORD_INVALID', 'PASSWORD_REQUIRED', 'GATEWAY_TOKEN_INVALID', 'TWO_FACTOR_REQUIRED'].includes(failure.code)) setRestartState(null);
         onTerminalError();
         phaseRef.current = 'error';
         setPhase('error');

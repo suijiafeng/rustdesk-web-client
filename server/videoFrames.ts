@@ -1,3 +1,4 @@
+import { errorPayload } from '../shared/errors.ts';
 import { buildRefreshVideoMessage, buildVideoReceivedMessage, humanizeError } from '../shared/control.ts';
 import { encodeMessage } from '../shared/protos.ts';
 import type { ConnectedHost } from './rustdeskClient.ts';
@@ -26,7 +27,7 @@ export function createVideoFrameHandler(context: SessionContext): VideoFrameHand
       if (videoBuffer.shouldRequestRefresh(ws.bufferedAmount, performance.now())) {
         void conn.stream.sendRaw(encodeMessage(buildRefreshVideoMessage())).catch((err) => {
           if (state.phase === 'live' && state.hostConn === conn) {
-            sendJson({ type: 'status', state: 'error', detail: humanizeError(err) });
+            sendJson({ type: 'status', state: 'error', ...errorPayload(err) });
             cleanup(false);
           }
         });

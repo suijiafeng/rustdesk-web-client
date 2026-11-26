@@ -1,3 +1,4 @@
+import type { ErrorPayload } from '../../shared/errors';
 import { AlertCircle, KeyRound, RotateCw, Settings, X } from 'lucide-react';
 import { formatConnectionError } from '../lib/errors';
 import { t, type Locale } from '../lib/i18n';
@@ -5,6 +6,7 @@ import { t, type Locale } from '../lib/i18n';
 interface ErrorBannerProps {
   locale: Locale;
   rawError: string;
+  error?: ErrorPayload;
   onDismiss: () => void;
   onRetry?: () => void;
   onOpenNetworkSettings?: () => void;
@@ -14,13 +16,17 @@ interface ErrorBannerProps {
 export function ErrorBanner({
   locale,
   rawError,
+  error,
   onDismiss,
   onRetry,
   onOpenNetworkSettings,
   onRetryPassword,
 }: ErrorBannerProps) {
-  const formatted = formatConnectionError(locale, rawError);
+  const formatted = formatConnectionError(locale, error ?? rawError);
 
+  const technicalDetail = error?.detail ?? rawError;
+  const repeatedSummary = error && ['PASSWORD_INVALID', 'PASSWORD_REQUIRED', 'GATEWAY_TOKEN_INVALID', 'RATE_LIMITED', 'PEER_NOT_FOUND', 'PEER_OFFLINE', 'TWO_FACTOR_REQUIRED'].includes(error.code) && !technicalDetail.includes('[stage=');
+  const showRawDetail = Boolean(technicalDetail.trim() && technicalDetail.trim() !== formatted.message && !repeatedSummary);
   return (
     <div className="rd-err-banner" data-testid="error-banner" role="alert">
       <AlertCircle size={17} className="text-[var(--bad)] shrink-0 mt-0.5" aria-hidden="true" />
@@ -69,10 +75,11 @@ export function ErrorBanner({
             )}
           </div>
         ) : null}
-        {rawError.trim() && rawError.trim() !== formatted.message && (
+        {(error || showRawDetail) && (
           <details className="mt-2 text-xs text-[var(--ink-soft)]" data-testid="error-technical-details">
             <summary className="cursor-pointer">{t(locale, 'technicalDetails')}</summary>
-            <p className="m-0 mt-1 break-words whitespace-pre-wrap">{rawError}</p>
+            {error && <p className="m-0 mt-1 break-words font-mono">{error.code} · {error.stage}</p>}
+            {showRawDetail && <p className="m-0 mt-1 break-words whitespace-pre-wrap">{technicalDetail}</p>}
           </details>
         )}
       </div>
