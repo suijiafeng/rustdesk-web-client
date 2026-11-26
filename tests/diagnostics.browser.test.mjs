@@ -30,7 +30,8 @@ test('text connection details stay compact, accurate and transparent to remote i
         await settle();
       };
       await evaluate('window.diagnosticsFixture.setDirect(true); window.diagnosticsFixture.step({fps:47,bitrate:2100000,rtt:26})');
-      assert.match(await evaluate('document.querySelector("[data-testid=diag-rtt]").textContent'), /远端往返 26 ms/);
+      assert.equal(await evaluate('document.querySelector("[data-testid=diag-rtt] dt").textContent'), '远端往返');
+      assert.equal(await evaluate('document.querySelector("[data-testid=diag-value-rtt]").textContent'), '26 ms');
       const sizes = [];
       for (const [width, height, mobile, screenshot] of [
         [1440, 900, false, '/tmp/rd-diagnostics-desktop.png'],
@@ -50,17 +51,30 @@ test('text connection details stay compact, accurate and transparent to remote i
             const close = document.querySelector('[data-testid="diag-close"]').getBoundingClientRect();
             const signal = document.querySelector('[data-testid="diag-picture-state"]').getBoundingClientRect();
             return { x:r.x, width:r.width, height:r.height, scroll:document.documentElement.scrollWidth,
-              rows:[...document.querySelectorAll('.diag-text > span')].map(e => e.getBoundingClientRect().y),
+              rows:[...overlay.querySelectorAll('.diag-metrics > div')].map(row => {
+                const [label, metric] = row.children;
+                const labelRect = label.getBoundingClientRect();
+                const metricRect = metric.getBoundingClientRect();
+                return { y:labelRect.top, metricY:metricRect.top, left:labelRect.left, right:metricRect.right,
+                  labelAlign:getComputedStyle(label).textAlign, metricAlign:getComputedStyle(metric).textAlign };
+              }),
               textTarget:document.elementFromPoint(value.x+value.width/2,value.y+value.height/2)?.getAttribute('data-testid'),
               buttonTarget:document.elementFromPoint(close.x+close.width/2,close.y+close.height/2)?.closest('button')?.getAttribute('data-testid'),
               signalTarget:document.elementFromPoint(signal.x+signal.width/2,signal.y+signal.height/2)?.closest('[data-testid]')?.getAttribute('data-testid'),
               blur:getComputedStyle(overlay).backdropFilter, background:getComputedStyle(overlay).backgroundImage,
               unexpectedSections:overlay.querySelectorAll('.diag-trend, details, [data-testid="diag-collapse"]').length };
           })()`);
-          assert.ok(layout.width >= width - 26 && layout.width < width, JSON.stringify(layout));
-          assert.ok(layout.height <= (width < 640 ? 85 : 52), JSON.stringify(layout));
+          assert.ok(layout.width <= 240 && layout.x + layout.width < width, JSON.stringify(layout));
           assert.ok(layout.scroll <= width, JSON.stringify(layout));
-          assert.ok(new Set(layout.rows.map(y => Math.round(y))).size <= (width < 640 ? 4 : 2), JSON.stringify(layout));
+          assert.equal(layout.rows.length, 6);
+          assert.equal(new Set(layout.rows.map(row => row.y)).size, 6);
+          for (const row of layout.rows) {
+            assert.equal(row.y, row.metricY);
+            assert.equal(row.left, layout.rows[0].left);
+            assert.equal(row.right, layout.rows[0].right);
+            assert.equal(row.labelAlign, 'left');
+            assert.equal(row.metricAlign, 'right');
+          }
           assert.equal(layout.textTarget, 'fixture-desktop', 'Text must pass pointer input to the desktop');
           assert.equal(layout.buttonTarget, 'diag-close');
           assert.equal(layout.signalTarget, 'diag-picture-state', 'The signal icon must accept hover for its status tooltip');

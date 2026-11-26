@@ -96,12 +96,12 @@ function paint() {
 }
 
 function step({ fps = 54, bitrate = 2_400_000, rtt = 32, lost = false, fresh = true, idle = false,
-  elapsed = 1000, inFlightFrames = 0, oldestFrameAgeMs = 0 } = {}) {
+  jitterMs = 3, packetLossPct = 0, decodeLatencyMs = 8, elapsed = 1000, inFlightFrames = 0, oldestFrameAgeMs = 0 } = {}) {
   now += elapsed;
   stats = { ...stats, codec: 'h264', width: 1920, height: 1080, renderFps: fps, rxFps: fps,
-    bitrate, streamState: idle ? 'idle' : 'active', inFlightFrames, oldestFrameAgeMs };
+    bitrate, decodeLatencyMs, streamState: idle ? 'idle' : 'active', inFlightFrames, oldestFrameAgeMs };
   const seq = summary.totalSent + 1;
-  summary = { ...summary, totalSent: seq };
+  summary = { ...summary, totalSent: seq, avgRttMs: rtt, jitterMs, packetLossPct };
   if (fresh) {
     summary = { ...summary, totalSent: seq, currentRttMs: lost ? summary.currentRttMs : rtt,
       history: [...summary.history, { seq, rttMs: lost ? null : rtt, lost }].slice(-24) };
@@ -130,14 +130,14 @@ async function run() {
   try {
     render();
     check(value('fps') === '—' && value('bitrate') === '—' && value('rtt') === '—', 'Waiting values must remain unknown');
-    check(select('diag-resolution').textContent === '—', 'Unknown resolution must remain unknown');
-    check(select('diag-picture-state').getAttribute('aria-label') === '等待画面', 'Initial status icon must describe waiting');
+    check(select('diag-codec').textContent === '—', 'Unknown codec must remain unknown');
+    check(select('diag-picture-state').getAttribute('aria-label') === '正在评估连接质量', 'Initial status icon must describe waiting');
     check(select('diag-picture-state').textContent === '', 'Picture status must use an icon without explanatory text');
     check(!document.querySelector('.diag-trend, details, [data-testid="diag-collapse"]'), 'Text details must not contain charts or expandable sections');
     step({ fps: 60, rtt: 40 });
     check(value('fps') === '60 帧/秒' && value('rtt') === '40 ms', 'Fresh measurements must use readable Chinese units');
-    check(select('diag-resolution').textContent === '1920 × 1080', 'Resolution must remain compact');
-    check(select('diag-picture-state').dataset.state === 'active', 'Active output must use its normal status icon');
+    check(select('diag-codec').textContent === 'h264', 'Current codec must be displayed');
+    check(select('diag-picture-state').dataset.state === 'good', 'Active output must use its normal status icon');
     check(select('diag-rtt').textContent?.startsWith('网关往返'), 'Gateway latency must name its actual endpoint');
     step({ lost: true });
     check(value('rtt') === '—', 'A lost probe must not reuse the last successful RTT');
@@ -147,12 +147,22 @@ async function run() {
     check(value('rtt') === '—', 'An outstanding probe must not reuse the previous latency');
     step({ fps: 0, bitrate: 0, idle: true });
     check(value('fps') === '0 帧/秒' && value('bitrate') === '0 b/s', 'An idle desktop must display real zero');
-    check(select('diag-picture-state').dataset.state === 'active', 'A connected idle picture retains the normal signal state');
-    check(select('diag-picture-state').getAttribute('aria-label') === '暂无新画面', 'An idle icon must avoid claiming the remote desktop is necessarily still');
+    check(select('diag-picture-state').dataset.state === 'good', 'A connected idle picture retains the normal signal state');
+    check(select('diag-picture-state').getAttribute('aria-label') === '连接质量良好', 'An idle icon must avoid claiming the remote desktop is necessarily still');
+    for (const metrics of [{ rtt: 80 }, { jitterMs: 20 }, { packetLossPct: 1 }, { decodeLatencyMs: 50 }]) {
+      step(metrics);
+      check(select('diag-picture-state').dataset.state === 'fair', 'Moderate network or decode issues must reduce quality');
+    }
+    for (const metrics of [{ rtt: 200 }, { jitterMs: 50 }, { packetLossPct: 5 }, { decodeLatencyMs: 100 }]) {
+      step(metrics);
+      check(select('diag-picture-state').dataset.state === 'poor', 'Severe network or decode issues must show poor quality');
+    }
+    step({ rtt: 20, jitterMs: 0, decodeLatencyMs: 0 });
+    check(select('diag-picture-state').dataset.state === 'good', 'Recovered metrics must restore good quality');
     step({ fps: 0, bitrate: 0, idle: true, inFlightFrames: 5, oldestFrameAgeMs: 450 });
     check(select('diag-picture-state').getAttribute('aria-label') === '画面恢复中', 'Decode backlog must override idle status');
     check(select('diag-picture-state').dataset.state === 'recovering', 'A pending picture must use recovery status');
-    check(document.querySelector('.diag-text')?.children[1] === select('diag-picture-state'), 'Signal status must follow the connection route');
+    check(document.querySelector('.diag-header')?.firstElementChild === select('diag-picture-state'), 'Signal status must lead the header');
     result.checks.push('compact text, accessible signal status, real zero and fresh/lost/pending RTT');
 
     resetView();
