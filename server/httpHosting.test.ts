@@ -6,6 +6,7 @@ import http from 'node:http';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
+import { brotliCompressSync, brotliDecompressSync, gzipSync, gunzipSync } from 'node:zlib';
 import test from 'node:test';
 import express from 'express';
 import { WebSocket, WebSocketServer } from 'ws';
@@ -20,12 +21,12 @@ const timeout = () => ({ signal: AbortSignal.timeout(3_000) });
 const portOf = (server: http.Server | net.Server) => (server.address() as net.AddressInfo).port;
 const closeServer = (server: http.Server | net.Server) => new Promise<void>(resolve => server.close(() => resolve()));
 
-function request(server: http.Server, pathname: string, method = 'GET') {
-  return new Promise<{ status: number; headers: http.IncomingHttpHeaders; body: string }>((resolve, reject) => {
-    const req = http.request({ host: '127.0.0.1', port: portOf(server), path: pathname, method, agent: false }, res => {
+function request(server: http.Server, pathname: string, method = 'GET', headers: http.OutgoingHttpHeaders = {}) {
+  return new Promise<{ status: number; headers: http.IncomingHttpHeaders; body: string; bytes: Buffer }>((resolve, reject) => {
+    const req = http.request({ host: '127.0.0.1', port: portOf(server), path: pathname, method, headers, agent: false }, res => {
       const chunks: Buffer[] = [];
       res.on('data', chunk => chunks.push(chunk));
-      res.on('end', () => resolve({ status: res.statusCode!, headers: res.headers, body: Buffer.concat(chunks).toString() }));
+      res.on('end', () => resolve({ status: res.statusCode!, headers: res.headers, body: Buffer.concat(chunks).toString(), bytes: Buffer.concat(chunks) }));
       res.on('error', reject);
     });
     req.on('error', reject);
@@ -256,4 +257,35 @@ test('server entry point enforces proxy-aware and Render origins and exits on bo
       }
     }
   }
+});
+
+test('precompressed assets negotiate encodings, preserve content types and support conditional requests', async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'rd-encoding-'));
+  const source = Buffer.from('export const desktop = "remote";'.repeat(200));
+  await fs.mkdir(path.join(dir, 'assets'));
+  const file = path.join(dir, 'assets/app-ABcd1234.js');
+  await Promise.all([fs.writeFile(file, source), fs.writeFile(file + '.br', brotliCompressSync(source)), fs.writeFile(file + '.gz', gzipSync(source))]);
+  const app = express();
+  serveProductionFiles(app, dir);
+  const server = http.createServer(app).listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(async () => { await closeServer(server); await fs.rm(dir, { recursive: true, force: true }); });
+  for (const [accepted, expected] of [['br, gzip', 'br'], ['br;q=0.1, gzip;q=0.9', 'gzip'], ['gzip;q=0, br;q=0', undefined], ['br;q=0.5, identity;q=1', undefined]] as const) {
+    const result = await request(server, '/assets/app-ABcd1234.js', 'GET', { 'Accept-Encoding': accepted });
+    assert.equal(result.status, 200);
+    assert.equal(result.headers['content-encoding'], expected);
+    assert.match(result.headers['content-type']!, /javascript/);
+    assert.match(result.headers.vary!, /Accept-Encoding/);
+    assert.match(result.headers['cache-control']!, /immutable/);
+    const plain = expected === 'br' ? brotliDecompressSync(result.bytes) : expected === 'gzip' ? gunzipSync(result.bytes) : result.bytes;
+    assert.deepEqual(plain, source);
+  }
+  const encoded = await request(server, '/assets/app-ABcd1234.js', 'GET', { 'Accept-Encoding': 'br' });
+  const head = await request(server, '/assets/app-ABcd1234.js', 'HEAD', { 'Accept-Encoding': 'br' });
+  assert.equal(head.bytes.length, 0);
+  assert.equal(head.headers['content-length'], String(encoded.bytes.length));
+  const cached = await request(server, '/assets/app-ABcd1234.js', 'GET', { 'Accept-Encoding': 'br', 'If-None-Match': encoded.headers.etag });
+  assert.equal(cached.status, 304);
+  assert.equal(cached.bytes.length, 0);
+  assert.equal((await request(server, '/assets/missing-ABcd1234.js', 'GET', { 'Accept-Encoding': 'br' })).status, 404);
 });

@@ -2,6 +2,7 @@ import express, { type Express } from 'express';
 import type { Server } from 'node:http';
 import type { Socket } from 'node:net';
 import path from 'node:path';
+import { stat } from 'node:fs/promises';
 import type { WebSocket, WebSocketServer } from 'ws';
 
 // Keep API misses out of both the production SPA and Vite's development fallback.
@@ -13,12 +14,52 @@ export function installApiNotFound(app: Express): void {
 }
 
 export function serveProductionFiles(app: Express, distDir: string): void {
+  const cacheControl = (filename: string) => {
+    const relative = path.relative(distDir, filename);
+    const versionedAsset = relative.startsWith(`assets${path.sep}`)
+      && /-[A-Za-z0-9_-]{8,}\.[^.]+$/.test(path.basename(filename));
+    return versionedAsset ? 'public, max-age=31536000, immutable' : 'no-cache';
+  };
+  app.use((req, res, next) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+    let pathname: string;
+    try { pathname = decodeURIComponent(req.path); } catch { return next(); }
+    if (!/\.(?:js|css|html|svg|json|webmanifest)$/.test(pathname)) return next();
+    const filename = path.resolve(distDir, `.${pathname}`);
+    if (!filename.startsWith(path.resolve(distDir) + path.sep)) return next();
+    res.vary('Accept-Encoding');
+    const weights = new Map<string, number>();
+    for (const item of (req.headers['accept-encoding'] ?? '').toLowerCase().split(',')) {
+      const [name, ...parameters] = item.trim().split(';');
+      const quality = parameters.find(value => value.trim().startsWith('q='))?.trim().slice(2);
+      const value = quality === undefined ? 1 : Number(quality);
+      weights.set(name, Number.isFinite(value) && value >= 0 && value <= 1 ? value : 0);
+    }
+    const variants = (['br', 'gzip'] as const).map(encoding => ({
+      encoding, quality: weights.get(encoding) ?? weights.get('*') ?? 0,
+    })).filter(variant => variant.quality > 0 && variant.quality >= (weights.get('identity') ?? 0))
+      .sort((a, b) => b.quality - a.quality);
+    void (async () => {
+      for (const { encoding } of variants) {
+        const compressed = `${filename}.${encoding === 'br' ? 'br' : 'gz'}`;
+        try { if (!(await stat(compressed)).isFile()) continue; }
+        catch (error) {
+          if (['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) continue;
+          throw error;
+        }
+        res.type(path.extname(filename));
+        res.setHeader('Content-Encoding', encoding);
+        res.sendFile(compressed, { headers: { 'Cache-Control': cacheControl(filename) } }, error => {
+          if (error) next(error);
+        });
+        return;
+      }
+      next();
+    })().catch(next);
+  });
   app.use(express.static(distDir, {
     setHeaders: (res, filename) => {
-      const relative = path.relative(distDir, filename);
-      const versionedAsset = relative.startsWith(`assets${path.sep}`)
-        && /-[A-Za-z0-9_-]{8,}\.[^.]+$/.test(path.basename(filename));
-      res.setHeader('Cache-Control', versionedAsset ? 'public, max-age=31536000, immutable' : 'no-cache');
+      res.setHeader('Cache-Control', cacheControl(filename));
     },
   }));
   // A stale asset URL must not receive index.html with a successful status.
