@@ -52,27 +52,71 @@ export function encodeBytesFrame(data: Uint8Array): Buffer {
  * Streaming decoder for hbb_common::BytesCodec frames.
  */
 export class BytesFrameDecoder {
-  private buf: Buffer = Buffer.alloc(0);
+  private chunks: Array<Buffer | undefined> = [];
+  private headIndex = 0;
+  private headOffset = 0;
+  private bufferedBytes = 0;
 
   push(chunk: Buffer): Buffer[] {
-    this.buf = this.buf.length === 0 ? chunk : Buffer.concat([this.buf, chunk]);
+    if (chunk.length > 0) {
+      this.chunks.push(chunk);
+      this.bufferedBytes += chunk.length;
+    }
     const frames: Buffer[] = [];
-    while (this.buf.length > 0) {
-      const headLen = (this.buf[0] & 0x03) + 1;
-      if (this.buf.length < headLen) break;
+    while (this.bufferedBytes > 0) {
+      const headLen = (this.chunks[this.headIndex]![this.headOffset] & 0x03) + 1;
+      if (this.bufferedBytes < headLen) break;
+
+      // A prefix spans at most four bytes, even when every byte arrived separately.
       let n = 0;
+      let index = this.headIndex;
+      let offset = this.headOffset;
       for (let i = 0; i < headLen; i++) {
-        n |= this.buf[i] << (8 * i);
+        const part = this.chunks[index]!;
+        n |= part[offset++] << (8 * i);
+        if (offset === part.length) {
+          index++;
+          offset = 0;
+        }
       }
       const payloadLen = n >>> 2;
       if (payloadLen > MAX_FRAME_LENGTH) {
         throw new Error(`frame overflow: ${payloadLen}`);
       }
-      if (this.buf.length < headLen + payloadLen) break;
-      frames.push(Buffer.from(this.buf.subarray(headLen, headLen + payloadLen)));
-      this.buf = this.buf.subarray(headLen + payloadLen);
+      if (this.bufferedBytes < headLen + payloadLen) break;
+
+      this.consume(headLen);
+      const frame = Buffer.allocUnsafe(payloadLen);
+      this.consume(payloadLen, frame);
+      frames.push(frame);
+
+      if (this.headIndex === this.chunks.length) {
+        this.chunks = [];
+        this.headIndex = 0;
+      } else if (this.headIndex >= 1024 && this.headIndex * 2 >= this.chunks.length) {
+        // Amortize queue compaction instead of moving the remaining chunks per frame.
+        this.chunks = this.chunks.slice(this.headIndex);
+        this.headIndex = 0;
+      }
     }
     return frames;
+  }
+
+  private consume(length: number, target?: Buffer): void {
+    let written = 0;
+    while (written < length) {
+      const part = this.chunks[this.headIndex]!;
+      const take = Math.min(length - written, part.length - this.headOffset);
+      if (target) part.copy(target, written, this.headOffset, this.headOffset + take);
+      this.headOffset += take;
+      written += take;
+      if (this.headOffset === part.length) {
+        // Drop the payload reference immediately; the sparse prefix holds no TCP buffers.
+        this.chunks[this.headIndex++] = undefined;
+        this.headOffset = 0;
+      }
+    }
+    this.bufferedBytes -= length;
   }
 }
 
