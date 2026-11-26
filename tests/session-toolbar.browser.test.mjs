@@ -40,6 +40,11 @@ async function until(expression) {
 }
 const select = name => `document.querySelector('[data-testid="${name}"]')`;
 const list = "document.querySelector('[role=listbox]')";
+const css = (element, property) => evaluate(`getComputedStyle(${element}).${property}`);
+async function setSystemTheme(theme) {
+  await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: theme }] });
+  await until(`document.documentElement.dataset.theme === '${theme}'`);
+}
 const hasPrivacySwitch = `Array.from(${select('session-menu')}.querySelectorAll('[role="switch"]'))
   .some(input => /Privacy mode|隐私模式/.test(input.closest('label').textContent))`;
 async function touch(type, touchPoints = []) {
@@ -119,8 +124,10 @@ try {
   await cdp('Page.addScriptToEvaluateOnNewDocument', { source: mock });
   await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 740, deviceScaleFactor: 1, mobile: true });
   await cdp('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+  await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] });
   await connect();
   await until(select('mobile-dock-expand'));
+  await until("document.documentElement.dataset.theme === 'dark'");
   await tapElement(select('mobile-dock-expand'));
   await tap(100, 360);
   assert.deepEqual((await sent()).filter(e => e.type === 'mouse').map(e => e.action), ['move', 'down', 'up']);
@@ -147,6 +154,17 @@ try {
   await tapElement(fps);
   await until(list);
   assert.equal(await evaluate(fps + '.getAttribute("aria-expanded")'), 'true');
+  const screenPanel = select('session-menu');
+  const selectedOption = `${list}.querySelector('[aria-selected="true"]')`;
+  assert.equal(await css(screenPanel, 'backgroundColor'), 'rgb(34, 37, 43)');
+  assert.equal(await css(list, 'backgroundColor'), 'rgb(34, 37, 43)');
+  await setSystemTheme('light');
+  assert.equal(await css(select('mobile-dock'), 'backgroundColor'), 'rgb(242, 245, 249)');
+  assert.equal(await css(screenPanel, 'backgroundColor'), 'rgb(252, 253, 255)');
+  assert.equal(await css(list, 'backgroundColor'), 'rgb(252, 253, 255)');
+  assert.equal(await css(list, 'colorScheme'), 'light');
+  assert.equal(await css(selectedOption, 'color'), 'rgb(24, 95, 168)');
+  assert.equal(await css(selectedOption, 'backgroundColor'), 'rgb(229, 240, 255)');
   await tapElement(fps);
   assert.equal(await evaluate(fps + '.getAttribute("aria-expanded")'), 'false');
   await tapElement(fps);
@@ -242,13 +260,14 @@ try {
   assert.equal(await evaluate('document.activeElement === ' + select('soft-input')), true);
   await evaluate(`window.setTestViewportHeight(${fullHeight - 260})`);
   await until(`${select('stage')}.dataset.keyboardAvoiding === 'true'`);
+  await setSystemTheme('dark');
   const systemKeyboardTop = await evaluate(toolbarTop);
   const functionRow = select('soft-function-row');
   const operationRow = select('soft-operation-row');
   assert.equal(await evaluate(`${operationRow}.getBoundingClientRect().top - ${functionRow}.getBoundingClientRect().bottom`), 4);
   assert.equal(await evaluate(`getComputedStyle(${functionRow}).backgroundColor`), 'rgba(0, 0, 0, 0)');
   assert.equal(await evaluate(`getComputedStyle(${select('soft-mod-ctrl')}).backgroundColor`), 'rgba(0, 0, 0, 0)');
-  assert.equal(await evaluate(`getComputedStyle(${select('soft-mod-ctrl')}).borderColor`), 'rgb(100, 117, 138)');
+  await until(`getComputedStyle(${select('soft-mod-ctrl')}).borderColor === 'rgb(100, 117, 138)'`);
   assert.ok(await evaluate(`Math.abs(${operationRow}.getBoundingClientRect().bottom - window.visualViewport.height) < 1`));
   assert.match(await switchLabel(), /切到电脑键盘|Switch to computer keyboard/);
   assert.ok(await evaluate(`${operationRow}.firstElementChild === ${keyboardSwitch} &&
@@ -278,6 +297,13 @@ try {
   const keyEvents = "window.sent.filter(event => event.type === 'key')";
   const firstVirtualEvent = await evaluate(keyEvents + '.length');
   const letterA = `${virtualKeyboard}.querySelector('[data-key-feedback="letter-a"]')`;
+  await setSystemTheme('light');
+  const ctrl = select('soft-mod-ctrl');
+  assert.equal(await css(functionRow, 'backgroundColor'), 'rgba(0, 0, 0, 0)');
+  assert.equal(await css(ctrl, 'backgroundColor'), 'rgba(0, 0, 0, 0)');
+  await until(`getComputedStyle(${ctrl}).color === 'rgb(23, 44, 73)'`);
+  assert.equal(await css(operationRow, 'backgroundColor'), 'rgb(242, 245, 249)');
+  assert.equal(await css(letterA, 'backgroundColor'), 'rgb(255, 255, 255)');
   const letterPoint = await evaluate(`(() => {
     const rect = ${letterA}.getBoundingClientRect();
     return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
@@ -290,7 +316,9 @@ try {
   assert.equal(await evaluate(letterA + '.dataset.keyPressed'), 'true');
   await until(letterA + '.dataset.keyPressed === undefined');
   await tapElement(select('soft-mod-ctrl'));
-  await until(`getComputedStyle(${select('soft-mod-ctrl')}).borderColor === 'rgb(157, 189, 224)'`);
+  await until(`getComputedStyle(${ctrl}).backgroundColor === 'rgb(229, 240, 255)'`);
+  await setSystemTheme('dark');
+  await until(`getComputedStyle(${ctrl}).borderColor === 'rgb(157, 189, 224)'`);
   await tapElement(select('soft-mod-shift'));
   await tapElement(`${virtualKeyboard}.querySelector('[data-key="Enter"]')`);
   await tapElement(`${virtualKeyboard}.querySelector('[data-key="Shift"]')`);
@@ -334,6 +362,10 @@ try {
   assert.equal(await evaluate(shortcutButton + '.textContent'), 'Ctrl+A');
   await tapElement(settingsButton);
   await until(shortcutSettings);
+  await setSystemTheme('light');
+  assert.equal(await css(shortcutSettings, 'backgroundColor'), 'rgb(252, 253, 255)');
+  await setSystemTheme('dark');
+  assert.equal(await css(shortcutSettings, 'backgroundColor'), 'rgb(34, 37, 43)');
   const panelFits = width => `(() => {
     const panel = ${shortcutSettings}.getBoundingClientRect();
     return Math.abs(panel.left - 8) < 1 && Math.abs(panel.right - (${width} - 8)) < 1 &&
