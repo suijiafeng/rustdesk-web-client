@@ -223,7 +223,6 @@ export function SessionPanels({
           summary={diagSummary}
           routeLabel={routeLabel}
           browserDirect={peer?.route?.startsWith('webrtc')}
-          encryptionLabel={t(locale, peer?.encrypted ? 'linkEncrypted' : 'linkPlain')}
           gatewayVideo={gatewayVideo}
           onClose={() => setDiagnosticsOpen(false)}
         />

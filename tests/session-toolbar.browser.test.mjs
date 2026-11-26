@@ -527,8 +527,9 @@ try {
 
   await connect('Mac OS', true);
   const diagnostics = select('diagnostic-overlay');
-  for (const metric of ['fps', 'bitrate', 'rtt']) await until(select(`diag-chart-${metric}`));
-  await until(`${diagnostics}?.textContent.match(/Waiting for keyframe|等待关键帧/)`);
+  for (const metric of ['fps', 'bitrate', 'rtt']) await until(select(`diag-value-${metric}`));
+  await until(select('diag-picture-state') + '?.dataset.state === "recovering"');
+  assert.match(await evaluate(select('diag-picture-state') + '.getAttribute("aria-label")'), /Recovering picture|画面恢复中/);
   assert.doesNotMatch(await evaluate(diagnostics + '.textContent'), /128 KiB|Gateway queue|Dropped frames|网关队列|网关丢帧/);
   const controlsBeforeClosingDiagnostics = await evaluate("window.sent.filter(event => event.type === 'key' || event.type === 'mouse').length");
   await evaluate(select('diag-close') + '.focus()');

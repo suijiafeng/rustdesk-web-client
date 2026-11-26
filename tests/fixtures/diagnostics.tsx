@@ -1,8 +1,13 @@
 import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
+import { useRef } from 'react';
 import { DiagnosticOverlay } from '../../src/components/DiagnosticOverlay';
 import { computeDiagnosticsSummary, createDiagnosticsState } from '../../src/lib/diagnostics';
 import { EMPTY_STATS, createSessionStatsStore } from '../../src/lib/sessionStats';
+import { useRemoteKeyboard } from '../../src/hooks/useRemoteKeyboard';
+import { DEFAULT_DISPLAY_PREFS } from '../../src/lib/displayPrefs';
+import type { ClientMessage } from '../../src/lib/protocol';
+import type { ConnectionPhase } from '../../src/types';
 import '../../src/index.css';
 
 const result = { status: 'running', error: '', checks: [] as string[], violations: [] as string[] };
@@ -12,43 +17,53 @@ const mount = document.createElement('div');
 document.body.append(mount);
 const root = createRoot(mount);
 let now = 0;
-let nextTimer = -1;
-const timers = new Map<number, () => void>();
+const timers = new Set<number>();
 const realSetInterval = window.setInterval.bind(window);
 const realClearInterval = window.clearInterval.bind(window);
-// Advance only the overlay's sampling clock; Chrome still lays out and paints normally.
+// Count real interval ownership; the text overlay should create none.
 Object.defineProperty(performance, 'now', { value: () => now });
 window.setInterval = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
-  if (timeout !== 1000 || typeof handler !== 'function') return realSetInterval(handler, timeout, ...args);
-  const id = nextTimer--;
-  timers.set(id, () => handler(...args));
+  const id = realSetInterval(handler, timeout, ...args);
+  timers.add(id);
   return id;
 }) as typeof window.setInterval;
-window.clearInterval = id => { if (typeof id === 'number' && timers.has(id)) timers.delete(id); else realClearInterval(id); };
+window.clearInterval = id => { if (typeof id === 'number') timers.delete(id); realClearInterval(id); };
 
 let open = true;
 let dark = false;
 let browserDirect = false;
 let pointerEvents = 0;
+const remoteKeys: ClientMessage[] = [];
+const send = (message: ClientMessage) => { remoteKeys.push(message); };
+const closeChrome = () => {};
 let stats = { ...EMPTY_STATS };
 const statsStore = createSessionStatsStore();
 let summary = computeDiagnosticsSummary(createDiagnosticsState(), now);
 const select = (id: string) => document.querySelector<HTMLElement>(`[data-testid="${id}"]`)!;
 const check = (value: unknown, message: string) => { if (!value) throw new Error(message); };
 const value = (metric: string) => select(`diag-value-${metric}`).textContent;
-const line = (metric: string) => select(`diag-chart-${metric}`).querySelector('.diag-chart-line')!.getAttribute('d')!;
+
+
+function Fixture() {
+  const chromeRef = useRef({ menu: false, dialog: false });
+  const phaseRef = useRef<ConnectionPhase>('live');
+  const displayPrefsRef = useRef(DEFAULT_DISPLAY_PREFS);
+  useRemoteKeyboard({ send, closeChrome, chromeRef, phaseRef, displayPrefsRef,
+    shortcutModifier: 'Control', showCtrlAltDel: true });
+  return (
+    <section data-testid="fixture-stage" style={{ position: 'fixed', inset: 0 }}
+      onPointerDown={() => { pointerEvents++; }} onPointerUp={() => { pointerEvents++; }}>
+      <canvas data-testid="fixture-desktop" tabIndex={0} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
+      {open && <DiagnosticOverlay locale="zh" statsStore={statsStore} summary={summary}
+        routeLabel={browserDirect ? 'WebRTC 浏览器直连' : '网关中继'} browserDirect={browserDirect}
+        onClose={() => { open = false; render(); }} />}
+    </section>
+  );
+}
 
 function render() {
   statsStore.setStats(stats);
-  flushSync(() => root.render(
-    <section data-testid="fixture-stage" style={{ position: 'fixed', inset: 0 }}
-      onPointerDown={() => { pointerEvents++; }} onPointerUp={() => { pointerEvents++; }}>
-      <canvas data-testid="fixture-desktop" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
-      {open && <DiagnosticOverlay locale="zh" statsStore={statsStore} summary={summary}
-        routeLabel={browserDirect ? 'WebRTC 浏览器直连' : '网关中继'} browserDirect={browserDirect}
-        encryptionLabel="已加密" onClose={() => { open = false; render(); }} />}
-    </section>,
-  ));
+  flushSync(() => root.render(<Fixture />));
 }
 
 function paint() {
@@ -80,17 +95,18 @@ function paint() {
   }
 }
 
-function step({ fps = 54, bitrate = 2_400_000, rtt = 32, lost = false, fresh = true, idle = false, elapsed = 1000 } = {}) {
+function step({ fps = 54, bitrate = 2_400_000, rtt = 32, lost = false, fresh = true, idle = false,
+  elapsed = 1000, inFlightFrames = 0, oldestFrameAgeMs = 0 } = {}) {
   now += elapsed;
   stats = { ...stats, codec: 'h264', width: 1920, height: 1080, renderFps: fps, rxFps: fps,
-    bitrate, streamState: idle ? 'idle' : 'active' };
+    bitrate, streamState: idle ? 'idle' : 'active', inFlightFrames, oldestFrameAgeMs };
+  const seq = summary.totalSent + 1;
+  summary = { ...summary, totalSent: seq };
   if (fresh) {
-    const seq = summary.totalSent + 1;
     summary = { ...summary, totalSent: seq, currentRttMs: lost ? summary.currentRttMs : rtt,
       history: [...summary.history, { seq, rttMs: lost ? null : rtt, lost }].slice(-24) };
   }
   render();
-  flushSync(() => { for (const callback of timers.values()) callback(); });
 }
 
 function resetView() {
@@ -105,6 +121,7 @@ Object.assign(window, { diagnosticsFixture: {
   setTheme(next: boolean) { dark = next; document.documentElement.dataset.theme = dark ? 'dark' : 'light'; paint(); },
   setDirect(next: boolean) { browserDirect = next; render(); },
   pointerCount: () => pointerEvents,
+  keyCount: () => remoteKeys.length,
   timerCount: () => timers.size,
 } });
 window.addEventListener('resize', paint);
@@ -113,36 +130,39 @@ async function run() {
   try {
     render();
     check(value('fps') === '—' && value('bitrate') === '—' && value('rtt') === '—', 'Waiting values must remain unknown');
+    check(select('diag-resolution').textContent === '—', 'Unknown resolution must remain unknown');
+    check(select('diag-picture-state').getAttribute('aria-label') === '等待画面', 'Initial status icon must describe waiting');
+    check(select('diag-picture-state').textContent === '', 'Picture status must use an icon without explanatory text');
+    check(!document.querySelector('.diag-trend, details, [data-testid="diag-collapse"]'), 'Text details must not contain charts or expandable sections');
     step({ fps: 60, rtt: 40 });
-    check(value('fps') === '60 FPS' && value('rtt') === '40 ms', 'Fresh measurements must appear');
+    check(value('fps') === '60 帧/秒' && value('rtt') === '40 ms', 'Fresh measurements must use readable Chinese units');
+    check(select('diag-resolution').textContent === '1920 × 1080', 'Resolution must remain compact');
+    check(select('diag-picture-state').dataset.state === 'active', 'Active output must use its normal status icon');
+    check(select('diag-rtt').textContent?.startsWith('网关往返'), 'Gateway latency must name its actual endpoint');
     step({ lost: true });
     check(value('rtt') === '—', 'A lost probe must not reuse the last successful RTT');
     step({ rtt: 65 });
-    check((line('rtt').match(/M/g) ?? []).length === 2, 'RTT path must break across a lost probe');
+    check(value('rtt') === '65 ms', 'A later successful probe must restore latency');
     step({ fresh: false });
-    check(value('rtt') === '—', 'No new probe means no new latency measurement');
+    check(value('rtt') === '—', 'An outstanding probe must not reuse the previous latency');
     step({ fps: 0, bitrate: 0, idle: true });
-    check(value('fps') === '0 FPS' && value('bitrate') === '0 b/s', 'Static desktop must display real zero');
-    check(select('diagnostic-overlay').textContent!.includes('画面静止'), 'Static desktop must be distinguished from a failure');
-    result.checks.push('missing values, static zero, lost and stale RTT');
-
-    for (let index = 0; index < 65; index++) step({ fps: 45 + index % 13, bitrate: 1_500_000 + index % 9 * 180_000, rtt: 24 + index % 7 * 5 });
-    const count = Number(select('diag-chart-fps').dataset.samples);
-    check(count >= 29 && count <= 31, `History must remain bounded: ${count}`);
-    step({ elapsed: 8000, rtt: 70 });
-    check((line('fps').match(/M/g) ?? []).length === 2, 'A paused sampling interval must remain a visible gap');
-    result.checks.push('bounded history and background-time gaps');
+    check(value('fps') === '0 帧/秒' && value('bitrate') === '0 b/s', 'An idle desktop must display real zero');
+    check(select('diag-picture-state').dataset.state === 'active', 'A connected idle picture retains the normal signal state');
+    check(select('diag-picture-state').getAttribute('aria-label') === '暂无新画面', 'An idle icon must avoid claiming the remote desktop is necessarily still');
+    step({ fps: 0, bitrate: 0, idle: true, inFlightFrames: 5, oldestFrameAgeMs: 450 });
+    check(select('diag-picture-state').getAttribute('aria-label') === '画面恢复中', 'Decode backlog must override idle status');
+    check(select('diag-picture-state').dataset.state === 'recovering', 'A pending picture must use recovery status');
+    check(document.querySelector('.diag-text')?.children[1] === select('diag-picture-state'), 'Signal status must follow the connection route');
+    result.checks.push('compact text, accessible signal status, real zero and fresh/lost/pending RTT');
 
     resetView();
     await new Promise(resolve => setTimeout(resolve, 0));
-    check(Number(select('diag-chart-fps').dataset.samples) === 1, `Reopening must start a new chart window: ${select('diag-chart-fps').dataset.samples}`);
     check(value('rtt') === '—', 'Reopening must not display a cached probe as fresh');
-    check(timers.size === 1, 'Reopening must release its previous timer');
-    result.checks.push('reopen reset and timer cleanup');
-    for (let index = 0; index < 30; index++) step({ fps: 52 + Math.round(Math.sin(index * .4) * 6),
-      bitrate: 1_700_000 + Math.round(Math.sin(index * .3) * 600_000), rtt: 28 + Math.round(Math.sin(index * .55) * 9) });
+    check(timers.size === 0, 'Text details must not own an extra sampling interval');
+    step({ fps: 47, bitrate: 2_100_000, rtt: 26 });
     paint();
     check(result.violations.length === 0, 'Fixture must obey production script policy');
+    result.checks.push('reopen freshness and zero additional timers');
     result.status = 'passed';
   } catch (error) {
     result.error = error instanceof Error ? error.message : String(error);

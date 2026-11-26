@@ -877,15 +877,18 @@ button:focus-visible {
   color: var(--ink);
 }
 
-/* Non-interactive telemetry stays transparent to the remote desktop underneath. */
+/* Text telemetry stays transparent to remote input except for status and close controls. */
 .diag-overlay {
   position: absolute;
   z-index: 4;
   top: calc(48px + env(safe-area-inset-top, 0px));
   left: calc(12px + env(safe-area-inset-left, 0px));
   right: calc(12px + env(safe-area-inset-right, 0px));
-  padding: 7px 12px 8px;
-  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 8px 5px 12px;
+  border-radius: 8px;
   border: 1px solid rgb(255 255 255 / 9%);
   background: linear-gradient(105deg, rgb(12 20 30 / 66%), rgb(12 20 30 / 42%));
   color: #f3f7fc;
@@ -894,52 +897,34 @@ button:focus-visible {
   user-select: none;
   contain: layout style;
 }
-.diag-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
-.diag-context { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 12px; min-width: 0; font-size: 11px; line-height: 1.4; }
+.diag-text { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 18px; flex: 1; min-width: 0; font-size: 12px; line-height: 1.5; }
+.diag-text > span { white-space: nowrap; }
 .diag-route { font-weight: 600; }
-.diag-format, .diag-security, .diag-window { color: #d1dce8; }
-.diag-security { display: inline-flex; align-items: center; gap: 4px; }
-.diag-window { opacity: .85; }
-.diag-actions { display: flex; align-self: flex-start; flex-shrink: 0; pointer-events: auto; }
-.diag-icon-btn {
-  display: inline-flex; align-items: center; justify-content: center;
+.diag-value { font-variant-numeric: tabular-nums; }
+.diag-status { display: inline-flex; align-items: center; color: #aab6c4; pointer-events: auto; }
+.diag-status:focus-visible { outline: 2px solid #8cd5ff; outline-offset: 2px; border-radius: 2px; }
+.diag-status[data-state="active"] { color: #8ee2b1; }
+.diag-status[data-state="recovering"] { color: #f7d899; animation: diag-recovering 1.2s ease-in-out infinite; }
+@keyframes diag-recovering { 50% { opacity: .4; } }
+@media (prefers-reduced-motion: reduce) { .diag-status[data-state="recovering"] { animation: none; } }
+.diag-close {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
   width: 30px; height: 30px; border: 0; border-radius: 6px;
-  background: transparent; color: #e0eaf5; cursor: pointer;
+  background: transparent; color: #e0eaf5; cursor: pointer; pointer-events: auto;
 }
-.diag-icon-btn:hover, .diag-icon-btn:focus-visible { background: rgb(255 255 255 / 16%); color: #fff; }
-.diag-icon-btn:focus-visible { outline: 2px solid #8cd5ff; outline-offset: -2px; }
-.diag-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
-.diag-metric { min-width: 0; --trend-color: #89d9c3; }
-.diag-metric-bitrate { --trend-color: #8cc8ff; }
-.diag-metric-rtt { --trend-color: #e7c386; }
-.diag-metric-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
-.diag-metric-label { font-size: 11px; color: #d1dce8; }
-.diag-metric-heading strong { font-size: 15px; font-weight: 600; white-space: nowrap; }
-.diag-trend { position: relative; height: 36px; margin-top: 2px; color: var(--trend-color); }
-.diag-trend svg { display: block; width: 100%; height: 100%; overflow: visible; }
-.diag-chart-line { fill: none; stroke: currentColor; stroke-width: 1.5; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
-.diag-chart-grid { fill: none; stroke: rgb(255 255 255 / 12%); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-dasharray: 2 5; }
-.diag-trend circle { fill: currentColor; }
-.diag-chart-scale { position: absolute; left: 0; top: 1px; font-size: 9px; color: #bbc7d5; }
-.diag-overlay[data-collapsed="true"] { padding-bottom: 7px; }
-@media (pointer: coarse) { .diag-icon-btn { width: 38px; height: 38px; } }
+.diag-close:hover, .diag-close:focus-visible { background: rgb(255 255 255 / 16%); color: #fff; }
+.diag-close:focus-visible { outline: 2px solid #8cd5ff; outline-offset: -2px; }
+@media (pointer: coarse) { .diag-close { width: 38px; height: 38px; } }
 
 @media (max-width: 640px) {
   .diag-overlay {
     top: calc(38px + env(safe-area-inset-top, 0px));
     left: calc(8px + env(safe-area-inset-left, 0px));
     right: calc(8px + env(safe-area-inset-right, 0px));
-    padding: 5px 8px 7px;
+    padding: 5px 6px 5px 8px;
+    gap: 8px;
   }
-  .diag-context { column-gap: 8px; font-size: 10px; }
-  .diag-window { flex-basis: 100%; }
-  .diag-security { display: none; }
-  .diag-metrics { gap: 12px; margin-top: 3px; }
-  .diag-metric-heading { align-items: flex-start; flex-direction: column; gap: 0; }
-  .diag-metric-label { font-size: 10px; }
-  .diag-metric-heading strong { font-size: 14px; }
-  .diag-trend { height: 28px; }
-  .diag-chart-scale { font-size: 8px; }
+  .diag-text { gap: 3px 12px; font-size: 11px; }
 
   .sheet.sheet-menu {
     top: auto;
