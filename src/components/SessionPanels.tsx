@@ -1,0 +1,419 @@
+import type { Dispatch, RefObject, SetStateAction } from 'react';
+import type { useClipboardSync } from '../hooks/useClipboardSync';
+import type { useGatewaySession } from '../hooks/useGatewaySession';
+import type { usePreferences } from '../hooks/usePreferences';
+import type { useRemoteKeyboard } from '../hooks/useRemoteKeyboard';
+import type { useRemotePointer } from '../hooks/useRemotePointer';
+import type { useSavedDevices } from '../hooks/useSavedDevices';
+import type { useVideoPipeline } from '../hooks/useVideoPipeline';
+import type { useViewTransform } from '../hooks/useViewTransform';
+import type { SoftKeyboardMode } from '../hooks/useKeyboardViewport';
+import type { SavedDevice } from '../lib/devices';
+import { persistDisplayPrefs, type DisplayPrefs } from '../lib/displayPrefs';
+import type { DiagnosticsSummary } from '../lib/diagnostics';
+import { t } from '../lib/i18n';
+import type { ClientMessage, PeerMessage, QualityLevel, ServerMessage } from '../lib/protocol';
+import type { ConnectionPhase } from '../types';
+import { DiagnosticOverlay } from './DiagnosticOverlay';
+import { MobileDock } from './MobileDock';
+import type { MobilePanel } from './MobileSessionPanel';
+import { RustDeskShell } from './RustDeskShell';
+import { SessionHandle } from './SessionHandle';
+import { SessionMenu } from './SessionMenu';
+import { SoftKeyboardBar } from './SoftKeyboardBar';
+
+type Setter<T> = Dispatch<SetStateAction<T>>;
+
+interface SessionPanelsProps {
+  preferences: ReturnType<typeof usePreferences>;
+  savedDevices: ReturnType<typeof useSavedDevices>;
+  viewport: ReturnType<typeof useViewTransform>;
+  video: ReturnType<typeof useVideoPipeline>;
+  keyboard: ReturnType<typeof useRemoteKeyboard>;
+  pointer: ReturnType<typeof useRemotePointer>;
+  gateway: ReturnType<typeof useGatewaySession>;
+  clipboard: ReturnType<typeof useClipboardSync>;
+  connection: {
+    phase: ConnectionPhase;
+    detail: string;
+    peer: PeerMessage | null;
+    password: string;
+    setPassword: Setter<string>;
+    authRequired: boolean;
+    handleSelectDevice: (device: SavedDevice) => void;
+    handleUpdateDisplayPrefs: (patch: Partial<DisplayPrefs>) => void;
+  };
+  controls: {
+    send: (message: ClientMessage) => void;
+    display: number;
+    setDisplay: Setter<number>;
+    resolutionOptions: Extract<ServerMessage, { type: 'resolutions' }> | null;
+    quality: QualityLevel;
+    setQuality: Setter<QualityLevel>;
+    targetFps: number;
+    setTargetFps: Setter<number>;
+    privacyEnabled: boolean;
+    privacyPending: boolean;
+    setPrivacyPending: Setter<boolean>;
+    clipboardSync: boolean;
+    clipboardAllowed: boolean;
+    toggleClipboardSync: () => void;
+    audioEnabled: boolean;
+    toggleAudio: () => Promise<void>;
+    showCtrlAltDel: boolean;
+  };
+  chrome: {
+    handleX: number;
+    setHandleX: Setter<number>;
+    toolbarExpanded: boolean;
+    setToolbarExpanded: Setter<boolean>;
+    toolbarPinned: boolean;
+    setToolbarPinned: Setter<boolean>;
+    mobilePanel: MobilePanel;
+    setMobilePanel: Setter<MobilePanel>;
+    menuOpen: boolean;
+    setMenuOpen: Setter<boolean>;
+    connectDialog: boolean;
+    setConnectDialog: Setter<boolean>;
+    softKeys: boolean;
+    softKeyboardMode: SoftKeyboardMode;
+    softKeyboardInputRef: RefObject<HTMLInputElement | null>;
+    closeChrome: () => void;
+    toggleSoftKeyboard: () => void;
+    switchSoftKeyboard: (mode: SoftKeyboardMode) => void;
+    hideSoftKeyboard: () => void;
+    isMobileViewport: boolean;
+    isCoarseDevice: boolean;
+    isTouchLayout: boolean;
+    remoteInput: boolean;
+  };
+  notices: {
+    restartState: 'requested' | 'waiting' | null;
+    setRestartState: Setter<'requested' | 'waiting' | null>;
+    sessionTip: { text: string; error: boolean } | null;
+    showSessionTip: (text: string, error?: boolean) => void;
+    webRtcFallbackReason: string | null;
+    setWebRtcFallbackReason: Setter<string | null>;
+  };
+  diagnostics: {
+    diagnosticsOpen: boolean;
+    setDiagnosticsOpen: Setter<boolean>;
+    diagSummary: DiagnosticsSummary;
+    rtt: number;
+    gatewayVideo: Extract<ServerMessage, { type: 'pong' }>['gatewayVideo'];
+  };
+}
+
+export function SessionPanels({
+  preferences, savedDevices, viewport, video, keyboard, pointer, gateway, clipboard,
+  connection, controls, chrome, notices, diagnostics,
+}: SessionPanelsProps) {
+  const {
+    locale, localePreference, theme, displayPrefs, setDisplayPrefs, displayPrefsRef,
+    changeLocale, changeTheme, mode, directIpEnabled, host, port, peerId, idServer,
+    relayServer, serverKey, forceRelay, setMode, handleToggleDirectIp, setHost, setPort,
+    setPeerId, setIdServer, setRelayServer, setServerKey, setForceRelay,
+  } = preferences;
+  const {
+    savedGatewayToken, gatewayToken, gatewayTokenReady, gatewayTokenRejected,
+    gatewayTokenReadFailed, saveGatewayToken, devices, savedPasswords, passwordsReady,
+    passwordStorageFailed, setPasswordStorageFailed, handleClearSavedPassword,
+    handleToggleFavorite, handleRemoveDevice,
+  } = savedDevices;
+  const { pageZoomed, resetPageZoom, box, viewMode, setViewMode, setPan, setZoom, remoteW, remoteH, keyboardLayout, visibleViewport } = viewport;
+  const { stats, decoderError } = video;
+  const { sendText, sendChord, handleQuickKey } = keyboard;
+  const { touchMode, handleToggleTouchMode } = pointer;
+  const { connectSession, disconnect, requestRestart, handleDismissError } = gateway;
+  const { phase, detail, peer, password, setPassword, authRequired, handleSelectDevice, handleUpdateDisplayPrefs } = connection;
+  const {
+    send, display, setDisplay, resolutionOptions, quality, setQuality, targetFps, setTargetFps,
+    privacyEnabled, privacyPending, setPrivacyPending, clipboardSync, clipboardAllowed,
+    toggleClipboardSync, audioEnabled, toggleAudio, showCtrlAltDel,
+  } = controls;
+  const {
+    handleX, setHandleX, toolbarExpanded, setToolbarExpanded, toolbarPinned, setToolbarPinned,
+    mobilePanel, setMobilePanel, menuOpen, setMenuOpen, connectDialog, setConnectDialog,
+    softKeys, softKeyboardMode, softKeyboardInputRef, closeChrome, toggleSoftKeyboard,
+    switchSoftKeyboard, hideSoftKeyboard, isMobileViewport, isCoarseDevice, isTouchLayout, remoteInput,
+  } = chrome;
+  const { restartState, setRestartState, sessionTip, showSessionTip, webRtcFallbackReason, setWebRtcFallbackReason } = notices;
+  const { diagnosticsOpen, setDiagnosticsOpen, diagSummary, rtt, gatewayVideo } = diagnostics;
+  const showConnectSheet = phase !== 'live' || connectDialog;
+  const showSessionMenu = menuOpen && phase === 'live' && !connectDialog;
+  const showHandle = phase === 'live' && !connectDialog && !menuOpen && !isTouchLayout;
+  const showMobileDock = phase === 'live' && !connectDialog && !softKeys && isTouchLayout;
+  const liveHostTitle =
+    peer?.hostname || peer?.username || (mode === 'id' ? peerId : host) || 'Remote';
+  const routeLabel = t(locale, peer?.route === 'webrtc-relay' ? 'routeWebRtcRelay' : peer?.route === 'webrtc' ? 'routeWebRtcUnknown' : peer?.route === 'webrtc-direct' ? 'routeWebRtc' : peer?.route === 'relay' ? 'routeRelay' : peer?.route === 'direct' ? 'routeDirect' : 'routeUnknown');
+  const stageViewport = keyboardLayout.viewport ?? visibleViewport;
+
+  return (
+    <>
+      {pageZoomed && (
+        <div
+          className="page-zoom-banner"
+          data-testid="page-zoom-banner"
+          role="status"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <span>{t(locale, 'pageZoomedBanner')}</span>
+          <button
+            type="button"
+            className="rd-btn primary"
+            style={{ minHeight: 32, padding: '4px 10px' }}
+            data-testid="page-zoom-reset"
+            onClick={resetPageZoom}
+          >
+            {t(locale, 'reset')}
+          </button>
+        </div>
+      )}
+
+      {showHandle && (
+        <SessionHandle
+          locale={locale}
+          handleX={handleX}
+          stageWidth={box.w}
+          expanded={toolbarExpanded}
+          pinned={toolbarPinned}
+          hostTitle={liveHostTitle}
+          displays={peer?.displays ?? []}
+          activeDisplay={display}
+          viewMode={viewMode}
+          hasWarning={Boolean(decoderError)}
+          onMoveHandle={setHandleX}
+          onSetExpanded={setToolbarExpanded}
+          onTogglePinned={() => setToolbarPinned((prev) => !prev)}
+          onSwitchDisplay={(idx) => {
+            setDisplay(idx);
+            send({ type: 'switchDisplay', display: idx });
+          }}
+          onToggleViewMode={() => {
+            if (viewMode === 'fit') {
+              setViewMode('original');
+              setPan({
+                panX: (box.w - remoteW) / 2,
+                panY: (box.h - remoteH) / 2,
+              });
+            } else {
+              setViewMode('fit');
+              setZoom(1);
+              setPan({ panX: 0, panY: 0 });
+            }
+          }}
+          onToggleKeyboard={toggleSoftKeyboard}
+          onCtrlAltDel={showCtrlAltDel && !displayPrefs.viewOnly ? () => handleQuickKey('Ctrl+Alt+Del') : undefined}
+          onOpenMenu={() => setMenuOpen(true)}
+          onDisconnect={disconnect}
+        />
+      )}
+
+      {restartState && <div className="restart-notice" role="status">
+        {t(locale, restartState === 'requested' ? 'restartWaiting' : 'retryWaiting')}
+        <button type="button" onClick={restartState === 'requested' ? () => setRestartState(null) : disconnect}>{t(locale,'cancel')}</button>
+      </div>}
+      {diagnosticsOpen && phase === 'live' && (
+        <DiagnosticOverlay
+          locale={locale}
+          stats={stats}
+          summary={diagSummary}
+          routeLabel={routeLabel}
+          browserDirect={peer?.route?.startsWith('webrtc')}
+          encryptionLabel={t(locale, peer?.encrypted ? 'linkEncrypted' : 'linkPlain')}
+          hostRttMs={rtt}
+          targetFps={targetFps}
+          gatewayVideo={gatewayVideo}
+          onClose={() => setDiagnosticsOpen(false)}
+        />
+      )}
+
+      {(phase === 'live' || webRtcFallbackReason !== null) && (
+        <div className="session-tip-region" aria-live="polite" aria-atomic="true">
+          {webRtcFallbackReason !== null && (
+            <div className="session-tip fallback-tip" data-testid="webrtc-fallback-tip" data-session-notice
+              onPointerDown={e => e.stopPropagation()} onPointerUp={e => e.stopPropagation()}
+              onPointerMove={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
+              <span>{t(locale, 'webRtcFallback')}<br />{webRtcFallbackReason}</span>
+              <button type="button" data-testid="webrtc-fallback-dismiss" aria-label={t(locale, 'close')}
+                onClick={() => setWebRtcFallbackReason(null)}>×</button>
+            </div>
+          )}
+          {phase === 'live' && sessionTip && <div className="session-tip" data-testid="session-tip">{sessionTip.text}</div>}
+          {phase === 'live' && clipboardSync && clipboardAllowed && clipboard.pending && (
+            <div className="session-tip clipboard-tip" data-testid="clipboard-tip"
+              onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
+              <span>{t(locale, clipboard.pending === 'write' ? 'clipRemoteReady' : 'clipLocalReady')}</span>
+              <button type="button" onClick={() => { void (clipboard.pending === 'write' ? clipboard.writeRemote() : clipboard.readLocal()); }}>
+                {t(locale, clipboard.pending === 'write' ? 'copy' : 'clipSyncAction')}
+              </button>
+              <button type="button" aria-label={t(locale, 'close')} onClick={clipboard.dismiss}>×</button>
+            </div>
+          )}
+        </div>
+      )}
+      {showMobileDock && (
+        <MobileDock
+          locale={locale}
+          activePanel={menuOpen ? mobilePanel : null}
+          touchMode={touchMode}
+          onToggleTouchMode={() => {
+            handleToggleTouchMode();
+            setMobilePanel('toolbar');
+          }}
+          onToggleKeyboard={toggleSoftKeyboard}
+          onCollapse={closeChrome}
+          onOpenMenu={panel => {
+            setMobilePanel(current => menuOpen && panel === current ? 'toolbar' : panel);
+            setMenuOpen(true);
+          }}
+        />
+      )}
+
+      {passwordStorageFailed && <div className="restart-notice" role="alert">{t(locale, 'passwordStorageFailed')} <button onClick={() => setPasswordStorageFailed(false)}>OK</button></div>}
+      {showConnectSheet && passwordsReady && gatewayTokenReady && (
+        <RustDeskShell
+          locale={locale}
+          localePreference={localePreference}
+          isDesktop={!(isMobileViewport || (isCoarseDevice && box.h > 0 && box.h <= 540 && box.w > box.h))}
+          theme={theme}
+          displayPrefs={displayPrefs}
+          onChangeLocale={changeLocale}
+          onChangeTheme={changeTheme}
+          onUpdateDisplayPrefs={handleUpdateDisplayPrefs}
+          mode={mode}
+          directIpEnabled={directIpEnabled}
+          phase={phase}
+          host={host}
+          port={port}
+          password={password}
+          peerId={peerId}
+          idServer={idServer}
+          relayServer={relayServer}
+          serverKey={serverKey}
+          forceRelay={forceRelay}
+          gatewayToken={gatewayToken}
+          savedGatewayToken={savedGatewayToken}
+          gatewayTokenNeedsInput={authRequired && (!gatewayToken.trim() || gatewayTokenRejected)}
+          gatewayTokenReadFailed={gatewayTokenReadFailed}
+          onSaveGatewayToken={saveGatewayToken}
+          detail={detail}
+          decoderError={decoderError}
+          touchMode={touchMode}
+          diagnosticsOpen={diagnosticsOpen}
+          devices={devices}
+          savedPasswords={savedPasswords}
+          onChangeMode={setMode}
+          onToggleDirectIp={handleToggleDirectIp}
+          onChangeField={(field, val) => {
+            if (field === 'host') setHost(val);
+            else if (field === 'port') setPort(val);
+            else if (field === 'password') setPassword(val);
+            else if (field === 'peerId') setPeerId(val);
+            else if (field === 'idServer') setIdServer(val);
+            else if (field === 'relayServer') setRelayServer(val);
+            else if (field === 'serverKey') setServerKey(val);
+          }}
+          onChangeForceRelay={setForceRelay}
+          onClearSavedPassword={handleClearSavedPassword}
+          onSelectDevice={handleSelectDevice}
+          onToggleFavorite={handleToggleFavorite}
+          onRemoveDevice={handleRemoveDevice}
+          onToggleTouchMode={handleToggleTouchMode}
+          onToggleDiagnostics={() => setDiagnosticsOpen((prev) => !prev)}
+          onConnect={(req) => void connectSession(req)}
+          onDisconnect={disconnect}
+          onDismissError={handleDismissError}
+          onClose={closeChrome}
+        />
+      )}
+
+      {showSessionMenu && (
+        <SessionMenu
+          clipboardSync={clipboardSync && clipboardAllowed}
+          clipboardAllowed={clipboardAllowed}
+          onToggleClipboardSync={toggleClipboardSync}
+          onNotify={showSessionTip}
+          onRestart={requestRestart}
+          mobilePanel={mobilePanel}
+          locale={locale}
+          audioEnabled={audioEnabled}
+          onToggleAudio={toggleAudio}
+          mobileLayout={isTouchLayout}
+          followWindow={displayPrefs.followWindow}
+          onToggleFollowWindow={() => handleUpdateDisplayPrefs({ followWindow: !displayPrefs.followWindow })}
+          phase={phase}
+          peer={peer}
+          decoderError={decoderError}
+          display={display}
+          touchMode={touchMode}
+          viewOnly={displayPrefs.viewOnly}
+          sizes={resolutionOptions?.display === display ? resolutionOptions.sizes : []}
+          onResolution={(width, height) => send({ type: 'resolution', display, width, height })}
+          diagnosticsOpen={diagnosticsOpen}
+          stats={stats}
+          rtt={rtt}
+          quality={quality}
+          targetFps={targetFps}
+          preferredCodec={displayPrefs.codec}
+          privacyEnabled={privacyEnabled}
+          privacyPending={privacyPending}
+          onTogglePrivacy={() => {
+            if (!peer?.privacyAllowed || privacyPending || displayPrefs.viewOnly) return;
+            setPrivacyPending(true);
+            showSessionTip(t(locale, 'privacyWaiting'));
+            send({ type: 'privacy', enabled: !privacyEnabled });
+          }}
+          onClose={closeChrome}
+          onOpenConnection={() => {
+            setMenuOpen(false);
+            setConnectDialog(true);
+          }}
+          onDisconnect={disconnect}
+          onToggleDiagnostics={() => {
+            setDiagnosticsOpen(true);
+            setMenuOpen(false);
+          }}
+          onToggleTouchMode={handleToggleTouchMode}
+          reverseScroll={displayPrefs.reverseMouseWheel}
+          onReverseScrollChange={reverseMouseWheel => handleUpdateDisplayPrefs({ reverseMouseWheel })}
+          onSwitchDisplay={(idx) => {
+            setDisplay(idx);
+            send({ type: 'switchDisplay', display: idx });
+          }}
+          onQuickKey={handleQuickKey}
+          onChangeQuality={(q, fps, nextCodec) => {
+            setQuality(q);
+            setTargetFps(fps);
+            const activeCodec = nextCodec ?? displayPrefsRef.current.codec;
+            if (nextCodec && nextCodec !== displayPrefsRef.current.codec) {
+              setDisplayPrefs((prev) => {
+                const updated = { ...prev, codec: nextCodec };
+                persistDisplayPrefs(updated);
+                return updated;
+              });
+            }
+            send({ type: 'quality', quality: q, fps, codec: activeCodec });
+          }}
+        />
+      )}
+
+      {softKeys && remoteInput && (
+        <SoftKeyboardBar
+          onPasteText={clipboardSync && clipboardAllowed ? text => { clipboard.sendLocal(text); } : undefined}
+          locale={locale}
+          remotePlatform={peer?.platform}
+          inputRef={softKeyboardInputRef}
+          mode={softKeyboardMode}
+          reservedSpace={keyboardLayout.reservedSpace}
+          viewportHeight={stageViewport?.height ?? box.h}
+          onSwitchMode={switchSoftKeyboard}
+          onSendText={sendText}
+          onSendControl={(action, control) => send({ type: 'key', action, control })}
+          onSendChord={sendChord}
+          onHide={hideSoftKeyboard}
+        />
+      )}
+    </>
+  );
+}

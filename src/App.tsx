@@ -11,18 +11,13 @@ import type { RemoteSocket } from './lib/remoteSocket';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { RemoteStage } from './components/RemoteStage';
+import { SessionPanels } from './components/SessionPanels';
 import { RemoteAudio } from './lib/remoteAudio';
-import { DiagnosticOverlay } from './components/DiagnosticOverlay';
 import type { MobilePanel } from './components/MobileSessionPanel';
-import { MobileDock } from './components/MobileDock';
 import {
-  RustDeskShell,
   type ConnectRequest,
   type ConnectionPhase,
 } from './components/RustDeskShell';
-import { SessionHandle } from './components/SessionHandle';
-import { SessionMenu } from './components/SessionMenu';
-import { SoftKeyboardBar } from './components/SoftKeyboardBar';
 import {
   type SavedDevice,
 } from './lib/devices';
@@ -62,56 +57,14 @@ function detectCoarsePointer(): boolean {
 
 export default function App() {
   const isCoarseDevice = detectCoarsePointer();
+  const preferences = usePreferences(isCoarseDevice);
   const {
-    directIpEnabled,
-    setDirectIpEnabled,
-    mode,
-    setMode,
-    host,
-    setHost,
-    port,
-    setPort,
-    peerId,
-    setPeerId,
-    idServer,
-    setIdServer,
-    relayServer,
-    setRelayServer,
-    serverKey,
-    setServerKey,
-    forceRelay,
-    setForceRelay,
-    handleToggleDirectIp,
-    localePreference,
-    locale,
-    changeLocale,
-    theme,
-    changeTheme,
-    displayPrefs,
-    setDisplayPrefs,
-    displayPrefsRef,
-  } = usePreferences(isCoarseDevice);
+    setDirectIpEnabled, setMode, setPeerId, setIdServer, setRelayServer,
+    setServerKey, setForceRelay, setHost, setPort,
+    locale, displayPrefs, setDisplayPrefs, displayPrefsRef,
+  } = preferences;
   const [password, setPassword] = useState('');
-  const {
-    savedGatewayToken,
-    setTemporaryGatewayToken,
-    gatewayToken,
-    gatewayTokenReady,
-    gatewayTokenRejected,
-    setGatewayTokenRejected,
-    gatewayTokenReadFailed,
-    saveGatewayToken,
-    devices,
-    setDevices,
-    savedPasswords,
-    passwordsReady,
-    passwordStorageFailed,
-    setPasswordStorageFailed,
-    handleClearSavedPassword,
-    rememberDevicePassword,
-    handleToggleFavorite,
-    handleRemoveDevice,
-  } = useSavedDevices();
+  const savedDevices = useSavedDevices();
   const [authRequired, setAuthRequired] = useState(false);
   const [webRtcEnabled, setWebRtcEnabled] = useState(false);
 
@@ -154,10 +107,8 @@ export default function App() {
     }
   }, []);
 
-  const {
-    stats, setStats, decoderError, setDecoderError, decoderRef, sizeRef,
-    frameStatsRef, statAccRef, ensureDecoder, noteFrame,
-  } = useVideoPipeline({ phase, send });
+  const video = useVideoPipeline({ phase, send });
+  const { stats, decoderRef, sizeRef } = video;
   const [rtt, setRtt] = useState(0);
   const [gatewayVideo, setGatewayVideo] = useState<Extract<ServerMessage, { type: 'pong' }>['gatewayVideo']>();
   const [quality, setQuality] = useState<QualityLevel>(() =>
@@ -241,7 +192,6 @@ export default function App() {
   const restartDeadline = useRef(0);
   const reconnectRequest = useRef<ConnectRequest | null>(null);
   const connectGeneration = useRef(0);
-  const routeLabel = t(locale, peer?.route === 'webrtc-relay' ? 'routeWebRtcRelay' : peer?.route === 'webrtc' ? 'routeWebRtcUnknown' : peer?.route === 'webrtc-direct' ? 'routeWebRtc' : peer?.route === 'relay' ? 'routeRelay' : peer?.route === 'direct' ? 'routeDirect' : 'routeUnknown');
   const [diagnosticsOpen, setDiagnosticsOpen] = useState<boolean>(() => {
     try {
       return new URLSearchParams(window.location.search).get('diag') === '1';
@@ -271,24 +221,7 @@ export default function App() {
   // Mouse & touch gesture refs (unified deterministic TouchGestureState FSM)
   const cursorRef = useRef({ x: 640, y: 360 });
   const lastInputPointRef = useRef<{ x: number; y: number } | null>(null);
-  const {
-    viewMode,
-    setViewMode,
-    setZoom,
-    setPan,
-    box,
-    visibleViewport,
-    pageZoomed,
-    remoteW,
-    remoteH,
-    viewRef,
-    keyboardLayout,
-    view,
-    resetPageZoom,
-    setScaleAround,
-    applyPinchStepRef,
-    panBy,
-  } = useViewTransform({
+  const viewport = useViewTransform({
     initialViewStyle: displayPrefs.viewStyle,
     isCoarseDevice,
     phase,
@@ -302,6 +235,8 @@ export default function App() {
     followCursorRef,
     onSystemDismiss: () => hideSoftKeyboard(),
   });
+
+  const { setViewMode, setZoom, setPan, box, remoteW, remoteH, keyboardLayout, view, visibleViewport } = viewport;
 
   const isMobileViewport =
     box.w > 0 ? box.w <= 768 : typeof window !== 'undefined' && window.innerWidth <= 768;
@@ -429,20 +364,8 @@ export default function App() {
     }
   };
 
-  const {
-    touchMode,
-    virtualCursorVisible,
-    touchGestureRef,
-    moveRafRef,
-    placeCursor,
-    finishPendingClick,
-    clearLongPress,
-    handlePointerDown,
-    handlePointerMove,
-    handlePointerUpOrCancel,
-    handleLostPointerCapture,
-    handleToggleTouchMode,
-  } = useRemotePointer({
+  const pointer = useRemotePointer({
+    ...viewport,
     isCoarseDevice,
     isMobileViewport,
     isTouchLayout,
@@ -458,13 +381,6 @@ export default function App() {
     cursorRef,
     lastInputPointRef,
     followCursorRef,
-    viewRef,
-    view,
-    remoteW,
-    remoteH,
-    panBy,
-    setScaleAround,
-    applyPinchStepRef,
     openSoftKeyboard,
     softKeys,
     textCursor,
@@ -475,6 +391,8 @@ export default function App() {
     toolbarPinned,
     setToolbarExpanded,
   });
+
+  const { touchMode, virtualCursorVisible, touchGestureRef, moveRafRef, finishPendingClick, clearLongPress } = pointer;
 
   // Expose window.__rd and window.__rdView on every render
   useEffect(() => {
@@ -535,26 +453,19 @@ export default function App() {
     };
   }, [diagnosticsOpen, phase]);
 
-  const { connectSession, disconnect, requestRestart, handleDismissError } = useGatewaySession({
-    locale,
-    peerId,
-    idServer,
-    relayServer,
-    serverKey,
-    forceRelay,
-    host,
-    port,
+  const gateway = useGatewaySession({
+    ...preferences,
+    ...savedDevices,
+    ...video,
+    ...viewport,
+    ...pointer,
     reconnectRequest,
     phaseRef,
-    sizeRef,
-    displayPrefsRef,
     cursorElRef,
     audioRef,
     diagStateRef,
     setWebRtcFallbackReason,
     setRestartState,
-    setGatewayTokenRejected,
-    setTemporaryGatewayToken,
     setPhase,
     setConnectDialog,
     setMenuOpen,
@@ -562,32 +473,21 @@ export default function App() {
     setPeer,
     setDisplay,
     setCursorEmbedded,
-    setStats,
-    setDevices,
     setPrivacyPending,
     setPrivacyEnabled,
-    setDecoderError,
     setMobilePanel,
-    setViewMode,
-    setZoom,
-    setPan,
     setResolutionOptions,
     setCursorShape,
     setRtt,
     setGatewayVideo,
     setDiagSummary,
     setStatusDetail,
-    rememberDevicePassword,
-    handleClearSavedPassword,
     focusDesktopCapture,
-    placeCursor,
     showSessionTip,
     stopAudio,
     send,
     clipboard,
-    mode,
     password,
-    gatewayToken,
     webRtcEnabled,
     setWebRtcEnabled,
     phase,
@@ -596,21 +496,14 @@ export default function App() {
     restartDeadline,
     connectGeneration,
     wsRef,
-    decoderRef,
     canvasRef,
-    frameStatsRef,
-    statAccRef,
     lastInputPointRef,
     emptyStats: EMPTY_STATS,
     setQuality,
     setTargetFps,
     setSoftKeys,
     setToolbarExpanded,
-    ensureDecoder,
-    noteFrame,
     resetDiagnostics,
-    finishPendingClick,
-    clearLongPress,
   });
 
   const handleUpdateDisplayPrefs = useCallback(
@@ -662,13 +555,7 @@ export default function App() {
     };
   }, [clearLongPress, finishPendingClick]);
 
-  const {
-    captureComposingRef,
-    lastCompositionEndAtRef,
-    sendText,
-    sendChord,
-    handleQuickKey,
-  } = useRemoteKeyboard({
+  const keyboard = useRemoteKeyboard({
     send,
     closeChrome,
     chromeRef,
@@ -678,12 +565,6 @@ export default function App() {
     showCtrlAltDel,
   });
 
-  const showConnectSheet = phase !== 'live' || connectDialog;
-  const showSessionMenu = menuOpen && phase === 'live' && !connectDialog;
-  const showHandle = phase === 'live' && !connectDialog && !menuOpen && !isTouchLayout;
-  const showMobileDock = phase === 'live' && !connectDialog && !softKeys && isTouchLayout;
-  const liveHostTitle =
-    peer?.hostname || peer?.username || (mode === 'id' ? peerId : host) || 'Remote';
   const showRemoteCursor =
     displayPrefs.showRemoteCursor &&
     !cursorEmbedded &&
@@ -700,275 +581,31 @@ export default function App() {
       keyboardAvoiding={Boolean(keyboardLayout.viewport)}
       remoteInput={remoteInput}
       scrollStyle={displayPrefs.scrollStyle}
-      pointer={{ handlePointerDown, handlePointerMove, handlePointerUpOrCancel, handleLostPointerCapture }}
+      pointer={pointer}
       canvas={{ canvasRef, remoteW, remoteH, view }}
       cursor={{ cursorElRef, cursorCanvasRef, cursorShape, showRemoteCursor, enlargeCursor: displayPrefs.enlargeCursor }}
-      capture={{ captureRef, captureComposingRef, lastCompositionEndAtRef, displayPrefsRef, sendText }}
+      capture={{ ...keyboard, captureRef, displayPrefsRef }}
     >
-      {pageZoomed && (
-        <div
-          className="page-zoom-banner"
-          data-testid="page-zoom-banner"
-          role="status"
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          <span>{t(locale, 'pageZoomedBanner')}</span>
-          <button
-            type="button"
-            className="rd-btn primary"
-            style={{ minHeight: 32, padding: '4px 10px' }}
-            data-testid="page-zoom-reset"
-            onClick={resetPageZoom}
-          >
-            {t(locale, 'reset')}
-          </button>
-        </div>
-      )}
-
-      {showHandle && (
-        <SessionHandle
-          locale={locale}
-          handleX={handleX}
-          stageWidth={box.w}
-          expanded={toolbarExpanded}
-          pinned={toolbarPinned}
-          hostTitle={liveHostTitle}
-          displays={peer?.displays ?? []}
-          activeDisplay={display}
-          viewMode={viewMode}
-          hasWarning={Boolean(decoderError)}
-          onMoveHandle={setHandleX}
-          onSetExpanded={setToolbarExpanded}
-          onTogglePinned={() => setToolbarPinned((prev) => !prev)}
-          onSwitchDisplay={(idx) => {
-            setDisplay(idx);
-            send({ type: 'switchDisplay', display: idx });
-          }}
-          onToggleViewMode={() => {
-            if (viewMode === 'fit') {
-              setViewMode('original');
-              setPan({
-                panX: (box.w - remoteW) / 2,
-                panY: (box.h - remoteH) / 2,
-              });
-            } else {
-              setViewMode('fit');
-              setZoom(1);
-              setPan({ panX: 0, panY: 0 });
-            }
-          }}
-          onToggleKeyboard={toggleSoftKeyboard}
-          onCtrlAltDel={showCtrlAltDel && !displayPrefs.viewOnly ? () => handleQuickKey('Ctrl+Alt+Del') : undefined}
-          onOpenMenu={() => setMenuOpen(true)}
-          onDisconnect={disconnect}
-        />
-      )}
-
-      {restartState && <div className="restart-notice" role="status">
-        {t(locale, restartState === 'requested' ? 'restartWaiting' : 'retryWaiting')}
-        <button type="button" onClick={restartState === 'requested' ? () => setRestartState(null) : disconnect}>{t(locale,'cancel')}</button>
-      </div>}
-      {diagnosticsOpen && phase === 'live' && (
-        <DiagnosticOverlay
-          locale={locale}
-          stats={stats}
-          summary={diagSummary}
-          routeLabel={routeLabel}
-          browserDirect={peer?.route?.startsWith('webrtc')}
-          encryptionLabel={t(locale, peer?.encrypted ? 'linkEncrypted' : 'linkPlain')}
-          hostRttMs={rtt}
-          targetFps={targetFps}
-          gatewayVideo={gatewayVideo}
-          onClose={() => setDiagnosticsOpen(false)}
-        />
-      )}
-
-      {(phase === 'live' || webRtcFallbackReason !== null) && (
-        <div className="session-tip-region" aria-live="polite" aria-atomic="true">
-          {webRtcFallbackReason !== null && (
-            <div className="session-tip fallback-tip" data-testid="webrtc-fallback-tip" data-session-notice
-              onPointerDown={e => e.stopPropagation()} onPointerUp={e => e.stopPropagation()}
-              onPointerMove={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
-              <span>{t(locale, 'webRtcFallback')}<br />{webRtcFallbackReason}</span>
-              <button type="button" data-testid="webrtc-fallback-dismiss" aria-label={t(locale, 'close')}
-                onClick={() => setWebRtcFallbackReason(null)}>×</button>
-            </div>
-          )}
-          {phase === 'live' && sessionTip && <div className="session-tip" data-testid="session-tip">{sessionTip.text}</div>}
-          {phase === 'live' && clipboardSync && clipboardAllowed && clipboard.pending && (
-            <div className="session-tip clipboard-tip" data-testid="clipboard-tip"
-              onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
-              <span>{t(locale, clipboard.pending === 'write' ? 'clipRemoteReady' : 'clipLocalReady')}</span>
-              <button type="button" onClick={() => { void (clipboard.pending === 'write' ? clipboard.writeRemote() : clipboard.readLocal()); }}>
-                {t(locale, clipboard.pending === 'write' ? 'copy' : 'clipSyncAction')}
-              </button>
-              <button type="button" aria-label={t(locale, 'close')} onClick={clipboard.dismiss}>×</button>
-            </div>
-          )}
-        </div>
-      )}
-      {showMobileDock && (
-        <MobileDock
-          locale={locale}
-          activePanel={menuOpen ? mobilePanel : null}
-          touchMode={touchMode}
-          onToggleTouchMode={() => {
-            handleToggleTouchMode();
-            setMobilePanel('toolbar');
-          }}
-          onToggleKeyboard={toggleSoftKeyboard}
-          onCollapse={closeChrome}
-          onOpenMenu={panel => {
-            setMobilePanel(current => menuOpen && panel === current ? 'toolbar' : panel);
-            setMenuOpen(true);
-          }}
-        />
-      )}
-
-      {passwordStorageFailed && <div className="restart-notice" role="alert">{t(locale, 'passwordStorageFailed')} <button onClick={() => setPasswordStorageFailed(false)}>OK</button></div>}
-      {showConnectSheet && passwordsReady && gatewayTokenReady && (
-        <RustDeskShell
-          locale={locale}
-          localePreference={localePreference}
-          isDesktop={!(isMobileViewport || (isCoarseDevice && box.h > 0 && box.h <= 540 && box.w > box.h))}
-          theme={theme}
-          displayPrefs={displayPrefs}
-          onChangeLocale={changeLocale}
-          onChangeTheme={changeTheme}
-          onUpdateDisplayPrefs={handleUpdateDisplayPrefs}
-          mode={mode}
-          directIpEnabled={directIpEnabled}
-          phase={phase}
-          host={host}
-          port={port}
-          password={password}
-          peerId={peerId}
-          idServer={idServer}
-          relayServer={relayServer}
-          serverKey={serverKey}
-          forceRelay={forceRelay}
-          gatewayToken={gatewayToken}
-          savedGatewayToken={savedGatewayToken}
-          gatewayTokenNeedsInput={authRequired && (!gatewayToken.trim() || gatewayTokenRejected)}
-          gatewayTokenReadFailed={gatewayTokenReadFailed}
-          onSaveGatewayToken={saveGatewayToken}
-          detail={detail}
-          decoderError={decoderError}
-          touchMode={touchMode}
-          diagnosticsOpen={diagnosticsOpen}
-          devices={devices}
-          savedPasswords={savedPasswords}
-          onChangeMode={setMode}
-          onToggleDirectIp={handleToggleDirectIp}
-          onChangeField={(field, val) => {
-            if (field === 'host') setHost(val);
-            else if (field === 'port') setPort(val);
-            else if (field === 'password') setPassword(val);
-            else if (field === 'peerId') setPeerId(val);
-            else if (field === 'idServer') setIdServer(val);
-            else if (field === 'relayServer') setRelayServer(val);
-            else if (field === 'serverKey') setServerKey(val);
-          }}
-          onChangeForceRelay={setForceRelay}
-          onClearSavedPassword={handleClearSavedPassword}
-          onSelectDevice={handleSelectDevice}
-          onToggleFavorite={handleToggleFavorite}
-          onRemoveDevice={handleRemoveDevice}
-          onToggleTouchMode={handleToggleTouchMode}
-          onToggleDiagnostics={() => setDiagnosticsOpen((prev) => !prev)}
-          onConnect={(req) => void connectSession(req)}
-          onDisconnect={disconnect}
-          onDismissError={handleDismissError}
-          onClose={closeChrome}
-        />
-      )}
-
-      {showSessionMenu && (
-        <SessionMenu
-          clipboardSync={clipboardSync && clipboardAllowed}
-          clipboardAllowed={clipboardAllowed}
-          onToggleClipboardSync={toggleClipboardSync}
-          onNotify={showSessionTip}
-          onRestart={requestRestart}
-          mobilePanel={mobilePanel}
-          locale={locale}
-          audioEnabled={audioEnabled}
-          onToggleAudio={toggleAudio}
-          mobileLayout={isTouchLayout}
-          followWindow={displayPrefs.followWindow}
-          onToggleFollowWindow={() => handleUpdateDisplayPrefs({ followWindow: !displayPrefs.followWindow })}
-          phase={phase}
-          peer={peer}
-          decoderError={decoderError}
-          display={display}
-          touchMode={touchMode}
-          viewOnly={displayPrefs.viewOnly}
-          sizes={resolutionOptions?.display === display ? resolutionOptions.sizes : []}
-          onResolution={(width, height) => send({ type: 'resolution', display, width, height })}
-          diagnosticsOpen={diagnosticsOpen}
-          stats={stats}
-          rtt={rtt}
-          quality={quality}
-          targetFps={targetFps}
-          preferredCodec={displayPrefs.codec}
-          privacyEnabled={privacyEnabled}
-          privacyPending={privacyPending}
-          onTogglePrivacy={() => {
-            if (!peer?.privacyAllowed || privacyPending || displayPrefs.viewOnly) return;
-            setPrivacyPending(true);
-            showSessionTip(t(locale, 'privacyWaiting'));
-            send({ type: 'privacy', enabled: !privacyEnabled });
-          }}
-          onClose={closeChrome}
-          onOpenConnection={() => {
-            setMenuOpen(false);
-            setConnectDialog(true);
-          }}
-          onDisconnect={disconnect}
-          onToggleDiagnostics={() => {
-            setDiagnosticsOpen(true);
-            setMenuOpen(false);
-          }}
-          onToggleTouchMode={handleToggleTouchMode}
-          reverseScroll={displayPrefs.reverseMouseWheel}
-          onReverseScrollChange={reverseMouseWheel => handleUpdateDisplayPrefs({ reverseMouseWheel })}
-          onSwitchDisplay={(idx) => {
-            setDisplay(idx);
-            send({ type: 'switchDisplay', display: idx });
-          }}
-          onQuickKey={handleQuickKey}
-          onChangeQuality={(q, fps, nextCodec) => {
-            setQuality(q);
-            setTargetFps(fps);
-            const activeCodec = nextCodec ?? displayPrefsRef.current.codec;
-            if (nextCodec && nextCodec !== displayPrefsRef.current.codec) {
-              setDisplayPrefs((prev) => {
-                const updated = { ...prev, codec: nextCodec };
-                persistDisplayPrefs(updated);
-                return updated;
-              });
-            }
-            send({ type: 'quality', quality: q, fps, codec: activeCodec });
-          }}
-        />
-      )}
-
-      {softKeys && remoteInput && (
-        <SoftKeyboardBar
-          onPasteText={clipboardSync && clipboardAllowed ? text => { clipboard.sendLocal(text); } : undefined}
-          locale={locale}
-          remotePlatform={peer?.platform}
-          inputRef={softKeyboardInputRef}
-          mode={softKeyboardMode}
-          reservedSpace={keyboardLayout.reservedSpace}
-          viewportHeight={stageViewport?.height ?? box.h}
-          onSwitchMode={switchSoftKeyboard}
-          onSendText={sendText}
-          onSendControl={(action, control) => send({ type: 'key', action, control })}
-          onSendChord={sendChord}
-          onHide={hideSoftKeyboard}
-        />
-      )}
+      <SessionPanels
+        preferences={preferences}
+        savedDevices={savedDevices}
+        viewport={viewport}
+        video={video}
+        keyboard={keyboard}
+        pointer={pointer}
+        gateway={gateway}
+        clipboard={clipboard}
+        connection={{ phase, detail, peer, password, setPassword, authRequired, handleSelectDevice, handleUpdateDisplayPrefs }}
+        controls={{ send, display, setDisplay, resolutionOptions, quality, setQuality, targetFps, setTargetFps,
+          privacyEnabled, privacyPending, setPrivacyPending, clipboardSync, clipboardAllowed, toggleClipboardSync,
+          audioEnabled, toggleAudio, showCtrlAltDel }}
+        chrome={{ handleX, setHandleX, toolbarExpanded, setToolbarExpanded, toolbarPinned, setToolbarPinned,
+          mobilePanel, setMobilePanel, menuOpen, setMenuOpen, connectDialog, setConnectDialog,
+          softKeys, softKeyboardMode, softKeyboardInputRef, closeChrome, toggleSoftKeyboard, switchSoftKeyboard,
+          hideSoftKeyboard, isMobileViewport, isCoarseDevice, isTouchLayout, remoteInput }}
+        notices={{ restartState, setRestartState, sessionTip, showSessionTip, webRtcFallbackReason, setWebRtcFallbackReason }}
+        diagnostics={{ diagnosticsOpen, setDiagnosticsOpen, diagSummary, rtt, gatewayVideo }}
+      />
     </RemoteStage>
   );
 }
