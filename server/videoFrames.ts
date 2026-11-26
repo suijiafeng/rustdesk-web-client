@@ -1,8 +1,9 @@
 import { errorPayload } from '../shared/errors.ts';
-import { buildRefreshVideoMessage, buildVideoReceivedMessage, humanizeError } from '../shared/control.ts';
+import { buildRefreshVideoMessage, buildVideoReceivedMessage } from '../shared/control.ts';
 import { encodeMessage } from '../shared/protos.ts';
 import type { ConnectedHost } from './rustdeskClient.ts';
 import type { SessionContext } from './sessionState.ts';
+import { VIDEO_RESUME_BYTES } from './videoBuffer.ts';
 import {
   CODEC_VP8,
   encodedFrameIsKey, extractEncodedFrames, type EncodedVideo,
@@ -51,6 +52,8 @@ export function createVideoFrameHandler(context: SessionContext): VideoFrameHand
     if (extracted) {
       const display = Math.max(0, Number(vf.display ?? 0));
       const nowMs = BigInt(Date.now());
+      const queuedBefore = ws.bufferedAmount;
+      let forwarded = 0;
       for (const f of extracted.frames) {
         const payload = f.data ? new Uint8Array(f.data) : new Uint8Array(0);
         const isKey = encodedFrameIsKey(extracted.codec, payload, f.key);
@@ -76,11 +79,15 @@ export function createVideoFrameHandler(context: SessionContext): VideoFrameHand
           data: payload,
         });
         sendBinary(packet);
+        forwarded++;
       }
-      // RustDesk 1.5 QoS ACK once per message containing video frames (non-blocking)
-      void conn.stream
-        .sendRaw(encodeMessage(buildVideoReceivedMessage()))
-        .catch(() => {});
+      // RustDesk 1.5 QoS ACK once per message containing video frames (non-blocking).
+      // Suppress ACKs when frames were shed or the browser downlink is already backed up.
+      if (forwarded > 0 && !videoBuffer.recovering && queuedBefore <= VIDEO_RESUME_BYTES) {
+        void conn.stream
+          .sendRaw(encodeMessage(buildVideoReceivedMessage()))
+          .catch(() => {});
+      }
     }
   };
 

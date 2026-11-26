@@ -2,6 +2,7 @@ import type { CursorPublisher } from '../shared/cursor.ts';
 import type { WebSocket } from 'ws';
 import type { GatewayAdmission } from './admission.ts';
 import type { CodecCaps } from '../shared/control.ts';
+import type { HostMessage } from '../shared/protoTypes.ts';
 import type { ConnectedHost } from './rustdeskClient.ts';
 import type { GatewayVideoBuffer } from './videoBuffer.ts';
 
@@ -13,6 +14,8 @@ export interface GatewayConfig {
 export interface SessionState {
   cursorIds?: boolean;
   audioBinary?: boolean;
+  delayEcho?: boolean;
+  pendingDelayProbes?: Map<number, NonNullable<HostMessage['test_delay']>>;
   cursorPublisher?: CursorPublisher;
   phase: 'awaiting-connect' | 'connecting' | 'live' | 'closed';
   resolutionDisplay: number;

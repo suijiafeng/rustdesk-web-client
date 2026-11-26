@@ -216,3 +216,21 @@ test('cursor recovery only sends cached bitmaps to clients that negotiated IDs',
   await f.send({ type: 'cursorRequest', id: 'x'.repeat(129) });
   assert.equal(f.replies.length, 2);
 });
+
+test('delayAck echoes a pending host TestDelay probe once and ignores unknown or replayed IDs', async t => {
+  const f = fixture(t);
+  const probe = { time: '123456', from_client: false, last_delay: 25 };
+  f.state.pendingDelayProbes = new Map([[1, probe]]);
+  await f.send({ type: 'delayAck', id: 1 });
+  assert.equal(f.writes.length, 0, 'unnegotiated sessions ignore delayAck');
+  f.state.delayEcho = true;
+  await f.send({ type: 'delayAck', id: 999 });
+  await f.send({ type: 'delayAck', id: -1 });
+  assert.equal(f.writes.length, 0);
+  await f.send({ type: 'delayAck', id: 1 });
+  assert.equal(f.writes.length, 1);
+  assert.equal(f.writes[0].test_delay?.time, '123456');
+  assert.equal(Boolean(f.writes[0].test_delay?.from_client), false);
+  await f.send({ type: 'delayAck', id: 1 });
+  assert.equal(f.writes.length, 1, 'replayed delayAck IDs must not echo twice');
+});

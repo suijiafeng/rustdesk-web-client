@@ -2,13 +2,15 @@ import { encodeAudioFrame } from '../shared/audio.ts';
 import { CursorPublisher } from '../shared/cursor.ts';
 import { errorPayload } from '../shared/errors.ts';
 import { decodeClipboard } from '../shared/clipboard.ts';
-import { humanizeError } from '../shared/control.ts';
 import { CursorShapes } from './cursor.ts';
 import { decodeMessage, encodeMessage } from '../shared/protos.ts';
 import type { ConnectedHost } from './rustdeskClient.ts';
 import type { SessionContext } from './sessionState.ts';
+import { AUDIO_QUEUE_LIMIT_BYTES } from './videoBuffer.ts';
 import { canRestart, permissions, peerToJson, initialDisplaySize, HostPermission, PrivacyState, privacyResult, supportedResolutions, type PeerInfo } from '../shared/peer.ts';
 import type { VideoFrameHandler } from './videoFrames.ts';
+
+const MAX_PENDING_DELAY_PROBES = 8;
 
 export async function startHostPump(
   conn: ConnectedHost,
@@ -16,6 +18,7 @@ export async function startHostPump(
   handleVideoFrame: VideoFrameHandler['handleFrame'],
 ): Promise<void> {
   const { state, ws, sendJson, sendBinary, cleanup } = context;
+  let delayProbeSeq = 0;
   const publishResolutions = (display: number, supported?: PeerInfo['resolutions']) => {
     state.resolutionDisplay = display;
     state.sizes = supportedResolutions(supported);
@@ -45,8 +48,21 @@ export async function startHostPump(
       const msg = decodeMessage(raw);
 
       // 1. TestDelay echo + RTT reporting
+      // When delayEcho is negotiated, bounce probes across the browser WebSocket
+      // behind queued video frames so RustDesk's VideoQoS sees true end-to-end delay.
       if (msg.test_delay && !msg.test_delay.from_client) {
-        void conn.stream.sendRaw(encodeMessage({ test_delay: msg.test_delay })).catch(() => {});
+        if (state.delayEcho) {
+          const id = ++delayProbeSeq;
+          const pending = state.pendingDelayProbes ??= new Map();
+          if (pending.size >= MAX_PENDING_DELAY_PROBES) {
+            const oldest = pending.keys().next().value;
+            if (oldest !== undefined) pending.delete(oldest);
+          }
+          pending.set(id, msg.test_delay);
+          sendJson({ type: 'delayProbe', id });
+        } else {
+          void conn.stream.sendRaw(encodeMessage({ test_delay: msg.test_delay })).catch(() => {});
+        }
         const lastDelay = Number(msg.test_delay.last_delay ?? 0);
         if (lastDelay > 0) {
           sendJson({ type: 'rtt', ms: lastDelay });
@@ -119,7 +135,7 @@ export async function startHostPump(
         if (state.audioRequested && state.audioAllowed && state.audioFormat) sendJson({ type: 'audioFormat', ...state.audioFormat });
       }
       const packet = msg.audio_frame?.data;
-      if (state.audioAllowed && state.audioRequested && packet && packet.length > 0 && packet.length <= 8192 && ws.bufferedAmount < 262144) {
+      if (state.audioAllowed && state.audioRequested && packet && packet.length > 0 && packet.length <= 8192 && ws.bufferedAmount < AUDIO_QUEUE_LIMIT_BYTES) {
         if (state.audioBinary) sendBinary(encodeAudioFrame(packet));
         else sendJson({ type: 'audioFrame', packet: Buffer.from(packet).toString('base64') });
       }

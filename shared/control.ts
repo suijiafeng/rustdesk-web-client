@@ -50,7 +50,7 @@ export type ClientMessage =
       fps?: number;
       codec?: string;
       lockAfterSessionEnd?: boolean;
-      media?: { cursorIds?: boolean; audioBinary?: boolean };
+      media?: { cursorIds?: boolean; audioBinary?: boolean; delayEcho?: boolean };
     }
   | {
       type: 'mouse';
@@ -98,6 +98,10 @@ export type ClientMessage =
       type: 'ping';
       seq?: number;
       clientTs?: number;
+    }
+  | {
+      type: 'delayAck';
+      id?: number;
     }
   | {
       type: 'disconnect';

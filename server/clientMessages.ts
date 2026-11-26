@@ -104,6 +104,7 @@ export function createClientMessageHandler(context: ClientMessageContext) {
       state.sessionCodecs = codecs;
       state.cursorIds = parsed.media?.cursorIds === true;
       state.audioBinary = parsed.media?.audioBinary === true;
+      state.delayEcho = parsed.media?.delayEcho === true;
 
       state.phase = 'connecting';
       sendJson({ type: 'status', state: 'connecting', detail: 'dialing the host' });
@@ -234,6 +235,14 @@ export function createClientMessageHandler(context: ClientMessageContext) {
         const message = state.cursorPublisher?.select(parsed.id, true);
         if (message) sendJson(message);
       }
+    },
+    delayAck: parsed => {
+      if (!state.delayEcho || typeof parsed.id !== 'number' || !Number.isSafeInteger(parsed.id) || parsed.id <= 0) return;
+      const pending = state.pendingDelayProbes;
+      const probe = pending?.get(parsed.id);
+      if (!probe) return;
+      pending!.delete(parsed.id);
+      forwardToHost({ test_delay: probe });
     },
     mouse: forwardControl,
     key: forwardControl,

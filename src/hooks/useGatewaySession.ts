@@ -256,7 +256,7 @@ export function useGatewaySession(context: GatewaySessionContext) {
           sock.send(
             JSON.stringify({
               type: 'connect',
-              media: { cursorIds: true, audioBinary: true },
+              media: { cursorIds: true, audioBinary: true, delayEcho: true },
               mode: 'id',
               peerId: targetPeerId,
               idServer: targetIdServer,
@@ -277,7 +277,7 @@ export function useGatewaySession(context: GatewaySessionContext) {
           sock.send(
             JSON.stringify({
               type: 'connect',
-              media: { cursorIds: true, audioBinary: true },
+              media: { cursorIds: true, audioBinary: true, delayEcho: true },
               mode: 'direct',
               host: targetHost,
               port: targetPort,

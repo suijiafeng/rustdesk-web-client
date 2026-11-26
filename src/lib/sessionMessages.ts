@@ -341,6 +341,9 @@ export function createSessionMessageHandler(context: SessionMessageContext) {
     rtt(msg) {
       setRtt(msg.ms);
     },
+    delayProbe(msg) {
+      send({ type: 'delayAck', id: msg.id });
+    },
     pong(msg) {
       setGatewayVideo(msg.gatewayVideo);
       const now = performance.now();

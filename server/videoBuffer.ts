@@ -1,5 +1,6 @@
-const VIDEO_QUEUE_LIMIT_BYTES = 1024 * 1024;
-const VIDEO_RESUME_BYTES = 256 * 1024;
+export const VIDEO_QUEUE_LIMIT_BYTES = 512 * 1024;
+export const VIDEO_RESUME_BYTES = 128 * 1024;
+export const AUDIO_QUEUE_LIMIT_BYTES = 768 * 1024;
 const REFRESH_INTERVAL_MS = 1000;
 
 export class GatewayVideoBuffer {

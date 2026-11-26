@@ -91,6 +91,7 @@ export type ServerMessage =
   | CursorMessage
   | ({ type: 'error'; message: string } & Partial<ErrorPayload>)
   | { type: 'rtt'; ms: number }
+  | { type: 'delayProbe'; id: number }
   | { type: 'pong'; seq: number; clientTs: number; serverTs: number; gatewayVideo?: GatewayVideoStats };
 
 export interface CodecSupport {
@@ -125,7 +126,7 @@ export type ClientMessage =
       quality?: QualityLevel;
       customQuality?: number;
       lockAfterSessionEnd?: boolean;
-      media?: { cursorIds?: boolean; audioBinary?: boolean };
+      media?: { cursorIds?: boolean; audioBinary?: boolean; delayEcho?: boolean };
       fps?: number;
       codec?: string;
     }
@@ -153,6 +154,7 @@ export type ClientMessage =
   | { type: 'refresh' }
   | { type: 'quality'; quality?: QualityLevel; customQuality?: number; fps: number; codec?: string }
   | { type: 'ping'; seq: number; clientTs: number }
+  | { type: 'delayAck'; id: number }
   | { type: 'disconnect' };
 
 export function decodeFrame(buf: ArrayBuffer): VideoPacket | null {

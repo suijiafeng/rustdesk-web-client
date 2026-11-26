@@ -73,6 +73,8 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): () => void {
     state.phase = 'closed';
     state.cursorPublisher?.clear();
     state.cursorPublisher = undefined;
+    state.pendingDelayProbes?.clear();
+    state.pendingDelayProbes = undefined;
     clearTimeout(connectDeadline);
     connection.abort();
     clearInterval(heartbeat);

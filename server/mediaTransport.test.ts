@@ -9,7 +9,7 @@ import { EncryptedFramedStream } from './bytesCodec.ts';
 import { startHostPump } from './hostMessages.ts';
 import type { ConnectedHost } from './rustdeskClient.ts';
 import type { SessionState } from './sessionState.ts';
-import { GatewayVideoBuffer } from './videoBuffer.ts';
+import { AUDIO_QUEUE_LIMIT_BYTES, GatewayVideoBuffer, VIDEO_QUEUE_LIMIT_BYTES } from './videoBuffer.ts';
 
 for (const negotiated of [false, true]) {
   for (const congested of [false, true]) {
@@ -42,7 +42,7 @@ for (const negotiated of [false, true]) {
       const binary: Uint8Array[] = [];
       const order: string[] = [];
       await startHostPump(conn, {
-        state, ws: { bufferedAmount: congested ? 262144 : 0 } as WebSocket, videoBuffer: new GatewayVideoBuffer(),
+        state, ws: { bufferedAmount: congested ? AUDIO_QUEUE_LIMIT_BYTES : 0 } as WebSocket, videoBuffer: new GatewayVideoBuffer(),
         sendJson: message => { json.push(message); order.push(String(message.type)); },
         sendBinary: frame => { binary.push(frame); order.push('binary'); },
         cleanup: () => { state.phase = 'closed'; },
@@ -60,3 +60,46 @@ for (const negotiated of [false, true]) {
     });
   }
 }
+
+test('audio continues flowing above the video cutoff and delayEcho bounces bounded TestDelay probes', async t => {
+  const stream = new EncryptedFramedStream(new Socket());
+  t.after(() => stream.close());
+  const hostWrites: Uint8Array[] = [];
+  t.mock.method(stream, 'sendRaw', async (data: Uint8Array) => { hostWrites.push(data); });
+  const state: SessionState = {
+    phase: 'live', hostConn: null, resolutionDisplay: 0, sizes: [], sessionCodecs: undefined,
+    preferredCodec: undefined, privacyImpl: '', audioRequested: true, audioAllowed: true,
+    audioFormat: null, currentSize: { width: 0, height: 0 }, audioBinary: true, delayEcho: true,
+  };
+  const conn: ConnectedHost = { stream, route: 'direct', privacyAllowed: true, clipboardAllowed: true,
+    restartAllowed: true, audioAllowed: true, peerInfo: { hostname: 'qos-peer' }, username: 'test', encrypted: true };
+  state.hostConn = conn;
+  const audioPacket = Uint8Array.from([1, 2, 3]);
+  const packets = [
+    encodeMessage({ audio_frame: { data: audioPacket } }),
+    ...Array.from({ length: 10 }, (_, index) => encodeMessage({ test_delay: { time: index + 1, from_client: false, last_delay: 42 } })),
+  ];
+  t.mock.method(stream, 'next', async () => {
+    if (!packets.length) { state.phase = 'closed'; return null; }
+    return packets.shift()!;
+  });
+  const json: Array<Record<string, unknown>> = [];
+  const binary: Uint8Array[] = [];
+  await startHostPump(conn, {
+    // Above video cutoff (512 KiB) so video sheds, but below audio limit (768 KiB).
+    state, ws: { bufferedAmount: VIDEO_QUEUE_LIMIT_BYTES + 64 * 1024 } as WebSocket, videoBuffer: new GatewayVideoBuffer(),
+    sendJson: message => json.push(message),
+    sendBinary: frame => binary.push(frame),
+    cleanup: () => { state.phase = 'closed'; },
+  }, () => {});
+  assert.equal(binary.length, 1);
+  assert.deepEqual(decodeAudioFrame(binary[0]), audioPacket);
+  // With delayEcho negotiated, gateway must NOT immediately echo TestDelay to host.
+  assert.equal(hostWrites.length, 0);
+  const probes = json.filter(message => message.type === 'delayProbe');
+  assert.equal(probes.length, 10);
+  assert.equal(state.pendingDelayProbes?.size, 8);
+  assert.equal(state.pendingDelayProbes?.has(1), false);
+  assert.equal(state.pendingDelayProbes?.has(2), false);
+  assert.equal(state.pendingDelayProbes?.has(10), true);
+});

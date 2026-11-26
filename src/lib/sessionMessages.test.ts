@@ -150,6 +150,8 @@ test('pong updates gateway metrics and diagnostic samples, while fallback remain
   assert.equal(f.events[1][0], 'diagnostics');
   f.handle({ type: 'rtt', ms: 15 });
   assert.deepEqual(f.events.at(-1), ['rtt', 15]);
+  f.handle({ type: 'delayProbe', id: 7 });
+  assert.deepEqual(f.events.at(-1), ['send', { type: 'delayAck', id: 7 }]);
   f.handle({ type: 'webrtcFallback', reason: 'signaling timeout' });
   assert.deepEqual(f.events.at(-1), ['fallback', 'signaling timeout']);
 });
