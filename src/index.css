@@ -597,21 +597,25 @@ button:focus-visible {
 
 .virtual-keyboard-row {
   display: flex;
-  justify-content: center;
-  gap: 4px;
+  gap: clamp(2px, 0.55vw, 5px);
+  width: min(100%, 900px);
+  margin-inline: auto;
 }
 
 .virtual-keyboard-row .soft-key-btn {
-  flex: 1 1 0;
+  flex: var(--virtual-key-width, 1) 1 0;
+  flex-direction: column;
   min-width: 0;
   min-height: 0;
-  max-width: 68px;
-  padding: 0 3px;
+  padding: 0 1px;
+  overflow: hidden;
+  font-size: clamp(9px, 2.7vw, 14px);
+  line-height: 1.1;
 }
 
-.virtual-keyboard-row [data-key="Space"] {
-  flex-grow: 3;
-  max-width: 220px;
+.virtual-key-alternate {
+  font-size: 0.72em;
+  opacity: 0.75;
 }
 
 .soft-key-divider {

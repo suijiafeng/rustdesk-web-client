@@ -8,6 +8,7 @@ import {
   controlFromKeyOrCode,
   diffTextInput,
   isImeEvent,
+  isModifier,
   remoteKeyboardProfile,
   type SoftChordPart,
 } from '../lib/keys';
@@ -51,11 +52,48 @@ const EXTRA_KEYS: ReadonlyArray<{ label: string; control: string; aria?: string 
 ] as const;
 
 const KEY_FEEDBACK_MS = 140;
-const CHAR_ROWS = ['1234567890', 'qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
+type VirtualKey =
+  | { chr: string; shifted: string; width?: number }
+  | { control: string; label: string; aria?: string; width?: number };
 
-const VIRTUAL_CONTROLS = EXTRA_KEYS.filter(key =>
-  ['Space', 'Enter', 'Backspace', 'ArrowLeft', 'ArrowRight'].includes(key.control),
-);
+function characterKeys(keys: string, shifted: string): VirtualKey[] {
+  return [...keys].map((chr, index) => ({ chr, shifted: shifted[index] }));
+}
+
+const VIRTUAL_ROWS: readonly (readonly VirtualKey[])[] = [
+  [
+    ...characterKeys('`1234567890-=', '~!@#$%^&*()_+'),
+    { control: 'Backspace', label: '⌫', aria: 'Backspace', width: 2 },
+  ],
+  [
+    { control: 'Tab', label: 'Tab', width: 1.5 },
+    ...characterKeys('qwertyuiop[]', 'QWERTYUIOP{}'),
+    { chr: '\\', shifted: '|', width: 1.5 },
+  ],
+  [
+    { control: 'CapsLock', label: 'Caps', aria: 'Caps Lock', width: 1.75 },
+    ...characterKeys("asdfghjkl;'", 'ASDFGHJKL:"'),
+    { control: 'Enter', label: 'Enter', width: 2.25 },
+  ],
+  [
+    { control: 'Shift', label: 'Shift', width: 2.25 },
+    ...characterKeys('zxcvbnm,./', 'ZXCVBNM<>?'),
+    { control: 'Shift', label: 'Shift', width: 2.75 },
+  ],
+];
+
+const VIRTUAL_BOTTOM_ROW: readonly VirtualKey[] = [
+  { control: 'Control', label: 'Ctrl', width: 1.5 },
+  { control: 'Meta', label: 'Win', width: 2 },
+  { control: 'Alt', label: 'Alt', width: 1.75 },
+  { control: 'Space', label: 'Space', width: 5.75 },
+  { control: 'ArrowLeft', label: '←', aria: 'Left arrow' },
+  { control: 'ArrowDown', label: '↓', aria: 'Down arrow' },
+  { control: 'ArrowUp', label: '↑', aria: 'Up arrow' },
+  { control: 'ArrowRight', label: '→', aria: 'Right arrow' },
+];
+const [controlKey, metaKey, altKey, ...bottomKeys] = VIRTUAL_BOTTOM_ROW;
+const MAC_VIRTUAL_BOTTOM_ROW = [controlKey, altKey, metaKey, ...bottomKeys];
 
 export function SoftKeyboardBar({
   locale,
@@ -87,6 +125,7 @@ export function SoftKeyboardBar({
     setPressedKey(key);
     feedbackTimer.current = setTimeout(() => setPressedKey(null), KEY_FEEDBACK_MS);
   };
+  const shiftActive = latched.includes('Shift');
   const modifierLabel = (control: string, label: string) =>
     control === 'Meta' ? metaLabel : control === 'Alt' ? altLabel : label;
 
@@ -147,6 +186,20 @@ export function SoftKeyboardBar({
       onSendText(key.chr);
     }
     focusSystemInput();
+  };
+
+  const tapVirtualKey = (key: VirtualKey) => {
+    if ('control' in key) {
+      if (isModifier(key.control)) toggleModifier(key.control);
+      else tapKey({ control: key.control });
+      return;
+    }
+    if (shiftActive && latched.length === 1) {
+      setLatched([]);
+      onSendText(key.shifted);
+      return;
+    }
+    tapKey({ chr: key.chr });
   };
 
   const syncInputValue = (el: HTMLInputElement) => {
@@ -332,21 +385,31 @@ export function SoftKeyboardBar({
       {mode === 'virtual' && (
         <div className="virtual-keyboard" data-testid="virtual-keyboard"
           role="group" aria-label={t(locale, 'softVirtualKeyboard')} inert={reservedSpace < 80}>
-          {CHAR_ROWS.map(row => <div className="virtual-keyboard-row" key={row}>
-            {[...row].map(chr => <button type="button" className="soft-key-btn" key={chr}
-              data-key-feedback={`letter-${chr}`}
-              data-key-pressed={pressedKey === `letter-${chr}` || undefined}
-              onClick={() => tapKey({ chr })}>{chr.toUpperCase()}</button>)}
-          </div>)}
-          <div className="virtual-keyboard-row">
-            {VIRTUAL_CONTROLS.map(key => <button type="button" className="soft-key-btn" key={key.control}
-              data-key={key.control} aria-label={key.aria ?? key.label}
-              data-key-feedback={`virtual-${key.control}`}
-              data-key-pressed={pressedKey === `virtual-${key.control}` || undefined}
-              onClick={() => tapKey({ control: key.control })}>
-              {key.control === 'Backspace' ? '⌫' : key.label}
-            </button>)}
-          </div>
+          {[...VIRTUAL_ROWS, metaLabel === 'Command' ? MAC_VIRTUAL_BOTTOM_ROW : VIRTUAL_BOTTOM_ROW].map((row, rowIndex) => (
+            <div className="virtual-keyboard-row" key={rowIndex}>
+              {row.map((key, keyIndex) => {
+                const control = 'control' in key ? key.control : undefined;
+                const label = 'control' in key ? modifierLabel(key.control, key.label)
+                  : /^[a-z]$/.test(key.chr) ? key.shifted : shiftActive ? key.shifted : key.chr;
+                const alternate = 'chr' in key && !/^[a-z]$/.test(key.chr)
+                  ? (shiftActive ? key.chr : key.shifted) : undefined;
+                const modifierActive = control && isModifier(control) ? latched.includes(control) : undefined;
+                const feedbackId = 'chr' in key ? `letter-${key.chr}` : `virtual-${control}-${rowIndex}-${keyIndex}`;
+                return <button type="button" className={`soft-key-btn${modifierActive ? ' active' : ''}`}
+                  key={feedbackId}
+                  style={{ '--virtual-key-width': key.width ?? 1 } as React.CSSProperties}
+                  data-key={control}
+                  aria-label={'control' in key ? key.aria ?? label : label}
+                  aria-pressed={modifierActive}
+                  data-key-feedback={feedbackId}
+                  data-key-pressed={pressedKey === feedbackId || undefined}
+                  onClick={() => tapVirtualKey(key)}>
+                  {alternate !== undefined && <span className="virtual-key-alternate" aria-hidden="true">{alternate}</span>}
+                  <span>{label}</span>
+                </button>;
+              })}
+            </div>
+          ))}
         </div>
       )}
       {mode === 'system' && <input

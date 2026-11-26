@@ -247,6 +247,12 @@ try {
   }
   assert.equal(await evaluate(virtualKeyboard + '.getBoundingClientRect().height'), 260);
 
+  assert.deepEqual(await evaluate(`Array.from(${virtualKeyboard}.children, row => row.children.length)`), [14, 14, 13, 12, 8]);
+  assert.ok(await evaluate(`[...(${virtualKeyboard}).querySelectorAll('button')].every(key => {
+    const { left, right } = key.getBoundingClientRect();
+    return left >= 0 && right <= window.innerWidth;
+  })`));
+
   const keyEvents = "window.sent.filter(event => event.type === 'key')";
   const firstVirtualEvent = await evaluate(keyEvents + '.length');
   const letterA = `${virtualKeyboard}.querySelector('[data-key-feedback="letter-a"]')`;
@@ -264,11 +270,20 @@ try {
   await tapElement(select('soft-mod-ctrl'));
   await tapElement(select('soft-mod-shift'));
   await tapElement(`${virtualKeyboard}.querySelector('[data-key="Enter"]')`);
+  await tapElement(`${virtualKeyboard}.querySelector('[data-key-feedback="letter-["]')`);
+  await tapElement(`${virtualKeyboard}.querySelector('[data-key="Shift"]')`);
+  const numberOne = `${virtualKeyboard}.querySelector('[data-key-feedback="letter-1"]')`;
+  assert.equal(await evaluate(numberOne + '.getAttribute("aria-label")'), '!');
+  await tapElement(numberOne);
+  await tapElement(`${virtualKeyboard}.querySelector('[data-key="CapsLock"]')`);
   const virtualEvents = (await evaluate(keyEvents)).slice(firstVirtualEvent);
   assert.deepEqual(virtualEvents.map(event => [event.action, event.control ?? event.chr]), [
     ['down', 'a'], ['up', 'a'],
     ['down', 'Control'], ['down', 'Shift'], ['down', 'Enter'],
     ['up', 'Enter'], ['up', 'Shift'], ['up', 'Control'],
+    ['down', '['], ['up', '['],
+    ['down', '!'], ['up', '!'],
+    ['down', 'CapsLock'], ['up', 'CapsLock'],
   ]);
   assert.equal(await evaluate(select('soft-input') + ' === null'), true);
 
@@ -284,7 +299,7 @@ try {
   await tapElement(select('soft-hide'));
   await evaluate(`window.setTestViewportHeight(${fullHeight})`);
   await until(select('mobile-dock-expand'));
-  console.log('Keyboard switching: native focus, virtual key events and stable height during viewport changes verified.');
+  console.log('Keyboard: QWERTY rows, shifted punctuation, native focus and stable height verified.');
 
   await cdp('Emulation.setTouchEmulationEnabled', { enabled: false });
   await cdp('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
