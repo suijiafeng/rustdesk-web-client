@@ -227,7 +227,10 @@ test('unsafe-eval CSP failures keep an explicit safe diagnosis and the offer pha
   assert.equal(f.pc.closeCalls, 1);
 });
 
-for (const reason of ['WebRTC signaling timed out', 'That target address is not allowed.', 'key mismatch: rendezvous server key signature is invalid']) {
+for (const reason of [
+  'WebRTC signaling timed out', 'That target address is not allowed.', 'key mismatch: rendezvous server key signature is invalid',
+  'ID does not exist', 'remote desktop is offline', 'key mismatch', 'key overuse', 'punch hole failed',
+]) {
   test(`signaling retains the fixed reason: ${reason}`, async t => {
     const f = fixture(t);
     await f.openSignal();

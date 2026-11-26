@@ -6,6 +6,7 @@ import {
   ImageQualityValues,
   KeyboardModeValues,
   PreferCodecValues,
+  PunchFailureValues,
 } from './protos.ts';
 
 export const MOUSE_TYPE_MOVE = 0;
@@ -395,6 +396,19 @@ export function toHostMessage(
   }
 }
 
+export function punchHoleFailureMessage(response: { failure?: number; other_failure?: string }): string {
+  const other = String(response.other_failure ?? '').trim();
+  if (other) return other;
+  // Proto3 omits the zero-valued ID_NOT_EXIST enum from the wire.
+  switch (response.failure ?? PunchFailureValues.ID_NOT_EXIST) {
+    case PunchFailureValues.ID_NOT_EXIST: return 'ID does not exist';
+    case PunchFailureValues.OFFLINE: return 'remote desktop is offline';
+    case PunchFailureValues.LICENSE_MISMATCH: return 'key mismatch';
+    case PunchFailureValues.LICENSE_OVERUSE: return 'key overuse';
+    default: return 'punch hole failed';
+  }
+}
+
 /**
  * Converts low-level network/auth errors into clear plain-language guidance matching spec §4.12.
  */
@@ -422,8 +436,11 @@ export function humanizeError(err: unknown): string {
     }
     return 'DNS lookup failed. Check the server domain spelling and network DNS settings.';
   }
-  if (lower.includes('offline') || lower.includes('id does not exist')) {
-    return 'The remote desktop is offline, or the ID does not match this host.';
+  if (lower.includes('id does not exist')) {
+    return 'ID does not exist. Check the device ID and that both devices use the same ID server.';
+  }
+  if (lower.includes('offline')) {
+    return 'The remote desktop is offline. Check that it is powered on, connected to the network, and running RustDesk.';
   }
   if (
     lower.includes('connection refused') ||

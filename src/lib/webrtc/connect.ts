@@ -19,6 +19,7 @@ const SAFE_FAILURE_REASONS = new Set([
   'WebRTC data channel failed', 'WebRTC channel is closed', 'WebRTC send timed out',
   'ID server closed WebRTC signaling', 'This peer or ID server did not offer WebRTC',
   'Incompatible ID server', 'Invalid ID server or peer ID',
+  'ID does not exist', 'remote desktop is offline', 'key mismatch', 'key overuse', 'punch hole failed',
   'Invalid signaling message', 'Send a WebRTC offer first', 'Unexpected ICE candidate',
   'That target address is not allowed.', 'That target port is not allowed.',
   'host closed the connection', 'timed out waiting for host response',

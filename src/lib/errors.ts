@@ -139,12 +139,14 @@ export function formatConnectionError(locale: Locale, rawMessage: string): Forma
       message: t(locale, 'errMsgTimeout'),
     };
   }
-  if (
-    lower.includes('offline') ||
-    lower.includes('id does not exist') ||
-    lower.includes('peer not found') ||
-    lower.includes('not match this host')
-  ) {
+  if (lower.includes('id does not exist') || lower.includes('peer not found')) {
+    return {
+      kind: 'network',
+      title: t(locale, 'errTitleIdNotFound'),
+      message: t(locale, 'errMsgIdNotFound'),
+    };
+  }
+  if (lower.includes('offline') || lower.includes('not match this host')) {
     return {
       kind: 'network',
       title: t(locale, 'errTitleOffline'),

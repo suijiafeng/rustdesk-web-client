@@ -2,6 +2,7 @@ import type { WebSocket } from 'ws';
 import type { GatewayAdmission } from './admission.ts';
 import { checkPort, RENDEZVOUS_PORT, tokenMatches } from './auth.ts';
 import { EncryptedFramedStream } from './bytesCodec.ts';
+import { punchHoleFailureMessage } from './control.ts';
 import { secureRendezvous } from './handshake.ts';
 import { decodeRendezvous, encodeRendezvous } from './protos.ts';
 import { decodeEndpoint, MAX_CANDIDATES, sdpFingerprint, validateCandidate } from '../shared/webrtc.ts';
@@ -82,7 +83,15 @@ export function serveWebRtcSignal(ws: WebSocket, token: string, admission?: Gate
           }
           const answer = incoming.punch_hole_response ?? incoming.relay_response;
           if (answer) {
-            if (!answer.webrtc_sdp_answer) throw new Error('This peer or ID server did not offer WebRTC');
+            const refusal = String(answer.other_failure ?? '').trim() || String(answer.refuse_reason ?? '').trim();
+            if (refusal) throw new Error(refusal);
+            if (!answer.webrtc_sdp_answer) {
+              if (incoming.punch_hole_response && (answer.failure !== undefined ||
+                  (!answer.socket_addr?.length && !answer.socket_addr_v6?.length))) {
+                throw new Error(punchHoleFailureMessage(answer));
+              }
+              throw new Error('This peer or ID server did not offer WebRTC');
+            }
             decodeEndpoint(answer.webrtc_sdp_answer, 'answer');
             send({ type: 'answer', answer: answer.webrtc_sdp_answer,
               signedPk: Buffer.from(answer.pk ?? []).toString('base64') });

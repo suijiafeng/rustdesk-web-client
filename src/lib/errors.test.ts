@@ -31,13 +31,31 @@ test('classifies gateway access token error into auth error', () => {
   assert.equal(res.title, '网关令牌无效');
 });
 
-test('classifies offline and missing peer ID into network error', () => {
+test('classifies offline errors with device availability guidance', () => {
   const res = formatConnectionError(
     'zh',
     'The remote desktop is offline, or the ID does not match this host.',
   );
   assert.equal(res.kind, 'network');
   assert.equal(res.title, '设备不在线');
+  assert.match(res.message, /开机、联网/);
+  assert.doesNotMatch(res.message, /ID 不存在/);
+});
+
+test('distinguishes missing IDs from offline devices in both languages', () => {
+  for (const raw of ['ID does not exist', 'peer not found']) {
+    const zh = formatConnectionError('zh', raw);
+    assert.equal(zh.kind, 'network');
+    assert.equal(zh.title, '设备 ID 不存在');
+    assert.match(zh.message, /相同的 ID 服务器/);
+    const en = formatConnectionError('en', raw);
+    assert.equal(en.title, 'Device ID Not Found');
+    assert.match(en.message, /same ID server/);
+  }
+  const offline = formatConnectionError('en', 'remote desktop is offline');
+  assert.equal(offline.title, 'Device Offline');
+  assert.match(offline.message, /powered on/);
+  assert.doesNotMatch(offline.message, /does not exist/);
 });
 
 test('classifies server key / signature mismatch into network error', () => {

@@ -13,6 +13,7 @@ import {
   type CodecCaps,
   buildLoginOptions,
   buildRefreshVideoMessage,
+  punchHoleFailureMessage,
 } from './control.ts';
 import {
   type HostHash,
@@ -23,7 +24,6 @@ import {
 import {
   ConnTypeValues,
   NatTypeValues,
-  PunchFailureValues,
   decodeAddrMangle,
   decodeMessage,
   decodeRendezvous,
@@ -402,20 +402,7 @@ export async function connectViaId(
         const relayHint = String(ph.relay_server ?? '').trim();
 
         if (!addrBytes || addrBytes.length === 0) {
-          const other = String(ph.other_failure ?? '').trim();
-          if (other) throw new Error(other);
-          switch (ph.failure) {
-            case PunchFailureValues.ID_NOT_EXIST:
-              throw new Error('ID does not exist');
-            case PunchFailureValues.OFFLINE:
-              throw new Error('remote desktop is offline');
-            case PunchFailureValues.LICENSE_MISMATCH:
-              throw new Error('key mismatch');
-            case PunchFailureValues.LICENSE_OVERUSE:
-              throw new Error('key overuse');
-            default:
-              throw new Error('punch hole failed');
-          }
+          throw new Error(punchHoleFailureMessage(ph));
         }
 
         const signedPk = ph.pk ? new Uint8Array(ph.pk) : undefined;
