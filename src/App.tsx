@@ -10,7 +10,7 @@ import { useGatewaySession } from './hooks/useGatewaySession';
 import type { RemoteSocket } from './lib/remoteSocket';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { MousePointer2 } from 'lucide-react';
+import { RemoteStage } from './components/RemoteStage';
 import { RemoteAudio } from './lib/remoteAudio';
 import { DiagnosticOverlay } from './components/DiagnosticOverlay';
 import type { MobilePanel } from './components/MobileSessionPanel';
@@ -693,96 +693,18 @@ export default function App() {
   const stageViewport = keyboardLayout.viewport ?? visibleViewport;
 
   return (
-    <section
-      ref={stageRef}
-      className="stage"
-      style={phase === 'live' && stageViewport ? {
-        position: 'fixed', inset: 'auto', left: stageViewport.left, top: stageViewport.top,
-        width: stageViewport.width, height: stageViewport.height,
-      } : undefined}
-      data-testid="stage"
-      data-keyboard-avoiding={keyboardLayout.viewport ? 'true' : undefined}
-      data-remote-active={remoteInput ? 'true' : 'false'}
-      data-scroll-style={displayPrefs.scrollStyle}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUpOrCancel}
-      onPointerCancel={handlePointerUpOrCancel}
-      onLostPointerCapture={handleLostPointerCapture}
-      onContextMenu={(e) => {
-        if (remoteInput || e.target === stageRef.current || e.target === canvasRef.current) {
-          e.preventDefault();
-        }
-      }}
+    <RemoteStage
+      stageRef={stageRef}
+      live={phase === 'live'}
+      stageViewport={stageViewport}
+      keyboardAvoiding={Boolean(keyboardLayout.viewport)}
+      remoteInput={remoteInput}
+      scrollStyle={displayPrefs.scrollStyle}
+      pointer={{ handlePointerDown, handlePointerMove, handlePointerUpOrCancel, handleLostPointerCapture }}
+      canvas={{ canvasRef, remoteW, remoteH, view }}
+      cursor={{ cursorElRef, cursorCanvasRef, cursorShape, showRemoteCursor, enlargeCursor: displayPrefs.enlargeCursor }}
+      capture={{ captureRef, captureComposingRef, lastCompositionEndAtRef, displayPrefsRef, sendText }}
     >
-      <canvas
-        ref={canvasRef}
-        data-testid="canvas"
-        width={remoteW}
-        height={remoteH}
-        style={{
-          left: `${view.panX}px`,
-          top: `${view.panY}px`,
-          width: `${remoteW * view.scale}px`,
-          height: `${remoteH * view.scale}px`,
-        }}
-      />
-
-      <div
-        ref={cursorElRef}
-        className="remote-cursor"
-        style={displayPrefs.enlargeCursor ? { transform: 'scale(2)', transformOrigin: '0 0' } : undefined}
-        data-testid="remote-cursor"
-        hidden={!showRemoteCursor}
-        aria-hidden="true"
-      >
-        {cursorShape ? (
-          <canvas
-            ref={cursorCanvasRef}
-            width={cursorShape.pixels.width}
-            height={cursorShape.pixels.height}
-            style={{ left: -cursorShape.hotX, top: -cursorShape.hotY }}
-          />
-        ) : (
-          <MousePointer2 size={18} fill="#fff" stroke="#171717" />
-        )}
-      </div>
-
-      <input
-        ref={captureRef}
-        type="text"
-        className="capture"
-        data-testid="capture"
-        aria-hidden="true"
-        tabIndex={-1}
-        autoComplete="off"
-        autoCorrect="off"
-        autoCapitalize="off"
-        spellCheck={false}
-        onCompositionStart={() => {
-          captureComposingRef.current = true;
-        }}
-        onCompositionEnd={(e) => {
-          captureComposingRef.current = false;
-          lastCompositionEndAtRef.current = performance.now();
-          const committed = e.data || e.currentTarget.value;
-          e.currentTarget.value = '';
-          if (committed && !displayPrefsRef.current.viewOnly) {
-            sendText(committed);
-          }
-        }}
-        onInput={(e) => {
-          if (captureComposingRef.current) return;
-          const val = e.currentTarget.value;
-          if (val) {
-            e.currentTarget.value = '';
-            if (!displayPrefsRef.current.viewOnly) {
-              sendText(val);
-            }
-          }
-        }}
-      />
-
       {pageZoomed && (
         <div
           className="page-zoom-banner"
@@ -1047,6 +969,6 @@ export default function App() {
           onHide={hideSoftKeyboard}
         />
       )}
-    </section>
+    </RemoteStage>
   );
 }
