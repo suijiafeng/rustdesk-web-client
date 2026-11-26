@@ -1,6 +1,7 @@
 import { SOFT_KEYBOARD_BAR_HEIGHT } from './lib/keyboardViewport';
 import { useKeyboardViewport, type SoftKeyboardMode } from './hooks/useKeyboardViewport';
 import { useClipboardSync } from './hooks/useClipboardSync';
+import { usePreferences } from './hooks/usePreferences';
 import { RemoteSocket } from './lib/remoteSocket';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
@@ -12,7 +13,6 @@ import { MobileDock } from './components/MobileDock';
 import {
   RustDeskShell,
   type ConnectRequest,
-  type ConnectionMode,
   type ConnectionPhase,
 } from './components/RustDeskShell';
 import { SessionHandle } from './components/SessionHandle';
@@ -44,7 +44,6 @@ import {
   applyMouseButtonSwap,
   applyWheelDirection,
   filterCodecSupport,
-  loadDisplayPrefs,
   persistDisplayPrefs,
   resolveQualityLevel,
   resolveTargetFps,
@@ -77,15 +76,7 @@ import {
   type TouchGestureEffect,
   type TouchGestureState,
 } from './lib/gestures';
-import {
-  LOCALE_STORAGE_KEY,
-  resolveEffectiveLocale,
-  resolveLocalePreference,
-  t,
-  type I18nKey,
-  type Locale,
-  type LocalePreference,
-} from './lib/i18n';
+import { t, type I18nKey } from './lib/i18n';
 import {
   isBrowserNavOrAuxButton,
   shouldEnableRemotePointerInput,
@@ -129,12 +120,6 @@ import {
   recordRxFrame,
   type FrameStatsState,
 } from './lib/stats';
-import {
-  loadSavedTheme,
-  persistTheme,
-  resolveEffectiveTheme,
-  type ThemePreference,
-} from './lib/theme';
 
 const EMPTY_STATS: SessionStats = {
   codec: '—',
@@ -159,57 +144,39 @@ function detectCoarsePointer(): boolean {
   );
 }
 
-const PREFS_STORAGE_KEY = 'rd_web_prefs';
-
-interface SavedConnectionPrefs {
-  mode?: ConnectionMode;
-  directIpEnabled?: boolean;
-  host?: string;
-  port?: string;
-  peerId?: string;
-  idServer?: string;
-  relayServer?: string;
-  serverKey?: string;
-  forceRelay?: boolean;
-}
-
-function loadSavedPrefs(): SavedConnectionPrefs {
-  try {
-    const raw = window.localStorage.getItem(PREFS_STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as SavedConnectionPrefs;
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
 export default function App() {
   const initialWebCodecs = webCodecsStatus();
   const isCoarseDevice = detectCoarsePointer();
-  const initialPrefs = useRef<SavedConnectionPrefs | null>(null);
-  if (initialPrefs.current === null) {
-    initialPrefs.current = loadSavedPrefs();
-  }
-  const prefs = initialPrefs.current;
-
-  // Only non-secret connection preferences are persisted to browser storage.
-  const [directIpEnabled, setDirectIpEnabled] = useState<boolean>(Boolean(prefs.directIpEnabled));
-  const [mode, setMode] = useState<ConnectionMode>(
-    prefs.directIpEnabled && prefs.mode === 'direct' ? 'direct' : 'id',
-  );
-  const [host, setHost] = useState(typeof prefs.host === 'string' ? prefs.host : '');
-  const [port, setPort] = useState(typeof prefs.port === 'string' ? prefs.port : '21118');
+  const {
+    directIpEnabled,
+    setDirectIpEnabled,
+    mode,
+    setMode,
+    host,
+    setHost,
+    port,
+    setPort,
+    peerId,
+    setPeerId,
+    idServer,
+    setIdServer,
+    relayServer,
+    setRelayServer,
+    serverKey,
+    setServerKey,
+    forceRelay,
+    setForceRelay,
+    handleToggleDirectIp,
+    localePreference,
+    locale,
+    changeLocale,
+    theme,
+    changeTheme,
+    displayPrefs,
+    setDisplayPrefs,
+    displayPrefsRef,
+  } = usePreferences(isCoarseDevice);
   const [password, setPassword] = useState('');
-  const [peerId, setPeerId] = useState(typeof prefs.peerId === 'string' ? prefs.peerId : '');
-  const [idServer, setIdServer] = useState(typeof prefs.idServer === 'string' ? prefs.idServer : '');
-  const [relayServer, setRelayServer] = useState(
-    typeof prefs.relayServer === 'string' ? prefs.relayServer : '',
-  );
-  const [serverKey, setServerKey] = useState(
-    typeof prefs.serverKey === 'string' ? prefs.serverKey : '',
-  );
-  const [forceRelay, setForceRelay] = useState(Boolean(prefs.forceRelay));
   const [savedGatewayToken, setSavedGatewayToken] = useState('');
   const [temporaryGatewayToken, setTemporaryGatewayToken] = useState<string>();
   const gatewayToken = temporaryGatewayToken ?? savedGatewayToken;
@@ -249,35 +216,6 @@ export default function App() {
   const [authRequired, setAuthRequired] = useState(false);
   const [webRtcEnabled, setWebRtcEnabled] = useState(false);
   const [devices, setDevices] = useState<SavedDevice[]>(() => loadSavedDevices());
-
-  useEffect(() => {
-    try {
-      const next: SavedConnectionPrefs = {
-        mode: directIpEnabled ? mode : 'id',
-        directIpEnabled,
-        host,
-        port,
-        peerId,
-        idServer,
-        relayServer,
-        serverKey,
-        forceRelay,
-      };
-      window.localStorage.setItem(PREFS_STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      // Ignore storage quota or private-mode errors
-    }
-  }, [mode, directIpEnabled, host, port, peerId, idServer, relayServer, serverKey, forceRelay]);
-
-  const handleToggleDirectIp = useCallback(() => {
-    setDirectIpEnabled((prev) => {
-      const next = !prev;
-      if (!next) {
-        setMode('id');
-      }
-      return next;
-    });
-  }, []);
 
   useEffect(() => {
     persistSavedDevices(devices);
@@ -378,54 +316,6 @@ export default function App() {
     handleClearSavedPassword(key);
   }, [handleClearSavedPassword]);
 
-  // Bilingual UI locale preference ('default' follows browser language, or explicit 'zh'/'en')
-  const [localePreference, setLocalePreference] = useState<LocalePreference>(() => {
-    try {
-      return resolveLocalePreference(window.localStorage.getItem(LOCALE_STORAGE_KEY));
-    } catch {
-      return 'default';
-    }
-  });
-
-  const locale: Locale = resolveEffectiveLocale(
-    localePreference,
-    typeof navigator !== 'undefined' ? navigator.language : null,
-  );
-
-  const changeLocale = useCallback((next: LocalePreference) => {
-    setLocalePreference(next);
-    try {
-      window.localStorage.setItem(LOCALE_STORAGE_KEY, next);
-    } catch {
-      // Ignore storage quota or private-mode errors
-    }
-  }, []);
-
-  useEffect(() => {
-    document.documentElement.lang = locale === 'zh' ? 'zh-CN' : 'en';
-  }, [locale]);
-
-  // Theme preference (light / dark / system) synced to <html data-theme="...">
-  const [theme, setTheme] = useState<ThemePreference>(() => loadSavedTheme());
-
-  const changeTheme = useCallback((next: ThemePreference) => {
-    setTheme(next);
-    persistTheme(next);
-  }, []);
-
-  useEffect(() => {
-    const mq = window.matchMedia?.('(prefers-color-scheme: dark)');
-    const apply = () => {
-      const effective = resolveEffectiveTheme(theme, Boolean(mq?.matches));
-      document.documentElement.dataset.theme = effective;
-    };
-    apply();
-    if (theme === 'system' && mq) {
-      mq.addEventListener?.('change', apply);
-      return () => mq.removeEventListener?.('change', apply);
-    }
-  }, [theme]);
-
   const [phase, setPhase] = useState<ConnectionPhase>('idle');
   const [detailKey, setDetailKey] = useState<I18nKey | null>('detailIdle');
   const [rawDetail, setRawDetail] = useState('');
@@ -434,23 +324,6 @@ export default function App() {
     setDetailKey(key);
     setRawDetail(customText);
   }, []);
-  // Display preferences (persisted locally & wired end-to-end to view, quality, codec, and input)
-  const [displayPrefs, setDisplayPrefs] = useState<DisplayPrefs>(() => {
-    const saved = loadDisplayPrefs();
-    if (isCoarseDevice || window.innerWidth <= 768) {
-      return {
-        ...saved,
-        autoKeyboard: true,
-        showRemoteCursor: true,
-        enlargeCursor: false,
-        followRemoteCursor: false,
-      };
-    }
-    return saved;
-  });
-  const displayPrefsRef = useRef(displayPrefs);
-  displayPrefsRef.current = displayPrefs;
-
   const [resolutionOptions, setResolutionOptions] = useState<Extract<ServerMessage, { type: 'resolutions' }> | null>(null);
   const followCursorRef = useRef<(x: number, y: number) => void>(() => {});
   const [peer, setPeer] = useState<PeerMessage | null>(null);
