@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronDown, Keyboard, ListPlus } from 'lucide-react';
+import { ArrowLeftRight, ChevronDown, Keyboard, ListPlus } from 'lucide-react';
 import type { SoftKeyboardMode } from '../hooks/useKeyboardViewport';
 import { SOFT_KEYBOARD_BAR_HEIGHT } from '../lib/keyboardViewport';
 import { SoftShortcutSettings, type SoftShortcut } from './SoftShortcutSettings';
@@ -445,12 +445,11 @@ export function SoftKeyboardBar({
       </div>
 
       <div className="soft-operation-row" data-testid="soft-operation-row">
-        <div className="soft-keyboard-tabs" role="group" aria-label={t(locale, 'softKeyboardType')}>
-          <button type="button" data-testid="soft-keyboard-virtual" aria-pressed={mode === 'virtual'}
-            onClick={() => changeKeyboardMode('virtual')}>{t(locale, 'softComputerKeyboard')}</button>
-          <button type="button" data-testid="soft-keyboard-system" aria-pressed={mode === 'system'}
-            onClick={() => changeKeyboardMode('system')}>{t(locale, 'softPhoneKeyboard')}</button>
-        </div>
+        <button type="button" className="soft-keyboard-switch" data-testid="soft-keyboard-switch"
+          onClick={() => changeKeyboardMode(mode === 'system' ? 'virtual' : 'system')}>
+          <ArrowLeftRight size={14} aria-hidden="true" />
+          <span>{t(locale, mode === 'system' ? 'softSwitchToComputerKeyboard' : 'softSwitchToPhoneKeyboard')}</span>
+        </button>
         <button type="button" className="softbar-icon soft-keyboard-hide" data-testid="soft-hide"
           aria-label={t(locale, 'softHide')} onClick={onHide}>
           <Keyboard size={19} aria-hidden="true" />

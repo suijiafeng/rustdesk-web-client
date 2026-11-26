@@ -557,29 +557,34 @@ button:focus-visible {
   min-width: 46px;
 }
 
-.soft-keyboard-tabs {
+.soft-keyboard-switch {
   display: inline-flex;
-  gap: 2px;
-  padding: 2px;
-  border-radius: 8px;
-  background: #191d23;
-}
-
-.soft-keyboard-tabs button {
-  padding: 3px 10px;
-  min-height: 29px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: #c2cad3;
-  font: 600 12px/1.1 system-ui, sans-serif;
-  white-space: nowrap;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  max-width: calc(100% - 51px);
+  padding: 3px 9px;
+  border: 1px solid #424954;
+  border-radius: 7px;
+  background: #303640;
+  color: #f3f5f8;
+  font: 600 12px/1.15 system-ui, sans-serif;
   cursor: pointer;
 }
 
-.soft-keyboard-tabs [aria-pressed="true"] {
-  background: #383f49;
-  color: #fff;
+.soft-keyboard-switch svg {
+  flex: none;
+  color: #c1cbd8;
+}
+
+.soft-keyboard-switch span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.soft-keyboard-switch:is(:hover, :active) {
+  background: #3b4552;
 }
 
 .soft-shortcut-settings {

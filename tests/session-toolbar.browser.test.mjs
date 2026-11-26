@@ -216,8 +216,8 @@ try {
   assert.equal(reversedScroll?.y, -originalScroll.y);
 
   const softbar = select('softbar');
-  const computerKeyboardTab = select('soft-keyboard-virtual');
-  const phoneKeyboardTab = select('soft-keyboard-system');
+  const keyboardSwitch = select('soft-keyboard-switch');
+  const switchLabel = () => evaluate(keyboardSwitch + '.textContent.trim()');
   const virtualKeyboard = select('virtual-keyboard');
   const toolbarTop = `${softbar}.getBoundingClientRect().top`;
   await evaluate(`(() => {
@@ -247,14 +247,13 @@ try {
   const operationRow = select('soft-operation-row');
   assert.ok(await evaluate(`${functionRow}.getBoundingClientRect().bottom <= ${operationRow}.getBoundingClientRect().top`));
   assert.ok(await evaluate(`Math.abs(${operationRow}.getBoundingClientRect().bottom - window.visualViewport.height) < 1`));
-  assert.equal(await evaluate(phoneKeyboardTab + '.getAttribute("aria-pressed")'), 'true');
-  assert.ok(await evaluate(`${operationRow}.firstElementChild.contains(${computerKeyboardTab}) &&
+  assert.match(await switchLabel(), /切到电脑键盘|Switch to computer keyboard/);
+  assert.ok(await evaluate(`${operationRow}.firstElementChild === ${keyboardSwitch} &&
     ${operationRow}.lastElementChild === ${select('soft-hide')}`));
 
-
-  await tapElement(computerKeyboardTab);
+  await tapElement(keyboardSwitch);
   assert.equal(await evaluate(softbar + '.dataset.keyboardMode'), 'virtual');
-  assert.equal(await evaluate(computerKeyboardTab + '.getAttribute("aria-pressed")'), 'true');
+  assert.match(await switchLabel(), /切到手机键盘|Switch to phone keyboard/);
   assert.equal(await evaluate(select('soft-input') + ' === null'), true);
   assert.equal(await evaluate(toolbarTop), systemKeyboardTop);
   for (const remaining of [310, 180, 90, 0]) {
@@ -366,8 +365,9 @@ try {
     ['down', 'Control'], ['down', 'a'], ['up', 'a'], ['up', 'Control'],
   ]);
 
-  await tapElement(phoneKeyboardTab);
+  await tapElement(keyboardSwitch);
   assert.equal(await evaluate(softbar + '.dataset.keyboardMode'), 'system');
+  assert.match(await switchLabel(), /切到电脑键盘|Switch to computer keyboard/);
   assert.equal(await evaluate('document.activeElement === ' + select('soft-input')), true);
   assert.equal(await evaluate(toolbarTop), systemKeyboardTop);
   for (const remaining of [90, 260, 0, 310, 140, 260]) {
