@@ -6,6 +6,7 @@ import { useSavedDevices } from './hooks/useSavedDevices';
 import { useViewTransform } from './hooks/useViewTransform';
 import { useRemoteKeyboard } from './hooks/useRemoteKeyboard';
 import { useRemotePointer } from './hooks/useRemotePointer';
+import { createSessionMessageHandler } from './lib/sessionMessages';
 import { RemoteSocket } from './lib/remoteSocket';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
@@ -25,7 +26,6 @@ import { SoftKeyboardBar } from './components/SoftKeyboardBar';
 import { probeCodecs, webCodecsStatus } from './lib/decoder';
 import {
   deviceKeyFor,
-  upsertRecentDevice,
   type SavedDevice,
 } from './lib/devices';
 import {
@@ -41,7 +41,6 @@ import {
   PING_INTERVAL_MS,
   PING_TIMEOUT_MS,
   recordPingSent,
-  recordPongReceived,
   sweepTimeouts,
   type DiagnosticsState,
   type DiagnosticsSummary,
@@ -678,9 +677,6 @@ export default function App() {
       sock.binaryType = 'arraybuffer';
       wsRef.current = sock;
       let receivedTerminalError = false;
-      let sessionDisplays: PeerMessage['displays'] = [];
-      let activeDisplay = 0;
-      let cursorDisplayOrigin = { x: 0, y: 0 };
 
       sock.onopen = () => {
         if (wsRef.current !== sock) return;
@@ -721,6 +717,74 @@ export default function App() {
         }
       };
 
+      const handleSessionMessage = createSessionMessageHandler({
+        locale,
+        peerId,
+        idServer,
+        relayServer,
+        serverKey,
+        forceRelay,
+        host,
+        port,
+        reconnectRequest,
+        phaseRef,
+        sizeRef,
+        displayPrefsRef,
+        cursorElRef,
+        audioRef,
+        diagStateRef,
+        setWebRtcFallbackReason,
+        setRestartState,
+        setGatewayTokenRejected,
+        setTemporaryGatewayToken,
+        setPhase,
+        setConnectDialog,
+        setMenuOpen,
+        setAuthRequired,
+        setPeer,
+        setDisplay,
+        setCursorEmbedded,
+        setStats,
+        setDevices,
+        setPrivacyPending,
+        setPrivacyEnabled,
+        setDecoderError,
+        setMobilePanel,
+        setViewMode,
+        setZoom,
+        setPan,
+        setResolutionOptions,
+        setCursorShape,
+        setRtt,
+        setGatewayVideo,
+        setDiagSummary,
+        setStatusDetail,
+        rememberDevicePassword,
+        handleClearSavedPassword,
+        focusDesktopCapture,
+        placeCursor,
+        showSessionTip,
+        stopAudio,
+        send,
+        clipboard,
+        connection: {
+          activeMode,
+          targetPeerId,
+          targetIdServer,
+          targetRelayServer,
+          targetServerKey,
+          targetForceRelay,
+          targetHost,
+          targetPortStr,
+          targetPassword,
+          shouldRemember,
+          targetGatewayToken,
+          targetDeviceKey,
+          req,
+        },
+        onTerminalError: () => { receivedTerminalError = true; },
+      });
+
       sock.onmessage = (ev) => {
         if (wsRef.current !== sock) return;
         if (ev.data instanceof ArrayBuffer) {
@@ -745,224 +809,7 @@ export default function App() {
           return;
         }
 
-        switch (msg.type) {
-          case 'webrtcFallback':
-            setWebRtcFallbackReason(msg.reason);
-            break;
-          case 'status':
-            if (msg.state === 'live') {
-              reconnectRequest.current = {
-                mode: activeMode, peerId: targetPeerId, idServer: targetIdServer, relayServer: targetRelayServer,
-                serverKey: targetServerKey, forceRelay: targetForceRelay, host: targetHost, port: targetPortStr,
-                password: targetPassword, remember: shouldRemember, gatewayToken: targetGatewayToken,
-              };
-              setRestartState(null);
-              setGatewayTokenRejected(false);
-              if (req?.gatewayToken !== undefined) setTemporaryGatewayToken(targetGatewayToken);
-              phaseRef.current = 'live';
-              setPhase('live');
-              setConnectDialog(false);
-              setMenuOpen(false);
-              setStatusDetail(
-                msg.detail === 'encrypted' ? 'detailEncryptedSession' : 'linkPlain',
-              );
-              if (shouldRemember && targetPassword) {
-                rememberDevicePassword(targetDeviceKey, targetPassword);
-              } else if (!shouldRemember) {
-                handleClearSavedPassword(targetDeviceKey);
-              }
-              focusDesktopCapture();
-            } else if (msg.state === 'connecting') {
-              phaseRef.current = 'connecting';
-              setPhase('connecting');
-              if (msg.detail) {
-                setStatusDetail(null, msg.detail);
-              } else {
-                setStatusDetail('connecting');
-              }
-            } else if (msg.state === 'error') {
-              if (msg.detail && /password|token|two.factor/i.test(msg.detail)) setRestartState(null);
-              receivedTerminalError = true;
-              phaseRef.current = 'error';
-              setPhase('error');
-              setConnectDialog(true);
-              setMenuOpen(false);
-              if (msg.detail && /password/i.test(msg.detail)) {
-                // Clear stale remembered password so the next attempt prompts cleanly
-                handleClearSavedPassword(targetDeviceKey);
-              }
-              if (msg.detail && /token/i.test(msg.detail)) {
-                setAuthRequired(true);
-                setGatewayTokenRejected(true);
-                setStatusDetail('detailTokenError');
-              } else if (msg.detail) {
-                setStatusDetail(null, msg.detail);
-              } else {
-                setStatusDetail('detailHostRejected');
-              }
-            } else if (msg.state === 'closed') {
-              phaseRef.current = 'idle';
-              setPhase('idle');
-              setStatusDetail('detailDisconnected');
-            }
-            break;
-
-          case 'peer': {
-            sessionDisplays = msg.displays;
-            activeDisplay = msg.currentDisplay;
-            setPeer(msg);
-            setDisplay(msg.currentDisplay);
-            const chosen = msg.displays[msg.currentDisplay] ?? msg.displays[0];
-            cursorDisplayOrigin = { x: chosen?.x ?? 0, y: chosen?.y ?? 0 };
-            setCursorEmbedded(Boolean(chosen?.cursorEmbedded));
-            if (chosen && chosen.width > 0 && chosen.height > 0) {
-              sizeRef.current = { width: chosen.width, height: chosen.height };
-              setStats((prev) => ({ ...prev, width: chosen.width, height: chosen.height }));
-              placeCursor(chosen.width / 2, chosen.height / 2);
-            }
-            setDevices((prev) =>
-              upsertRecentDevice(
-                prev,
-                activeMode === 'id'
-                  ? {
-                      mode: 'id',
-                      peerId: peerId.replace(/\s+/g, ''),
-                      idServer: idServer.trim(),
-                      relayServer: relayServer.trim(),
-                      serverKey: serverKey.trim(),
-                      forceRelay,
-                      hostname: msg.hostname || '',
-                      platform: msg.platform || '',
-                    }
-                  : {
-                      mode: 'direct',
-                      host: host.trim(),
-                      port: port.trim() || '21118',
-                      hostname: msg.hostname || '',
-                      platform: msg.platform || '',
-                    },
-                Date.now(),
-              ),
-            );
-            break;
-          }
-
-          case 'permissions':
-            setPeer(previous => previous ? { ...previous, privacyAllowed: msg.privacyAllowed, clipboardAllowed: msg.clipboardAllowed } : previous);
-            if (!msg.privacyAllowed) setPrivacyPending(false);
-            break;
-          case 'privacyResult':
-            showSessionTip(t(locale, msg.failed ? 'privacyFailed' : msg.enabled ? 'privacyOn' : 'privacyOff'), msg.failed);
-            if (typeof msg.enabled === 'boolean') setPrivacyEnabled(msg.enabled);
-            setPrivacyPending(false);
-            break;
-          case 'restartPermission':
-            setPeer(previous => previous ? { ...previous, restartAllowed: msg.allowed } : previous);
-            break;
-          case 'restartResult':
-            if (!msg.sent) {
-              setRestartState(null);
-              setDecoderError(t(locale, 'restartFailed'));
-              setMobilePanel('actions');
-              setMenuOpen(true);
-            }
-            break;
-          case 'audioDenied':
-            stopAudio();
-            showSessionTip(t(locale, 'audioDenied'), true);
-            break;
-          case 'audioFormat':
-            audioRef.current?.configure(msg.sampleRate, msg.channels);
-            break;
-          case 'audioFrame':
-            audioRef.current?.push(msg.packet);
-            break;
-          case 'focusedDisplay':
-            if (displayPrefsRef.current.followWindow && msg.display !== activeDisplay &&
-                sessionDisplays.some(d => d.index === msg.display && d.online !== false)) {
-              send({ type: 'switchDisplay', display: msg.display });
-            }
-            break;
-
-          case 'display':
-            activeDisplay = msg.display;
-            setDisplay(msg.display);
-            cursorDisplayOrigin = { x: msg.x ?? 0, y: msg.y ?? 0 };
-            setCursorEmbedded(Boolean(msg.cursorEmbedded));
-            if (msg.width > 0 && msg.height > 0) {
-              sizeRef.current = { width: msg.width, height: msg.height };
-              setStats((prev) => ({ ...prev, width: msg.width, height: msg.height }));
-              setViewMode('fit');
-              setZoom(1);
-              setPan({ panX: 0, panY: 0 });
-            }
-            break;
-
-          case 'cursor': {
-            const x = msg.x - cursorDisplayOrigin.x;
-            const y = msg.y - cursorDisplayOrigin.y;
-            const { width, height } = sizeRef.current;
-            if (x >= 0 && x < width && y >= 0 && y < height) {
-              placeCursor(x, y);
-            } else if (cursorElRef.current) {
-              cursorElRef.current.style.visibility = 'hidden';
-            }
-            break;
-          }
-
-          case 'resolutions':
-            setResolutionOptions(msg);
-            break;
-
-          case 'cursorShape': {
-            try {
-              const shape = msg.shape;
-              if (!shape) {
-                setCursorShape(null);
-                break;
-              }
-              const { width, height, hotX, hotY, rgba } = shape;
-              const pixels = Uint8ClampedArray.from(atob(rgba), (char) => char.charCodeAt(0));
-              setCursorShape({ pixels: new ImageData(pixels, width, height), hotX, hotY });
-            } catch {
-              setCursorShape(null);
-            }
-            break;
-          }
-
-          case 'clipboard':
-            if (!displayPrefsRef.current.disableClipboard) {
-              clipboard.receive(msg.text);
-            }
-            break;
-
-          case 'rtt':
-            setRtt(msg.ms);
-            break;
-
-          case 'pong': {
-            setGatewayVideo(msg.gatewayVideo);
-            const now = performance.now();
-            diagStateRef.current = recordPongReceived(diagStateRef.current, msg.seq, now);
-            setDiagSummary(computeDiagnosticsSummary(diagStateRef.current, now, PING_TIMEOUT_MS));
-            break;
-          }
-
-          case 'error':
-            setDecoderError(msg.message);
-            setStatusDetail(null, msg.message);
-            if (phaseRef.current === 'connecting') {
-              if (/password|token|two.factor/i.test(msg.message)) setRestartState(null);
-              receivedTerminalError = true;
-              phaseRef.current = 'error';
-              setPhase('error');
-              setConnectDialog(true);
-            }
-            break;
-
-          default:
-            break;
-        }
+        handleSessionMessage(msg);
       };
 
       sock.onerror = () => {
