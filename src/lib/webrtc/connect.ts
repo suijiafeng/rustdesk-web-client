@@ -6,6 +6,33 @@ import type { NativeConnection } from './session';
 
 const ROUTE_STATS_TIMEOUT_MS = 300;
 const DIRECT_CANDIDATE_TYPES = new Set(['host', 'srflx', 'prflx']);
+// Only fixed protocol errors are safe to include; browser SDP errors and server text may contain addresses or credentials.
+const SAFE_FAILURE_REASONS = new Set([
+  'WebRTC connection timed out', 'WebRTC connection failed',
+  'WebRTC signaling unavailable', 'WebRTC signaling closed', 'WebRTC signaling failed', 'WebRTC signaling timed out',
+  'WebRTC peer response timed out', 'WebRTC peer closed during identity verification',
+  'WebRTC peer closed before login', 'WebRTC peer did not provide its signed identity',
+  'WebRTC peer signature verification failed', 'WebRTC peer identity mismatch',
+  'WebRTC certificate does not match the signed peer identity',
+  'Invalid identity server key', 'Invalid WebRTC certificate fingerprint',
+  'Invalid WebRTC endpoint', 'Invalid WebRTC session description', 'Invalid ICE candidate',
+  'WebRTC data channel failed', 'WebRTC channel is closed', 'WebRTC send timed out',
+  'ID server closed WebRTC signaling', 'This peer or ID server did not offer WebRTC',
+  'Incompatible ID server', 'Invalid ID server or peer ID',
+  'Invalid signaling message', 'Send a WebRTC offer first', 'Unexpected ICE candidate',
+  'That target address is not allowed.', 'That target port is not allowed.',
+  'host closed the connection', 'timed out waiting for host response',
+  'server public key must be 32 bytes of standard base64',
+  'rendezvous server closed connection during key exchange',
+  'key mismatch: rendezvous server key signature is invalid',
+  'missing signed_params in rendezvous KeyExchange', 'invalid signed_params signature in rendezvous KeyExchange',
+  'invalid signed_params domain prefix', 'signed_params mismatch in rendezvous KeyExchange',
+  'The gateway access token is missing or incorrect.', 'Too many failed attempts. Try again shortly.',
+]);
+const SAFE_ERROR_NAMES = new Set([
+  'Error', 'EvalError', 'TypeError', 'SyntaxError', 'RangeError', 'OperationError',
+  'InvalidStateError', 'InvalidAccessError', 'NotSupportedError', 'NotAllowedError', 'NetworkError', 'SecurityError',
+]);
 
 export async function readWebRtcRoute(
   pc: Pick<RTCPeerConnection, 'getStats'>,
@@ -65,8 +92,39 @@ export function connectWebRtc(url: string, request: ConnectRequest, abort: Abort
     const localCandidates: string[] = [];
     const remoteCandidates: string[] = [];
     let localCount = 0;
+    let localSent = 0;
     let remoteCount = 0;
+    let remoteApplied = 0;
+    let phase = 'opening signaling';
+    let signalServerError = false;
+    let signalTransportError = false;
+    let signalCloseCode: number | undefined;
     let signalChain = Promise.resolve();
+    const diagnosticError = (error: unknown) => {
+      // Keep cancellation and password-rejection semantics, including the no-second-login rule.
+      if ((error instanceof Error || error instanceof DOMException) &&
+          (error.name === 'AbortError' || error.name === 'WebRtcLoginError')) return error;
+      const iceConnected = pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed' || pc.connectionState === 'connected';
+      const stage = settled ? 'session' : loggingIn ? (verified ? 'host login' : 'peer identity')
+        : answered ? (iceConnected ? 'data channel' : 'ICE') : phase;
+      const source = error instanceof Error || error instanceof DOMException ? error : null;
+      const errorClass = source && SAFE_ERROR_NAMES.has(source.name) ? source.name : 'Error';
+      const unsafeEval = source?.name === 'EvalError' && /unsafe-eval/i.test(source.message) && /Content Security Policy|\bCSP\b/i.test(source.message);
+      const reason = unsafeEval ? 'WebRTC blocked by Content Security Policy (unsafe-eval)'
+        : source && SAFE_FAILURE_REASONS.has(source.message) ? source.message : `WebRTC ${stage} failed`;
+      const context = [
+        `stage=${stage}`, `local candidates gathered/sent=${localCount}/${localSent}`,
+        `remote candidates received/applied=${remoteCount}/${remoteApplied}`,
+        `ICE=${pc.iceConnectionState}`, `gathering=${pc.iceGatheringState}`,
+        `PC=${pc.connectionState}`, `data channel=${channel.readyState}`,
+        `signaling=${['connecting', 'open', 'closing', 'closed'][signal.readyState] ?? 'unknown'}`,
+        `error class=${errorClass}`,
+      ];
+      if (signalServerError) context.push('signaling server error received');
+      if (signalTransportError) context.push('signaling transport error');
+      if (signalCloseCode !== undefined) context.push(`signaling close code=${signalCloseCode}`);
+      return new Error(`${reason} [${context.join('; ')}]`);
+    };
     const timer = setTimeout(() => fail(new Error('WebRTC connection timed out')), 12_000);
     const dispose = () => {
       if (disposed) return;
@@ -78,15 +136,20 @@ export function connectWebRtc(url: string, request: ConnectRequest, abort: Abort
       pc.close();
     };
     const fail = (error: unknown) => {
-      if (!settled) { settled = true; reject(error); }
-      else stream.fail(error);
+      if (disposed) return;
+      const diagnostic = diagnosticError(error);
+      if (!settled) { settled = true; reject(diagnostic); }
+      else stream.fail(diagnostic);
       dispose();
     };
     const cancel = () => fail(new DOMException('Connection cancelled', 'AbortError'));
     abort.addEventListener('abort', cancel, { once: true });
     if (abort.aborted) { cancel(); return; }
     const sendCandidate = (candidate: string) => {
-      if (signal.readyState === WebSocket.OPEN) signal.send(JSON.stringify({ type: 'candidate', candidate }));
+      if (signal.readyState === WebSocket.OPEN) {
+        signal.send(JSON.stringify({ type: 'candidate', candidate }));
+        localSent++;
+      }
     };
     const beginLogin = () => {
       if (!answered || !open || loggingIn || disposed) return;
@@ -111,11 +174,14 @@ export function connectWebRtc(url: string, request: ConnectRequest, abort: Abort
     };
     pc.onicecandidate = event => {
       if (!event.candidate || disposed || ++localCount > MAX_CANDIDATES) return;
-      const candidate = JSON.stringify(event.candidate.toJSON());
-      if (signalingReady) sendCandidate(candidate);
-      else localCandidates.push(candidate);
+      try {
+        const candidate = JSON.stringify(event.candidate.toJSON());
+        if (signalingReady) sendCandidate(candidate);
+        else localCandidates.push(candidate);
+      } catch (error) { fail(error); }
     };
     signal.onopen = () => {
+      phase = 'creating offer';
       void (async () => {
         const offer = await pc.createOffer();
         if (disposed) return;
@@ -124,6 +190,7 @@ export function connectWebRtc(url: string, request: ConnectRequest, abort: Abort
         signal.send(JSON.stringify({ type: 'offer', offer: encodeEndpoint({ type: 'offer', sdp: offer.sdp! }),
           peerId: request.peerId!.replace(/\s/g, ''), idServer: request.idServer,
           key: request.key ?? '', token: request.token ?? '' }));
+        phase = 'waiting answer';
       })().catch(fail);
     };
     signal.onmessage = event => {
@@ -131,6 +198,7 @@ export function connectWebRtc(url: string, request: ConnectRequest, abort: Abort
         if (disposed || verified) return;
         const message = JSON.parse(event.data);
         if (message.type === 'error') {
+          signalServerError = true;
           if (answered) return;
           throw new Error(message.message || 'WebRTC signaling failed');
         }
@@ -138,22 +206,38 @@ export function connectWebRtc(url: string, request: ConnectRequest, abort: Abort
           signalingReady = true;
           localCandidates.splice(0).forEach(sendCandidate);
         } else if (message.type === 'answer' && !answered) {
+          phase = 'answer identity';
           const answer = decodeEndpoint(message.answer, 'answer');
           fingerprint = sdpFingerprint(answer.sdp);
           peerKey = verifiedPeerKey(message.signedPk, request.key ?? '', request.peerId!.replace(/\s/g, ''));
+          phase = 'applying answer';
           await pc.setRemoteDescription(answer);
           answered = true;
-          for (const candidate of remoteCandidates.splice(0)) await pc.addIceCandidate(JSON.parse(candidate));
+          for (const candidate of remoteCandidates.splice(0)) {
+            await pc.addIceCandidate(JSON.parse(candidate));
+            remoteApplied++;
+          }
           beginLogin();
         } else if (message.type === 'candidate' && ++remoteCount <= MAX_CANDIDATES) {
           const candidate = validateCandidate(message.candidate);
-          if (answered) await pc.addIceCandidate(JSON.parse(candidate));
+          if (answered) {
+            await pc.addIceCandidate(JSON.parse(candidate));
+            remoteApplied++;
+          }
           else remoteCandidates.push(candidate);
         }
       }).catch(fail);
     };
-    signal.onerror = () => { if (!answered && !disposed) fail(new Error('WebRTC signaling unavailable')); };
+    signal.onerror = () => {
+      if (disposed || verified) return;
+      signalTransportError = true;
+      if (!answered) fail(new Error('WebRTC signaling unavailable'));
+    };
     // Some ID servers close the signaling TCP stream after the answer. Allow gathered ICE to finish.
-    signal.onclose = () => { if (!answered && !disposed) fail(new Error('WebRTC signaling closed')); };
+    signal.onclose = event => {
+      if (disposed || verified) return;
+      signalCloseCode = event.code;
+      if (!answered) fail(new Error('WebRTC signaling closed'));
+    };
   });
 }
