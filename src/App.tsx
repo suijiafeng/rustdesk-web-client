@@ -6,8 +6,8 @@ import { useSavedDevices } from './hooks/useSavedDevices';
 import { useViewTransform } from './hooks/useViewTransform';
 import { useRemoteKeyboard } from './hooks/useRemoteKeyboard';
 import { useRemotePointer } from './hooks/useRemotePointer';
-import { createSessionMessageHandler } from './lib/sessionMessages';
-import { RemoteSocket } from './lib/remoteSocket';
+import { useGatewaySession } from './hooks/useGatewaySession';
+import type { RemoteSocket } from './lib/remoteSocket';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { MousePointer2 } from 'lucide-react';
@@ -23,13 +23,10 @@ import {
 import { SessionHandle } from './components/SessionHandle';
 import { SessionMenu } from './components/SessionMenu';
 import { SoftKeyboardBar } from './components/SoftKeyboardBar';
-import { probeCodecs, webCodecsStatus } from './lib/decoder';
 import {
-  deviceKeyFor,
   type SavedDevice,
 } from './lib/devices';
 import {
-  filterCodecSupport,
   persistDisplayPrefs,
   resolveQualityLevel,
   resolveTargetFps,
@@ -49,14 +46,11 @@ import { t, type I18nKey } from './lib/i18n';
 import { shouldEnableRemotePointerInput } from './lib/inputIsolation';
 import { remoteKeyboardProfile } from './lib/keys';
 import {
-  decodeFrame,
-  wsUrl,
   type ClientMessage,
   type PeerMessage,
   type QualityLevel,
   type ServerMessage,
 } from './lib/protocol';
-import { createFrameStats } from './lib/stats';
 
 function detectCoarsePointer(): boolean {
   if (typeof window === 'undefined') return false;
@@ -541,402 +535,83 @@ export default function App() {
     };
   }, [diagnosticsOpen, phase]);
 
-  // Fetch /api/health on mount
-  useEffect(() => {
-    let active = true;
-    fetch('/api/health', { cache: 'no-store' })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (active) setWebRtcEnabled(data?.webRtcEnabled === true);
-        if (active && data && typeof data.authRequired === 'boolean') {
-          setAuthRequired(data.authRequired);
-        }
-      })
-      .catch(() => {
-        if (active) setAuthRequired(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const connectSession = useCallback(
-    async (req?: ConnectRequest, retry = false) => {
-      const generation = ++connectGeneration.current;
-      setWebRtcFallbackReason(null);
-      if (!retry) {
-        setRestartState(null);
-        reconnectRequest.current = null;
-      }
-      const activeMode = req?.mode ?? mode;
-      const targetPeerId = (req?.peerId ?? peerId).replace(/\s+/g, '');
-      const targetIdServer = (req?.idServer ?? idServer).trim();
-      const targetRelayServer = (req?.relayServer ?? relayServer).trim();
-      const targetServerKey = (req?.serverKey ?? serverKey).trim();
-      const targetForceRelay = req?.forceRelay ?? forceRelay;
-      const targetHost = (req?.host ?? host).trim();
-      const targetPortStr = String(req?.port ?? port).trim() || '21118';
-      const targetPort = Number(targetPortStr) || 21118;
-      const targetPassword = req?.password ?? password;
-      const targetGatewayToken = req?.gatewayToken ?? gatewayToken;
-      const shouldRemember = req?.remember ?? false;
-      const targetDeviceKey = deviceKeyFor({
-        mode: activeMode,
-        peerId: targetPeerId,
-        host: targetHost,
-        port: targetPortStr,
-      });
-
-      const wc = webCodecsStatus();
-      if (!wc.ok) {
-        setPhase('error');
-        setDecoderError(wc.reason);
-        setStatusDetail(null, wc.reason);
-        setConnectDialog(true);
-        return;
-      }
-
-      if (activeMode === 'direct' && !targetHost) {
-        setPhase('error');
-        setStatusDetail('detailMissingHost');
-        return;
-      }
-      if (activeMode === 'id' && (!targetPeerId || !targetIdServer)) {
-        setPhase('error');
-        setStatusDetail('detailMissingId');
-        return;
-      }
-
-      const rawSupport = await probeCodecs();
-      if (generation !== connectGeneration.current) return;
-      if (
-        !rawSupport.vp8 &&
-        !rawSupport.vp9 &&
-        !rawSupport.h264 &&
-        !rawSupport.h265 &&
-        !rawSupport.av1
-      ) {
-        setPhase('error');
-        setDecoderError(t(locale, 'detailNoCodecs'));
-        setStatusDetail('detailNoCodecs');
-        setConnectDialog(true);
-        return;
-      }
-      const preferredCodec = displayPrefsRef.current.codec;
-      const support = filterCodecSupport(rawSupport, preferredCodec);
-
-      // Close previous socket & decoder cleanly
-      if (wsRef.current) {
-        wsRef.current.onclose = null;
-        wsRef.current.onerror = null;
-        wsRef.current.onmessage = null;
-        wsRef.current.close();
-        wsRef.current = null;
-      }
-      decoderRef.current?.close();
-      frameStatsRef.current = createFrameStats();
-      statAccRef.current = {
-        width: 0,
-        height: 0,
-        decoded: 0,
-        dropped: 0,
-        lastDelayMs: 0,
-        lastCodec: '—',
-      };
-
-      const initialQuality = resolveQualityLevel(
-        displayPrefsRef.current.qualityPreset,
-        displayPrefsRef.current.customBitrate,
-      );
-      const initialFps = resolveTargetFps(
-        displayPrefsRef.current.qualityPreset,
-        displayPrefsRef.current.customFps,
-      );
-
-      setPeer(null);
-      setPrivacyEnabled(false);
-      setPrivacyPending(false);
-      setResolutionOptions(null);
-      setCursorShape(null);
-      setCursorEmbedded(false);
-      lastInputPointRef.current = null;
-      placeCursor(sizeRef.current.width / 2, sizeRef.current.height / 2);
-      setStats(EMPTY_STATS);
-      setQuality(initialQuality);
-      setTargetFps(initialFps);
-      setGatewayVideo(undefined);
-      setRtt(0);
-      resetDiagnostics();
-      setDecoderError('');
-      setMenuOpen(false);
-      setSoftKeys(false);
-      setPhase('connecting');
-      setStatusDetail('detailOpeningSocket');
-
-      const sock = webRtcEnabled && activeMode === 'id' && !targetForceRelay ? new RemoteSocket(wsUrl()) : new WebSocket(wsUrl());
-      sock.binaryType = 'arraybuffer';
-      wsRef.current = sock;
-      let receivedTerminalError = false;
-
-      sock.onopen = () => {
-        if (wsRef.current !== sock) return;
-        setStatusDetail('detailAuthenticating');
-        if (activeMode === 'id') {
-          sock.send(
-            JSON.stringify({
-              type: 'connect',
-              mode: 'id',
-              peerId: targetPeerId,
-              idServer: targetIdServer,
-              relayServer: targetRelayServer,
-              key: targetServerKey,
-              forceRelay: targetForceRelay,
-              password: targetPassword,
-              token: targetGatewayToken,
-              codecs: support,
-              quality: initialQuality,
-              fps: initialFps,
-              codec: preferredCodec,
-            }),
-          );
-        } else {
-          sock.send(
-            JSON.stringify({
-              type: 'connect',
-              mode: 'direct',
-              host: targetHost,
-              port: targetPort,
-              password: targetPassword,
-              token: targetGatewayToken,
-              codecs: support,
-              quality: initialQuality,
-              fps: initialFps,
-              codec: preferredCodec,
-            }),
-          );
-        }
-      };
-
-      const handleSessionMessage = createSessionMessageHandler({
-        locale,
-        peerId,
-        idServer,
-        relayServer,
-        serverKey,
-        forceRelay,
-        host,
-        port,
-        reconnectRequest,
-        phaseRef,
-        sizeRef,
-        displayPrefsRef,
-        cursorElRef,
-        audioRef,
-        diagStateRef,
-        setWebRtcFallbackReason,
-        setRestartState,
-        setGatewayTokenRejected,
-        setTemporaryGatewayToken,
-        setPhase,
-        setConnectDialog,
-        setMenuOpen,
-        setAuthRequired,
-        setPeer,
-        setDisplay,
-        setCursorEmbedded,
-        setStats,
-        setDevices,
-        setPrivacyPending,
-        setPrivacyEnabled,
-        setDecoderError,
-        setMobilePanel,
-        setViewMode,
-        setZoom,
-        setPan,
-        setResolutionOptions,
-        setCursorShape,
-        setRtt,
-        setGatewayVideo,
-        setDiagSummary,
-        setStatusDetail,
-        rememberDevicePassword,
-        handleClearSavedPassword,
-        focusDesktopCapture,
-        placeCursor,
-        showSessionTip,
-        stopAudio,
-        send,
-        clipboard,
-        connection: {
-          activeMode,
-          targetPeerId,
-          targetIdServer,
-          targetRelayServer,
-          targetServerKey,
-          targetForceRelay,
-          targetHost,
-          targetPortStr,
-          targetPassword,
-          shouldRemember,
-          targetGatewayToken,
-          targetDeviceKey,
-          req,
-        },
-        onTerminalError: () => { receivedTerminalError = true; },
-      });
-
-      sock.onmessage = (ev) => {
-        if (wsRef.current !== sock) return;
-        if (ev.data instanceof ArrayBuffer) {
-          const packet = decodeFrame(ev.data);
-          if (!packet) return;
-          ensureDecoder().push(packet, canvasRef.current);
-          noteFrame(
-            packet.codecName,
-            packet.width,
-            packet.height,
-            packet.data.byteLength,
-            Date.now() - packet.gatewayUnixMs,
-          );
-          return;
-        }
-
-        if (typeof ev.data !== 'string') return;
-        let msg: ServerMessage;
-        try {
-          msg = JSON.parse(ev.data) as ServerMessage;
-        } catch {
-          return;
-        }
-
-        handleSessionMessage(msg);
-      };
-
-      sock.onerror = () => {
-        if (wsRef.current !== sock || receivedTerminalError) return;
-        phaseRef.current = 'error';
-        setPhase('error');
-        setConnectDialog(true);
-        setStatusDetail('detailGatewayError');
-      };
-
-      sock.onclose = () => {
-        if (wsRef.current !== sock) return;
-        wsRef.current = null;
-        if (receivedTerminalError || phaseRef.current === 'error') {
-          return;
-        }
-        if (phaseRef.current === 'connecting') {
-          phaseRef.current = 'error';
-          setPhase('error');
-          setConnectDialog(true);
-          setStatusDetail('detailGatewayClosed');
-        } else {
-          phaseRef.current = 'idle';
-          setPhase('idle');
-        }
-      };
-    },
-    [
-      locale,
-      mode,
-      host,
-      port,
-      password,
-      rememberDevicePassword,
-      handleClearSavedPassword,
-      peerId,
-      idServer,
-      relayServer,
-      serverKey,
-      forceRelay,
-      gatewayToken,
-      webRtcEnabled,
-      ensureDecoder,
-      noteFrame,
-      placeCursor,
-      resetDiagnostics,
-      setStatusDetail,
-    ],
-  );
-
-  useEffect(() => {
-    if (!restartState) {
-      if (phase === 'idle' || phase === 'error') reconnectRequest.current = null;
-      return;
-    }
-    if (restartState === 'requested' && phase !== 'live') {
-      setRestartState('waiting');
-      return;
-    }
-    if (restartState === 'waiting' && (phase === 'idle' || phase === 'error')) {
-      const timer = window.setTimeout(() => {
-        if (reconnectRequest.current && Date.now() < restartDeadline.current) {
-          void connectSession(reconnectRequest.current, true);
-        }
-      }, 5000);
-      return () => window.clearTimeout(timer);
-    }
-  }, [restartState, phase, connectSession]);
-
-  useEffect(() => {
-    if (!restartState) return;
-    const timer = window.setTimeout(() => {
-      setRestartState(null);
-      setStatusDetail(restartState === 'requested' ? 'restartFailed' : 'retryEnded');
-      if (restartState === 'requested') {
-        setDecoderError(t(locale, 'restartFailed'));
-        setMobilePanel('actions');
-        setMenuOpen(true);
-      }
-    }, restartState === 'requested' ? 45000 : Math.max(0, restartDeadline.current - Date.now()));
-    return () => window.clearTimeout(timer);
-  }, [restartState, locale, setStatusDetail]);
-
-  const requestRestart = () => {
-    if (restartState || !peer?.restartAllowed || wsRef.current?.readyState !== WebSocket.OPEN) return;
-    restartDeadline.current = Date.now() + 180000;
-    setRestartState('requested');
-    setMenuOpen(false);
-    send({ type: 'restart' });
-  };
-
-  // Disconnect cleanly and return to idle state
-
-  const disconnect = useCallback(() => {
-    connectGeneration.current++;
-    setWebRtcFallbackReason(null);
-    reconnectRequest.current = null;
-    setRestartState(null);
-    finishPendingClick();
-    clearLongPress();
-    if (phaseRef.current === 'live' && displayPrefsRef.current.lockAfterSessionEnd) {
-      send({ type: 'key', action: 'down', control: 'LockScreen' });
-      send({ type: 'key', action: 'up', control: 'LockScreen' });
-    }
-    send({ type: 'disconnect' });
-    if (wsRef.current) {
-      wsRef.current.onclose = null;
-      wsRef.current.close();
-      wsRef.current = null;
-    }
-    decoderRef.current?.close();
-    setMenuOpen(false);
-    setToolbarExpanded(false);
-    setConnectDialog(false);
-    setSoftKeys(false);
-    resetDiagnostics();
-    setPhase('idle');
-    setStatusDetail('detailDisconnected');
-  }, [clearLongPress, finishPendingClick, resetDiagnostics, send, setStatusDetail]);
-
-  const handleDismissError = useCallback(() => {
-    setDecoderError('');
-    if (phaseRef.current === 'error') {
-      setPhase('idle');
-      setStatusDetail('detailIdle');
-    }
-  }, [setStatusDetail]);
+  const { connectSession, disconnect, requestRestart, handleDismissError } = useGatewaySession({
+    locale,
+    peerId,
+    idServer,
+    relayServer,
+    serverKey,
+    forceRelay,
+    host,
+    port,
+    reconnectRequest,
+    phaseRef,
+    sizeRef,
+    displayPrefsRef,
+    cursorElRef,
+    audioRef,
+    diagStateRef,
+    setWebRtcFallbackReason,
+    setRestartState,
+    setGatewayTokenRejected,
+    setTemporaryGatewayToken,
+    setPhase,
+    setConnectDialog,
+    setMenuOpen,
+    setAuthRequired,
+    setPeer,
+    setDisplay,
+    setCursorEmbedded,
+    setStats,
+    setDevices,
+    setPrivacyPending,
+    setPrivacyEnabled,
+    setDecoderError,
+    setMobilePanel,
+    setViewMode,
+    setZoom,
+    setPan,
+    setResolutionOptions,
+    setCursorShape,
+    setRtt,
+    setGatewayVideo,
+    setDiagSummary,
+    setStatusDetail,
+    rememberDevicePassword,
+    handleClearSavedPassword,
+    focusDesktopCapture,
+    placeCursor,
+    showSessionTip,
+    stopAudio,
+    send,
+    clipboard,
+    mode,
+    password,
+    gatewayToken,
+    webRtcEnabled,
+    setWebRtcEnabled,
+    phase,
+    peer,
+    restartState,
+    restartDeadline,
+    connectGeneration,
+    wsRef,
+    decoderRef,
+    canvasRef,
+    frameStatsRef,
+    statAccRef,
+    lastInputPointRef,
+    emptyStats: EMPTY_STATS,
+    setQuality,
+    setTargetFps,
+    setSoftKeys,
+    setToolbarExpanded,
+    ensureDecoder,
+    noteFrame,
+    resetDiagnostics,
+    finishPendingClick,
+    clearLongPress,
+  });
 
   const handleUpdateDisplayPrefs = useCallback(
     (patch: Partial<DisplayPrefs>) => {
