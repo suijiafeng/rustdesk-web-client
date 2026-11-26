@@ -64,6 +64,10 @@ export function MobileSessionPanel(p: MobileSessionPanelProps) {
         <div className="tool-group">
           {toggle(Volume2, 'remoteAudio', p.audioEnabled, p.onToggleAudio)}
           {toggle(Clipboard, 'clipSync', p.clipboardSync, p.onToggleClipboardSync, !p.clipboardAllowed)}
+          <label className="tool-row"><ArrowDownUp /><span>{label('scrollDirection')}</span>
+            <ScrollDirectionSelect locale={p.locale} tone="remote" testId="session-reverse-scroll"
+              reverse={p.reverseScroll} onChange={p.onReverseScrollChange} />
+          </label>
         </div>
         <div className="tool-group">
           {p.peer?.restartAllowed && <RestartAction locale={p.locale} className="tool-row" onConfirm={p.onRestart} />}
@@ -83,10 +87,6 @@ export function MobileSessionPanel(p: MobileSessionPanelProps) {
         <button type="button" className="tool-row" data-testid="gestures-back" onClick={() => p.onNavigate('more')}>
           <ChevronLeft />{label('dockMore')}
         </button>
-        <label className="tool-row"><ArrowDownUp /><span>{label('scrollDirection')}</span>
-          <ScrollDirectionSelect locale={p.locale} tone="remote" testId="session-reverse-scroll"
-            reverse={p.reverseScroll} onChange={p.onReverseScrollChange} />
-        </label>
         <h2 className="text-base font-semibold my-2">{label(p.touchMode ? 'touchModeGestures' : 'mouseModeGestures')}</h2>
         <dl data-testid="gesture-guide">{gestureRows[p.touchMode ? 'touch' : 'mouse'].map(([name, desc]) =>
           <div key={name}><dt>{label(name)}</dt><dd>{label(desc)}</dd></div>)}</dl>

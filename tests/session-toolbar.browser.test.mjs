@@ -134,6 +134,7 @@ try {
   await tapElement(select('dock-more'));
   await tapElement(select('more-gestures'));
   await until(select('gesture-guide'));
+  assert.equal(await evaluate(select('session-reverse-scroll') + ' === null'), true);
   await tapElement(select('gestures-back'));
   await tapElement(select('more-connection-details'));
   await until(select('diagnostic-overlay'));
@@ -197,8 +198,7 @@ try {
 
   const reverseScroll = select('session-reverse-scroll');
   await tapElement(select('mobile-dock-expand'));
-  await tapElement(select('dock-more'));
-  await tapElement(select('more-gestures'));
+  await tapElement(select('dock-menu'));
   const originalPreference = await evaluate(reverseScroll + '.textContent');
   await tapElement(reverseScroll);
   await until(list);
@@ -211,7 +211,7 @@ try {
   const otherPreference = await evaluate(otherDirection + '.textContent');
   await tapElement(otherDirection);
   assert.equal(await evaluate(reverseScroll + '.textContent'), otherPreference);
-  await tapElement(select('dock-more'));
+  await tapElement(select('dock-menu'));
   const reversedScroll = await threeFingerScroll();
   assert.equal(reversedScroll?.y, -originalScroll.y);
 
