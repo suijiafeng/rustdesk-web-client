@@ -1,3 +1,5 @@
+import { decodeAudioFrame } from '../../shared/audio.ts';
+import { zstdCompressSync } from 'node:zlib';
 import { mayFallbackFromWebRtc } from '../../shared/errors';
 import assert from 'node:assert/strict';
 import test, { type TestContext } from 'node:test';
@@ -414,5 +416,43 @@ for (const scenario of [
     assert.equal((f.failure() as { code: string }).code, scenario.code);
     assert.equal(mayFallbackFromWebRtc(f.failure()), scenario.fallback);
     assert.equal(f.pc.closeCalls, 1);
+  });
+}
+
+
+for (const negotiated of [false, true]) {
+  test(`WebRTC media preserves ordering and permissions with optimized media=${negotiated}`, async t => {
+    const f = fixture(t);
+    await f.openSignal(); await f.answer();
+    f.pc.channel.open(); f.identity();
+    f.pc.channel.receive(encodeMessage({ hash: { salt: 'salt', challenge: 'challenge' } }));
+    f.pc.channel.receive(encodeMessage({ login_response: { peer_info: { hostname: 'media-peer' } } }));
+    await f.outcome;
+    const connected = f.connected(); assert.ok(connected);
+    const replies: Array<string | ArrayBuffer> = [];
+    const session = createNativeSession(connected, selectCodecs(), data => replies.push(data), () => {}, undefined,
+      { cursorIds: negotiated, audioBinary: negotiated });
+    session.start(); session.send({ type: 'audio', enabled: true });
+    const packet = Uint8Array.from([1, 2, 255]);
+    f.pc.channel.receive(encodeMessage({ misc: { audio_format: { sample_rate: 48000, channels: 2 } } }));
+    f.pc.channel.receive(encodeMessage({ audio_frame: { data: packet } }));
+    f.pc.channel.receive(encodeMessage({ cursor_data: { id: 7, width: 1, height: 1, colors: zstdCompressSync(Buffer.alloc(4)) } }));
+    f.pc.channel.receive(encodeMessage({ cursor_id: 7 }));
+    await flush();
+    const json = replies.filter((value): value is string => typeof value === 'string').map(value => JSON.parse(value));
+    const formatIndex = replies.findIndex(value => typeof value === 'string' && JSON.parse(value).type === 'audioFormat');
+    const packetIndex = replies.findIndex(value => negotiated ? value instanceof ArrayBuffer : typeof value === 'string' && JSON.parse(value).type === 'audioFrame');
+    assert.ok(formatIndex >= 0 && packetIndex > formatIndex);
+    if (negotiated) assert.deepEqual(decodeAudioFrame(replies[packetIndex] as ArrayBuffer), packet);
+    else assert.equal(json.find(message => message.type === 'audioFrame').packet, Buffer.from(packet).toString('base64'));
+    assert.equal(json.filter(message => message.type === 'cursorShape').length, negotiated ? 1 : 2);
+    assert.equal(json.some(message => message.type === 'cursorId' && message.id === '7'), negotiated);
+    session.send({ type: 'cursorRequest', id: '7' }); await flush();
+    if (negotiated) assert.equal(JSON.parse(replies.at(-1) as string).shape.width, 1);
+    f.pc.channel.receive(encodeMessage({ misc: { permission_info: { permission: 3, enabled: false } } }));
+    await flush(); const count = replies.length;
+    f.pc.channel.receive(encodeMessage({ audio_frame: { data: packet } })); await flush();
+    assert.equal(replies.length, count, 'revoking audio prevents both binary and legacy audio');
+    session.close();
   });
 }

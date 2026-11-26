@@ -238,3 +238,20 @@ test('invalid formats fail once; a decoder output after closing still releases A
   f.player.configure(0, 2);
   assert.equal(f.errors(), 1);
 });
+
+
+test('raw Opus bytes and legacy base64 share the bounded decoder path', async t => {
+  const f = fixture(t);
+  await f.player.resume();
+  f.player.configure(48000, 2);
+  const packet = Uint8Array.from([1, 0, 255, 128]);
+  f.player.push(packet);
+  f.player.push(Buffer.from(packet).toString('base64'));
+  assert.equal(FakeDecoder.latest.chunks.length, 2);
+  const chunks = FakeDecoder.latest.chunks as unknown as { data: Uint8Array }[];
+  assert.strictEqual(chunks[0].data, packet, 'binary input should not make a base64 round trip');
+  assert.deepEqual(chunks[1].data, packet);
+  f.player.push(new Uint8Array(8193));
+  assert.equal(f.errors(), 1);
+  assert.equal(f.context.closeCalls, 1);
+});

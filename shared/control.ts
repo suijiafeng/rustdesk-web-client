@@ -50,7 +50,7 @@ export type ClientMessage =
       fps?: number;
       codec?: string;
       lockAfterSessionEnd?: boolean;
-      media?: { cursorIds?: boolean };
+      media?: { cursorIds?: boolean; audioBinary?: boolean };
     }
   | {
       type: 'mouse';

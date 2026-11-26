@@ -125,7 +125,7 @@ export type ClientMessage =
       quality?: QualityLevel;
       customQuality?: number;
       lockAfterSessionEnd?: boolean;
-      media?: { cursorIds?: boolean };
+      media?: { cursorIds?: boolean; audioBinary?: boolean };
       fps?: number;
       codec?: string;
     }

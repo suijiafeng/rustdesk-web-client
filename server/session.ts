@@ -37,7 +37,7 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): () => void {
     }
   };
 
-  const sendBinary = (buf: Buffer) => {
+  const sendBinary = (buf: Uint8Array) => {
     if (ws.readyState === ws.OPEN) {
       ws.send(buf, { binary: true });
     }

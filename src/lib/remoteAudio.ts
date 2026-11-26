@@ -140,15 +140,17 @@ export class RemoteAudio {
     }
   }
 
-  push(packet: string): void {
+  push(packet: string | Uint8Array): void {
     if (this.closed || this.context.state !== 'running' || this.decoder?.state !== 'configured') return;
     try {
-      if (typeof packet !== 'string' || packet.length > 11000) throw new Error('Invalid Opus packet');
+      if (typeof packet === 'string' ? packet.length > 11000 : !(packet instanceof Uint8Array) || packet.byteLength > 8192) {
+        throw new Error('Invalid Opus packet');
+      }
       if (this.decoder.decodeQueueSize > 12 && this.format) {
         this.configure(this.format.sampleRate, this.format.channels);
         if (this.closed || this.decoder?.state !== 'configured') return;
       }
-      const data = Uint8Array.from(atob(packet), c => c.charCodeAt(0));
+      const data = typeof packet === 'string' ? Uint8Array.from(atob(packet), c => c.charCodeAt(0)) : packet;
       if (!data.length || data.length > 8192) throw new Error('Invalid Opus packet');
       const timestamp = Math.max(this.lastTimestamp + 1, Math.round(this.context.currentTime * 1_000_000));
       this.lastTimestamp = timestamp;

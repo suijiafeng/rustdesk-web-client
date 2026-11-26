@@ -1,3 +1,4 @@
+import { encodeAudioFrame, decodeAudioFrame } from '../../shared/audio';
 import { RemoteAudio } from '../../src/lib/remoteAudio';
 
 const result = {
@@ -13,13 +14,13 @@ const delay = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, m
 function check(value: unknown, message: string): asserts value { if (!value) throw new Error(message); }
 
 async function encode(channels: number) {
-  const packets: { data: string; duration: number }[] = [];
+  const packets: { data: Uint8Array; duration: number }[] = [];
   let failure: DOMException | null = null;
   const encoder = new AudioEncoder({
     output(chunk) {
       const bytes = new Uint8Array(chunk.byteLength);
       chunk.copyTo(bytes);
-      packets.push({ data: btoa(String.fromCharCode(...bytes)), duration: (chunk.duration ?? 20000) / 1000 });
+      packets.push({ data: bytes, duration: (chunk.duration ?? 20000) / 1000 });
     },
     error(error) { failure = error; },
   });
@@ -98,7 +99,8 @@ async function run() {
       let next = performance.now();
       let valid = 0;
       for (let index = 0; index < packets.length; index++) {
-        player.push(packets[index].data);
+        const data = packets[index].data;
+        player.push(index % 2 ? btoa(String.fromCharCode(...data)) : decodeAudioFrame(encodeAudioFrame(data))!);
         next += packets[index].duration;
         await delay(Math.max(0, next - performance.now()));
         check(result.errors === 0, `RemoteAudio failed at ${result.stage}`);

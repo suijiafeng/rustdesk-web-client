@@ -1,3 +1,4 @@
+import { encodeAudioFrame } from '../shared/audio.ts';
 import { CursorPublisher } from '../shared/cursor.ts';
 import { errorPayload } from '../shared/errors.ts';
 import { decodeClipboard } from '../shared/clipboard.ts';
@@ -14,7 +15,7 @@ export async function startHostPump(
   context: SessionContext,
   handleVideoFrame: VideoFrameHandler['handleFrame'],
 ): Promise<void> {
-  const { state, ws, sendJson, cleanup } = context;
+  const { state, ws, sendJson, sendBinary, cleanup } = context;
   const publishResolutions = (display: number, supported?: PeerInfo['resolutions']) => {
     state.resolutionDisplay = display;
     state.sizes = supportedResolutions(supported);
@@ -119,7 +120,8 @@ export async function startHostPump(
       }
       const packet = msg.audio_frame?.data;
       if (state.audioAllowed && state.audioRequested && packet && packet.length > 0 && packet.length <= 8192 && ws.bufferedAmount < 262144) {
-        sendJson({ type: 'audioFrame', packet: Buffer.from(packet).toString('base64') });
+        if (state.audioBinary) sendBinary(encodeAudioFrame(packet));
+        else sendJson({ type: 'audioFrame', packet: Buffer.from(packet).toString('base64') });
       }
 
       // 3. Clipboard (single or RustDesk 1.4/1.5 MultiClipboards, bounded UTF-8)

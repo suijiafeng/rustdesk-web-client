@@ -1,3 +1,4 @@
+import { decodeAudioFrame } from '../../shared/audio';
 import { useCallback, useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from 'react';
 import type { SessionStats } from '../components/SessionMenu';
 import type { ConnectionMode, ConnectionPhase, ConnectRequest } from '../types';
@@ -255,7 +256,7 @@ export function useGatewaySession(context: GatewaySessionContext) {
           sock.send(
             JSON.stringify({
               type: 'connect',
-              media: { cursorIds: true },
+              media: { cursorIds: true, audioBinary: true },
               mode: 'id',
               peerId: targetPeerId,
               idServer: targetIdServer,
@@ -276,7 +277,7 @@ export function useGatewaySession(context: GatewaySessionContext) {
           sock.send(
             JSON.stringify({
               type: 'connect',
-              media: { cursorIds: true },
+              media: { cursorIds: true, audioBinary: true },
               mode: 'direct',
               host: targetHost,
               port: targetPort,
@@ -318,6 +319,8 @@ export function useGatewaySession(context: GatewaySessionContext) {
       sock.onmessage = (ev) => {
         if (wsRef.current !== sock) return;
         if (ev.data instanceof ArrayBuffer) {
+          const audio = decodeAudioFrame(ev.data);
+          if (audio) { context.audioRef.current?.push(audio); return; }
           const packet = decodeFrame(ev.data);
           if (!packet) return;
           ensureDecoder().push(packet, canvasRef.current);

@@ -103,6 +103,7 @@ export function createClientMessageHandler(context: ClientMessageContext) {
       }
       state.sessionCodecs = codecs;
       state.cursorIds = parsed.media?.cursorIds === true;
+      state.audioBinary = parsed.media?.audioBinary === true;
 
       state.phase = 'connecting';
       sendJson({ type: 'status', state: 'connecting', detail: 'dialing the host' });

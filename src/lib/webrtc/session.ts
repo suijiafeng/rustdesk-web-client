@@ -1,3 +1,4 @@
+import { encodeAudioFrame } from '../../../shared/audio.ts';
 import { type PeerInfo, canRestart, permissions, peerToJson, initialDisplaySize, HostPermission, PrivacyState, privacyResult, supportsModernDisplayControls, supportedResolutions } from '../../../shared/peer.ts';
 import { errorPayload } from '../../../shared/errors';
 import { decodeClipboard } from '../../../shared/clipboard.ts';
@@ -24,7 +25,7 @@ export function createNativeSession(
   conn: NativeConnection, sessionCodecs: CodecCaps,
   onData: (data: string | ArrayBuffer) => void, onClose: () => void,
   preferredCodec?: string,
-  media?: { cursorIds?: boolean },
+  media?: { cursorIds?: boolean; audioBinary?: boolean },
 ) {
   let state: 'live' | 'closed' = 'live';
   const cursorPublisher = new CursorPublisher(new CursorShapes(), media?.cursorIds === true);
@@ -156,7 +157,8 @@ export function createNativeSession(
         }
         const packet = msg.audio_frame?.data;
         if (audioAllowed && audioRequested && packet && packet.length > 0 && packet.length <= 8192) {
-          sendJson({ type: 'audioFrame', packet: Buffer.from(packet).toString('base64') });
+          if (media?.audioBinary === true) sendBinary(encodeAudioFrame(packet));
+          else sendJson({ type: 'audioFrame', packet: Buffer.from(packet).toString('base64') });
         }
 
         // 3. Clipboard (single or RustDesk 1.4/1.5 MultiClipboards, bounded UTF-8)

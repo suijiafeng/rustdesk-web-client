@@ -12,6 +12,7 @@ export interface GatewayConfig {
 
 export interface SessionState {
   cursorIds?: boolean;
+  audioBinary?: boolean;
   cursorPublisher?: CursorPublisher;
   phase: 'awaiting-connect' | 'connecting' | 'live' | 'closed';
   resolutionDisplay: number;
@@ -31,7 +32,7 @@ export interface SessionContext {
   ws: WebSocket;
   videoBuffer: GatewayVideoBuffer;
   sendJson: (payload: Record<string, unknown>) => void;
-  sendBinary: (buf: Buffer) => void;
+  sendBinary: (buf: Uint8Array) => void;
   cleanup: (sendClosedStatus: boolean) => void;
 }
 
