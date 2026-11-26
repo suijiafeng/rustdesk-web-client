@@ -66,7 +66,7 @@ export class RemoteSocket {
         if (abort.signal.aborted) { conn.stream.close(); return; }
         this.mode = 'webrtc';
         this.session = createNativeSession(conn, selectCodecs(message.codecs),
-          value => this.onmessage?.(new MessageEvent('message', { data: value })), () => this.close(), message.codec);
+          value => this.onmessage?.(new MessageEvent('message', { data: value })), () => this.close(), message.codec, message.media);
         this.session.start();
       })().catch(cause => {
         if (abort.signal.aborted || this.mode === 'closed') return;

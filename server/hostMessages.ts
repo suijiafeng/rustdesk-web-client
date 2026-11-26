@@ -1,3 +1,4 @@
+import { CursorPublisher } from '../shared/cursor.ts';
 import { errorPayload } from '../shared/errors.ts';
 import { decodeClipboard } from '../shared/clipboard.ts';
 import { humanizeError } from '../shared/control.ts';
@@ -19,7 +20,8 @@ export async function startHostPump(
     state.sizes = supportedResolutions(supported);
     sendJson({ type: 'resolutions', display, sizes: state.sizes });
   };
-  const cursorShapes = new CursorShapes();
+  const cursorPublisher = new CursorPublisher(new CursorShapes(), state.cursorIds);
+  state.cursorPublisher = cursorPublisher;
   state.currentSize = initialDisplaySize(conn.peerInfo);
   sendJson(peerToJson(conn.peerInfo, conn));
   publishResolutions(Number(conn.peerInfo.current_display ?? 0), conn.peerInfo.resolutions);
@@ -134,9 +136,9 @@ export async function startHostPump(
 
       // 4. Cursor shape and position
       if (msg.cursor_data) {
-        sendJson({ type: 'cursorShape', shape: cursorShapes.decode(msg.cursor_data) });
+        sendJson(cursorPublisher.update(msg.cursor_data));
       } else if (msg.cursor_id !== undefined) {
-        sendJson({ type: 'cursorShape', shape: cursorShapes.get(msg.cursor_id) });
+        sendJson(cursorPublisher.select(msg.cursor_id));
       } else if (msg.cursor_position) {
         sendJson({
           type: 'cursor',

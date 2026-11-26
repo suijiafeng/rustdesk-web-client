@@ -1,3 +1,4 @@
+import { CursorImages } from './cursorImages';
 import { asAppError, readErrorPayload, type ErrorPayload } from '../../shared/errors';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import type { MobilePanel } from '../components/MobileSessionPanel';
@@ -156,6 +157,9 @@ export function createSessionMessageHandler(context: SessionMessageContext) {
     targetDeviceKey,
     req,
   } = context.connection;
+  const cursorImages = new CursorImages(id => send({ type: 'cursorRequest', id }));
+  let disposed = false;
+  const dispose = () => { disposed = true; cursorImages.clear(); setCursorShape(null); };
   let sessionDisplays: PeerMessage['displays'] = [];
   let activeDisplay = 0;
   let cursorDisplayOrigin = { x: 0, y: 0 };
@@ -324,18 +328,10 @@ export function createSessionMessageHandler(context: SessionMessageContext) {
       setResolutionOptions(msg);
     },
     cursorShape(msg) {
-      try {
-        const shape = msg.shape;
-        if (!shape) {
-          setCursorShape(null);
-          return;
-        }
-        const { width, height, hotX, hotY, rgba } = shape;
-        const pixels = Uint8ClampedArray.from(atob(rgba), (char) => char.charCodeAt(0));
-        setCursorShape({ pixels: new ImageData(pixels, width, height), hotX, hotY });
-      } catch {
-        setCursorShape(null);
-      }
+      setCursorShape(cursorImages.receive(msg));
+    },
+    cursorId(msg) {
+      setCursorShape(cursorImages.select(msg.id));
     },
     clipboard(msg) {
       if (!displayPrefsRef.current.disableClipboard) {
@@ -365,10 +361,13 @@ export function createSessionMessageHandler(context: SessionMessageContext) {
     },
   };
 
-  return (message: ServerMessage) => {
+  const handle = (message: ServerMessage) => {
+    if (disposed) return;
     // The discriminant selects the matching payload type from the exhaustive map.
     if (!Object.hasOwn(handlers, message.type)) return;
     const handler = handlers[message.type] as ((value: ServerMessage) => void) | undefined;
     handler?.(message);
+    if (message.type === 'status' && (message.state === 'closed' || message.state === 'error')) dispose();
   };
+  return Object.assign(handle, { dispose });
 }

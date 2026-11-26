@@ -1,4 +1,4 @@
-import { useCallback, useEffect, type Dispatch, type RefObject, type SetStateAction } from 'react';
+import { useCallback, useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from 'react';
 import type { SessionStats } from '../components/SessionMenu';
 import type { ConnectionMode, ConnectionPhase, ConnectRequest } from '../types';
 import { probeCodecs, webCodecsStatus, type RemoteDecoder } from '../lib/decoder';
@@ -105,6 +105,13 @@ export function useGatewaySession(context: GatewaySessionContext) {
     emptyStats: EMPTY_STATS,
   } = context;
 
+  const messageDisposer = useRef<(() => void) | null>(null);
+  const clearSessionMessages = useCallback(() => {
+    messageDisposer.current?.();
+    messageDisposer.current = null;
+  }, []);
+  useEffect(() => clearSessionMessages, [clearSessionMessages]);
+
   // Fetch /api/health on mount
   useEffect(() => {
     let active = true;
@@ -189,6 +196,7 @@ export function useGatewaySession(context: GatewaySessionContext) {
       const preferredCodec = displayPrefsRef.current.codec;
       const support = filterCodecSupport(rawSupport, preferredCodec);
 
+      clearSessionMessages();
       // Close previous socket & decoder cleanly
       if (wsRef.current) {
         wsRef.current.onclose = null;
@@ -247,6 +255,7 @@ export function useGatewaySession(context: GatewaySessionContext) {
           sock.send(
             JSON.stringify({
               type: 'connect',
+              media: { cursorIds: true },
               mode: 'id',
               peerId: targetPeerId,
               idServer: targetIdServer,
@@ -267,6 +276,7 @@ export function useGatewaySession(context: GatewaySessionContext) {
           sock.send(
             JSON.stringify({
               type: 'connect',
+              media: { cursorIds: true },
               mode: 'direct',
               host: targetHost,
               port: targetPort,
@@ -300,8 +310,10 @@ export function useGatewaySession(context: GatewaySessionContext) {
           targetDeviceKey,
           req,
         },
-        onTerminalError: () => { receivedTerminalError = true; },
+        onTerminalError: () => { receivedTerminalError = true; clearSessionMessages(); },
       });
+
+      messageDisposer.current = handleSessionMessage.dispose;
 
       sock.onmessage = (ev) => {
         if (wsRef.current !== sock) return;
@@ -332,6 +344,7 @@ export function useGatewaySession(context: GatewaySessionContext) {
 
       sock.onerror = () => {
         if (wsRef.current !== sock || receivedTerminalError || phaseRef.current === 'error') return;
+        clearSessionMessages();
         const wasLive = phaseRef.current === 'live';
         phaseRef.current = 'error';
         setPhase('error');
@@ -343,6 +356,7 @@ export function useGatewaySession(context: GatewaySessionContext) {
       sock.onclose = () => {
         if (wsRef.current !== sock) return;
         wsRef.current = null;
+        clearSessionMessages();
         if (receivedTerminalError || phaseRef.current === 'error') {
           return;
         }
@@ -427,6 +441,7 @@ export function useGatewaySession(context: GatewaySessionContext) {
   // Disconnect cleanly and return to idle state
 
   const disconnect = useCallback(() => {
+    clearSessionMessages();
     connectGeneration.current++;
     setWebRtcFallbackReason(null);
     reconnectRequest.current = null;

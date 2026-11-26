@@ -1,3 +1,4 @@
+import type { CursorMessage } from '../../shared/cursor';
 import type { ErrorPayload } from '../../shared/errors';
 export const HEADER_LEN = 32;
 
@@ -55,14 +56,6 @@ export interface PeerMessage {
   encrypted: boolean;
 }
 
-export interface CursorShape {
-  width: number;
-  height: number;
-  hotX: number;
-  hotY: number;
-  rgba: string;
-}
-
 export interface GatewayVideoStats {
   queuedBytes: number;
   droppedFrames: number;
@@ -95,7 +88,7 @@ export type ServerMessage =
     }
   | { type: 'clipboard'; text: string }
   | { type: 'cursor'; x: number; y: number }
-  | { type: 'cursorShape'; shape: CursorShape | null }
+  | CursorMessage
   | ({ type: 'error'; message: string } & Partial<ErrorPayload>)
   | { type: 'rtt'; ms: number }
   | { type: 'pong'; seq: number; clientTs: number; serverTs: number; gatewayVideo?: GatewayVideoStats };
@@ -132,6 +125,7 @@ export type ClientMessage =
       quality?: QualityLevel;
       customQuality?: number;
       lockAfterSessionEnd?: boolean;
+      media?: { cursorIds?: boolean };
       fps?: number;
       codec?: string;
     }
@@ -150,6 +144,7 @@ export type ClientMessage =
       text?: string;
       modifiers?: string[];
     }
+  | { type: 'cursorRequest'; id: string }
   | { type: 'text'; text: string }
   | { type: 'clipboard'; text: string }
   | { type: 'followWindow'; enabled: boolean }

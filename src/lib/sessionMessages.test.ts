@@ -172,3 +172,17 @@ test('invalid cursor shapes clear the cursor and unknown message types are ignor
   for (const type of ['hello', 'unknown', 'constructor', '__proto__']) f.handle({ type } as ServerMessage);
   assert.deepEqual(f.events, []);
 });
+
+
+test('a disposed session drops cursor recovery requests and cannot mutate a new session', () => {
+  const f = fixture();
+  f.handle({ type: 'cursorId', id: '7' });
+  assert.deepEqual(f.events.at(-1), ['send', { type: 'cursorRequest', id: '7' }]);
+  f.handle.dispose();
+  const count = f.events.length;
+  f.handle({ type: 'cursorId', id: '8' });
+  f.handle(peer);
+  assert.equal(f.events.length, count);
+  assert.equal(f.cursorShape.value, null);
+  assert.equal(f.remotePeer.value, null);
+});

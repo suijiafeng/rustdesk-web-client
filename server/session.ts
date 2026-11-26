@@ -71,6 +71,8 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): () => void {
   const cleanup = (sendClosedStatus: boolean) => {
     if (state.phase === 'closed') return;
     state.phase = 'closed';
+    state.cursorPublisher?.clear();
+    state.cursorPublisher = undefined;
     clearTimeout(connectDeadline);
     connection.abort();
     clearInterval(heartbeat);

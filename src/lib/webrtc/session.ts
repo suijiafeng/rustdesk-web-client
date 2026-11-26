@@ -5,7 +5,7 @@ import { Buffer } from 'buffer';
 import { type ClientMessage, type CodecCaps, buildRefreshVideoMessage, buildVideoReceivedMessage, decodingPreferenceChanged, humanizeError, toHostMessage } from '../../../shared/control.ts';
 import { decodeMessage, encodeMessage } from '../../../shared/protos.ts';
 import { CODEC_VP8, encodeRdv1Frame, vp8KeyframeSize, encodedFrameIsKey, extractEncodedFrames } from '../../../shared/video.ts';
-import { CursorShapes } from '../../../shared/cursor.ts';
+import { CursorShapes, CursorPublisher } from '../../../shared/cursor.ts';
 import type { DataChannelStream } from './stream';
 
 export interface NativeConnection {
@@ -24,8 +24,10 @@ export function createNativeSession(
   conn: NativeConnection, sessionCodecs: CodecCaps,
   onData: (data: string | ArrayBuffer) => void, onClose: () => void,
   preferredCodec?: string,
+  media?: { cursorIds?: boolean },
 ) {
   let state: 'live' | 'closed' = 'live';
+  const cursorPublisher = new CursorPublisher(new CursorShapes(), media?.cursorIds === true);
   const hostConn = conn;
   let resolutionDisplay = 0;
   let sizes: { width: number; height: number }[] = [];
@@ -40,6 +42,7 @@ export function createNativeSession(
   const cleanup = (_sendClosedStatus = false) => {
     if (state === 'closed') return;
     state = 'closed';
+    cursorPublisher.clear();
     conn.stream.close();
     onClose();
   };
@@ -53,7 +56,6 @@ export function createNativeSession(
       sizes = supportedResolutions(supported);
       sendJson({ type: 'resolutions', display, sizes });
     };
-    const cursorShapes = new CursorShapes();
     currentSize = initialDisplaySize(conn.peerInfo);
     sendJson(peerToJson(conn.peerInfo, conn));
     publishResolutions(Number(conn.peerInfo.current_display ?? 0), conn.peerInfo.resolutions);
@@ -171,9 +173,9 @@ export function createNativeSession(
 
         // 4. Cursor shape and position
         if (msg.cursor_data) {
-          sendJson({ type: 'cursorShape', shape: cursorShapes.decode(msg.cursor_data) });
+          sendJson(cursorPublisher.update(msg.cursor_data));
         } else if (msg.cursor_id !== undefined) {
-          sendJson({ type: 'cursorShape', shape: cursorShapes.get(msg.cursor_id) });
+          sendJson(cursorPublisher.select(msg.cursor_id));
         } else if (msg.cursor_position) {
           sendJson({
             type: 'cursor',
@@ -248,6 +250,10 @@ export function createNativeSession(
   const sendControl = async (parsed: ClientMessage) => {
     if (parsed.type === 'ping') {
       await conn.stream.sendRaw(encodeMessage({ test_delay: { time: parsed.seq, from_client: true } }));
+      return;
+    }
+    if (parsed.type === 'cursorRequest') {
+      if (media?.cursorIds === true && typeof parsed.id === 'string' && parsed.id.length <= 128) sendJson(cursorPublisher.select(parsed.id, true));
       return;
     }
     if (parsed.type === 'disconnect') { cleanup(); return; }

@@ -30,6 +30,7 @@ export interface CodecCaps {
 }
 
 export type ClientMessage =
+  | { type: 'cursorRequest'; id: string }
   | { type: 'resolution'; display: number; width: number; height: number }
   | {
       type: 'connect';
@@ -49,6 +50,7 @@ export type ClientMessage =
       fps?: number;
       codec?: string;
       lockAfterSessionEnd?: boolean;
+      media?: { cursorIds?: boolean };
     }
   | {
       type: 'mouse';

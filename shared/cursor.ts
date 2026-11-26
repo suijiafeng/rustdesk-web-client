@@ -2,9 +2,9 @@ import { Buffer } from 'buffer';
 import { decompress } from 'fzstd';
 import { zstdFrameSize } from './compression.ts';
 
-const MAX_CURSOR_SIDE = 512;
-const MAX_CURSOR_CACHE_ENTRIES = 16;
-const MAX_CURSOR_CACHE_BYTES = 4 * 1024 * 1024;
+export const MAX_CURSOR_SIDE = 512;
+export const MAX_CURSOR_CACHE_ENTRIES = 16;
+export const MAX_CURSOR_CACHE_BYTES = 4 * 1024 * 1024;
 
 export interface CursorShape {
   width: number;
@@ -34,7 +34,7 @@ export class CursorShapes {
     return this.cache.get(id) ?? null;
   }
 
-  decode(data: CursorData): CursorShape | null {
+  decode(data: CursorData, onEvict?: (id: string) => void): CursorShape | null {
     const { id = '0', width = 0, height = 0, hotx = 0, hoty = 0, colors } = data;
     this.remove(id);
     if (
@@ -68,11 +68,14 @@ export class CursorShapes {
         this.cacheBytes + shape.rgba.length <= MAX_CURSOR_CACHE_BYTES
       ) break;
       this.remove(key);
+      onEvict?.(key);
     }
     this.cache.set(id, shape);
     this.cacheBytes += shape.rgba.length;
     return shape;
   }
+
+  clear(): void { this.cache.clear(); this.cacheBytes = 0; }
 
   private remove(id: string): void {
     const previous = this.cache.get(id);
@@ -81,4 +84,30 @@ export class CursorShapes {
       this.cache.delete(id);
     }
   }
+}
+
+
+export type CursorMessage =
+  | { type: 'cursorShape'; shape: CursorShape | null; id?: string; evictedIds?: string[] }
+  | { type: 'cursorId'; id: string };
+
+/** Ordered transports publish each bitmap once, then refer to its cached ID. */
+export class CursorPublisher {
+  constructor(private readonly shapes: CursorShapes, private readonly idsEnabled = false) {}
+
+  update(data: CursorData): CursorMessage {
+    const id = data.id ?? '0';
+    const evictedIds: string[] = [];
+    const shape = this.shapes.decode(data, evicted => evictedIds.push(evicted));
+    return this.idsEnabled ? { type: 'cursorShape', id, shape, evictedIds } : { type: 'cursorShape', shape };
+  }
+
+  select(id: string, resend = false): CursorMessage {
+    const shape = this.shapes.get(id);
+    if (!this.idsEnabled) return { type: 'cursorShape', shape };
+    // A missing native bitmap cannot be recovered by asking the browser for it.
+    return shape && !resend ? { type: 'cursorId', id } : { type: 'cursorShape', id, shape };
+  }
+
+  clear(): void { this.shapes.clear(); }
 }

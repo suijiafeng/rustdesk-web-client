@@ -102,6 +102,7 @@ export function createClientMessageHandler(context: ClientMessageContext) {
         return;
       }
       state.sessionCodecs = codecs;
+      state.cursorIds = parsed.media?.cursorIds === true;
 
       state.phase = 'connecting';
       sendJson({ type: 'status', state: 'connecting', detail: 'dialing the host' });
@@ -224,6 +225,12 @@ export function createClientMessageHandler(context: ClientMessageContext) {
         forwardToHost(hostMsg, refreshVideo);
       } catch (error) {
         sendJson({ type: 'error', message: humanizeError(error), ...errorPayload(error) });
+      }
+    },
+    cursorRequest: parsed => {
+      if (state.cursorIds && typeof parsed.id === 'string' && parsed.id.length <= 128) {
+        const message = state.cursorPublisher?.select(parsed.id, true);
+        if (message) sendJson(message);
       }
     },
     mouse: forwardControl,

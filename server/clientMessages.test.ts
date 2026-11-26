@@ -1,3 +1,5 @@
+import { CursorPublisher, CursorShapes } from '../shared/cursor.ts';
+import { zstdCompressSync } from 'node:zlib';
 import assert from 'node:assert/strict';
 import { Socket } from 'node:net';
 import test, { type TestContext } from 'node:test';
@@ -182,4 +184,22 @@ test('session-end lock settings reach the host before disconnect and reject non-
   await f.send({ type: 'disconnect' });
   assert.deepEqual(f.closed, [true]);
   assert.equal(f.writes.length, 2, 'disconnect does not race a final synthetic LockScreen key');
+});
+
+
+test('cursor recovery only sends cached bitmaps to clients that negotiated IDs', async t => {
+  const f = fixture(t);
+  f.state.cursorPublisher = new CursorPublisher(new CursorShapes(), true);
+  f.state.cursorPublisher.update({ id: '7', width: 1, height: 1, colors: zstdCompressSync(Buffer.alloc(4)) });
+  await f.send({ type: 'cursorRequest', id: '7' });
+  assert.equal(f.replies.length, 0);
+  f.state.cursorIds = true;
+  await f.send({ type: 'cursorRequest', id: '7' });
+  assert.equal(f.replies.at(-1)?.type, 'cursorShape');
+  assert.equal(f.replies.at(-1)?.id, '7');
+  assert.ok(f.replies.at(-1)?.shape);
+  await f.send({ type: 'cursorRequest', id: 'unknown' });
+  assert.equal(f.replies.at(-1)?.shape, null);
+  await f.send({ type: 'cursorRequest', id: 'x'.repeat(129) });
+  assert.equal(f.replies.length, 2);
 });

@@ -1,3 +1,4 @@
+import type { CursorPublisher } from '../shared/cursor.ts';
 import type { WebSocket } from 'ws';
 import type { GatewayAdmission } from './admission.ts';
 import type { CodecCaps } from '../shared/control.ts';
@@ -10,6 +11,8 @@ export interface GatewayConfig {
 }
 
 export interface SessionState {
+  cursorIds?: boolean;
+  cursorPublisher?: CursorPublisher;
   phase: 'awaiting-connect' | 'connecting' | 'live' | 'closed';
   resolutionDisplay: number;
   sizes: { width: number; height: number }[];
