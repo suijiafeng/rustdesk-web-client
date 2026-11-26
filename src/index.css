@@ -599,84 +599,42 @@ button:focus-visible {
   box-shadow: 0 10px 20px #0005;
 }
 
-.soft-shortcut-settings header,
-.soft-shortcut-footer {
+.soft-shortcut-settings header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 6px;
 }
 
-.soft-shortcut-modifiers {
+.soft-shortcut-options {
   display: flex;
   flex-wrap: wrap;
-  gap: 3px;
-  margin-bottom: 6px;
-}
-
-.soft-shortcut-keys {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(42px, 1fr));
-  gap: 3px;
-  max-height: min(145px, max(44px, calc(var(--soft-shortcut-space) - 120px)));
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  touch-action: pan-y;
-}
-
-.soft-shortcut-settings .soft-key-btn {
-  min-width: 0;
-  min-height: 29px;
-  padding-inline: 4px;
-  white-space: normal;
-}
-
-.soft-shortcut-settings [aria-pressed="true"] {
-  border-color: #8bcaff;
-  background: #356597;
-}
-
-.soft-shortcut-footer {
-  margin-top: 6px;
-}
-
-.soft-shortcut-footer output {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.soft-shortcut-settings button:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.soft-shortcut-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  max-height: 76px;
-  overflow-y: auto;
-  margin: 0 0 7px;
-  padding: 0 0 7px;
-  border-bottom: 1px solid #40454c;
-  list-style: none;
+  gap: 5px;
 }
 
 .soft-shortcut-chip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 6px;
+  max-width: 100%;
+  min-height: 32px;
+  padding: 4px 8px;
   border: 1px solid #40454c;
-  border-radius: 5px;
+  border-radius: 6px;
   background: transparent;
   color: inherit;
   font-size: 12px;
+  overflow-wrap: anywhere;
   cursor: pointer;
 }
 
 .soft-shortcut-chip:hover {
   background: #383f49;
+}
+
+.soft-shortcut-chip[aria-pressed="true"] {
+  border-color: #5b86b1;
+  background: #304863;
 }
 
 .soft-key-capture {

@@ -1,6 +1,4 @@
-import { X } from 'lucide-react';
-import { useState } from 'react';
-import { isModifier } from '../lib/keys';
+import { Check, X } from 'lucide-react';
 import { t, type Locale } from '../lib/i18n';
 
 export interface SoftShortcut {
@@ -8,38 +6,20 @@ export interface SoftShortcut {
   key: string;
 }
 
-interface KeyChoice {
-  value: string;
+interface ShortcutOption {
+  id: string;
   label: string;
   aria?: string;
+  selected: boolean;
+  shortcut: SoftShortcut;
 }
 
-export function SoftShortcutSettings({
-  locale, modifiers, keys, shortcuts, describe, onAdd, onRemove, onClose,
-}: {
+export function SoftShortcutSettings({ locale, options, onToggle, onClose }: {
   locale: Locale;
-  modifiers: readonly KeyChoice[];
-  keys: readonly KeyChoice[];
-  shortcuts: readonly SoftShortcut[];
-  describe: (shortcut: SoftShortcut) => string;
-  onAdd: (shortcut: SoftShortcut) => void;
-  onRemove: (index: number) => void;
+  options: readonly ShortcutOption[];
+  onToggle: (shortcut: SoftShortcut) => void;
   onClose: () => void;
 }) {
-  const [selectedModifiers, setSelectedModifiers] = useState<string[]>([]);
-  const [key, setKey] = useState('');
-  const canCombine = !isModifier(key);
-  const draft = { modifiers: modifiers.filter(choice => selectedModifiers.includes(choice.value)).map(choice => choice.value), key };
-  const alreadyAdded = shortcuts.some(shortcut => shortcut.key === key &&
-    shortcut.modifiers.length === draft.modifiers.length &&
-    draft.modifiers.every(modifier => shortcut.modifiers.includes(modifier)));
-  const addShortcut = () => {
-    if (!key || alreadyAdded) return;
-    onAdd(draft);
-    setKey('');
-    setSelectedModifiers([]);
-  };
-
   return (
     <section className="soft-shortcut-settings" role="dialog" aria-label={t(locale, 'softShortcutSettings')}
       data-testid="soft-shortcut-settings"
@@ -50,45 +30,14 @@ export function SoftShortcutSettings({
           <X size={17} aria-hidden="true" />
         </button>
       </header>
-      {shortcuts.length > 0 && (
-        <ul className="soft-shortcut-list" aria-label={t(locale, 'softVisibleKeys')}>
-          {shortcuts.map((shortcut, index) => {
-            const label = describe(shortcut);
-            return <li key={label}>
-              <button type="button" className="soft-shortcut-chip" data-testid="soft-shortcut-remove"
-                data-remove-key={shortcut.key}
-                aria-label={`${t(locale, 'softShortcutRemove')} ${label}`} onClick={() => onRemove(index)}>
-                <span>{label}</span><X size={13} aria-hidden="true" />
-              </button>
-            </li>;
-          })}
-        </ul>
-      )}
-      <div className="soft-shortcut-modifiers" role="group" aria-label={t(locale, 'softShortcutModifiers')}>
-        {modifiers.map(choice => <button key={choice.value} type="button" className="soft-key-btn"
-          data-shortcut-modifier={choice.value} aria-pressed={selectedModifiers.includes(choice.value)}
-          disabled={!canCombine}
-          onClick={() => setSelectedModifiers(previous => previous.includes(choice.value)
-            ? previous.filter(value => value !== choice.value) : [...previous, choice.value])}>
-          {choice.label}
-        </button>)}
+      <div className="soft-shortcut-options">
+        {options.map(({ id, label, aria, selected, shortcut }) => (
+          <button key={id} type="button" className="soft-shortcut-chip" data-shortcut-option={id}
+            aria-label={aria} aria-pressed={selected} onClick={() => onToggle(shortcut)}>
+            <span>{label}</span>{selected && <Check size={13} aria-hidden="true" />}
+          </button>
+        ))}
       </div>
-      <div className="soft-shortcut-keys" role="group" aria-label={t(locale, 'softShortcutKey')}>
-        {keys.map(choice => <button key={choice.value} type="button" className="soft-key-btn"
-          data-shortcut-key={choice.value} aria-label={choice.aria}
-          aria-pressed={key === choice.value} onClick={() => {
-            setKey(choice.value);
-            if (isModifier(choice.value)) setSelectedModifiers([]);
-          }}>
-          {choice.label}
-        </button>)}
-      </div>
-      <div className="soft-shortcut-footer">
-        <output aria-live="polite">{key ? describe(draft) : t(locale, 'softShortcutKey')}</output>
-        <button type="button" className="soft-key-btn" data-testid="soft-shortcut-add"
-          disabled={!key || alreadyAdded} onClick={addShortcut}>{t(locale, 'softShortcutAdd')}</button>
-      </div>
-
     </section>
   );
 }

@@ -61,10 +61,7 @@ const DEFAULT_FUNCTION_KEYS: SoftShortcut[] = [
   ...STICKY_MODIFIERS.map(({ control }) => ({ key: control, modifiers: [] })),
   { key: 'Escape', modifiers: [] },
 ];
-const SHORTCUT_KEYS = [
-  ...[...'abcdefghijklmnopqrstuvwxyz0123456789'].map(value => ({ value, label: value.toUpperCase(), aria: undefined })),
-  ...EXTRA_KEYS.map(({ control, label, aria }) => ({ value: control, label, aria })),
-];
+const FUNCTION_KEY_CHOICES = EXTRA_KEYS.map(({ control, label, aria }) => ({ value: control, label, aria }));
 
 function shortcutId(shortcut: SoftShortcut): string {
   return `${[...shortcut.modifiers].sort().join('-')}:${shortcut.key}`;
@@ -77,7 +74,7 @@ function readShortcuts(): SoftShortcut[] {
     if (!Array.isArray(saved)) return DEFAULT_FUNCTION_KEYS;
     const keys = saved.filter((entry): entry is SoftShortcut =>
       typeof entry?.key === 'string' &&
-      (SHORTCUT_KEYS.some(choice => choice.value === entry.key) || isModifier(entry.key)) &&
+      (FUNCTION_KEY_CHOICES.some(choice => choice.value === entry.key) || isModifier(entry.key) || /^[a-z0-9]$/.test(entry.key)) &&
       Array.isArray(entry.modifiers) &&
       entry.modifiers.every((value: unknown) => typeof value === 'string' && isModifier(value)) &&
       (!isModifier(entry.key) || entry.modifiers.length === 0),
@@ -161,10 +158,10 @@ export function SoftKeyboardBar({
     control === 'Meta' ? metaLabel : control === 'Alt' ? altLabel : label;
 
   const shortcutModifiers = STICKY_MODIFIERS.map(mod => ({ value: mod.control, label: modifierLabel(mod.control, mod.label) }));
-  const shortcutChoices = [...SHORTCUT_KEYS, ...shortcutModifiers];
+  const shortcutChoices = [...shortcutModifiers, ...FUNCTION_KEY_CHOICES];
   const describeShortcut = (shortcut: SoftShortcut) => [
     ...shortcut.modifiers.map(control => shortcutModifiers.find(choice => choice.value === control)?.label ?? control),
-    shortcutChoices.find(choice => choice.value === shortcut.key)?.label ?? shortcut.key,
+    shortcutChoices.find(choice => choice.value === shortcut.key)?.label ?? shortcut.key.toUpperCase(),
   ].join('+');
 
   const saveShortcuts = (next: SoftShortcut[]) => {
@@ -259,13 +256,32 @@ export function SoftKeyboardBar({
     focusSystemInput();
   };
 
-  const removeShortcut = (index: number) => {
-    const shortcut = shortcuts[index];
-    if (shortcut.modifiers.length === 0 && isModifier(shortcut.key)) {
+  const toggleShortcut = (shortcut: SoftShortcut) => {
+    const id = shortcutId(shortcut);
+    if (!shortcuts.some(item => shortcutId(item) === id)) {
+      saveShortcuts([...shortcuts, shortcut]);
+      return;
+    }
+    if (!shortcut.modifiers.length && isModifier(shortcut.key)) {
       setLatched(previous => previous.filter(value => value !== shortcut.key));
     }
-    saveShortcuts(shortcuts.filter((_, position) => position !== index));
+    saveShortcuts(shortcuts.filter(item => shortcutId(item) !== id));
   };
+
+  const shortcutOptions = [
+    ...shortcutChoices.map(choice => ({ key: choice.value, modifiers: [] })),
+    ...shortcuts.filter(shortcut => shortcut.modifiers.length > 0 || shortcut.key.length === 1),
+  ].map(shortcut => {
+    const id = shortcutId(shortcut);
+    const choice = shortcutChoices.find(item => item.value === shortcut.key);
+    return {
+      id,
+      label: describeShortcut(shortcut),
+      aria: !shortcut.modifiers.length && choice && 'aria' in choice ? choice.aria : undefined,
+      selected: shortcuts.some(item => shortcutId(item) === id),
+      shortcut,
+    };
+  });
 
   const changeKeyboardMode = (next: SoftKeyboardMode) => {
     if (mode === next) return;
@@ -426,12 +442,8 @@ export function SoftKeyboardBar({
           </button>
           {settingsOpen && <SoftShortcutSettings
             locale={locale}
-            modifiers={shortcutModifiers}
-            keys={shortcutChoices}
-            shortcuts={shortcuts}
-            describe={describeShortcut}
-            onAdd={shortcut => saveShortcuts([...shortcuts, shortcut])}
-            onRemove={removeShortcut}
+            options={shortcutOptions}
+            onToggle={toggleShortcut}
             onClose={() => setSettingsOpen(false)}
           />}
         </div>
