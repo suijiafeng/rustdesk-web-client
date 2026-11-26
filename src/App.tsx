@@ -23,6 +23,7 @@ import {
   type SavedDevice,
 } from './lib/devices';
 import {
+  normalizeDisplayPrefs,
   persistDisplayPrefs,
   type DisplayPrefs,
 } from './lib/displayPrefs';
@@ -581,6 +582,12 @@ export default function App() {
     [box.w, box.h, remoteW, remoteH, send],
   );
 
+  const handleResetDefaults = useCallback(() => {
+    const defaults = normalizeDisplayPrefs(null, isTouchLayout);
+    handleUpdateDisplayPrefs(defaults);
+    preferences.setTouchMode(isCoarseDevice);
+  }, [handleUpdateDisplayPrefs, isTouchLayout, isCoarseDevice, preferences.setTouchMode]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -631,7 +638,7 @@ export default function App() {
         pointer={pointer}
         gateway={gateway}
         clipboard={clipboard}
-        connection={{ phase, detail, connectionError, peer, password, setPassword, authRequired, handleSelectDevice, handleUpdateDisplayPrefs }}
+        connection={{ phase, detail, connectionError, peer, password, setPassword, authRequired, handleSelectDevice, handleUpdateDisplayPrefs, handleResetDefaults }}
         controls={{ send, display, setDisplay, resolutionOptions, quality, setQuality, targetFps, setTargetFps,
           privacyEnabled, privacyPending, setPrivacyPending, clipboardSync, clipboardAllowed, toggleClipboardSync,
           audioEnabled, toggleAudio, showCtrlAltDel }}

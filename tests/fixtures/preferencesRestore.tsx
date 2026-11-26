@@ -24,11 +24,11 @@ function Fixture() {
   } });
   useEffect(() => { result.status = 'passed'; }, []);
   return <>
-    <GeneralSettings locale="en" localePreference="en" theme={prefs.theme} touchMode={prefs.touchMode}
-      onChangeTheme={prefs.changeTheme} onChangeLocale={prefs.changeLocale}
-      onToggleTouchMode={() => prefs.setTouchMode(previous => !previous)} />
-    <DisplaySettings locale="en" displayPrefs={prefs.displayPrefs} diagnosticsOpen={false}
-      onUpdateDisplayPrefs={updateDisplay} onToggleDiagnostics={() => {}} />
+    <GeneralSettings locale="en" localePreference="en" theme={prefs.theme}
+      onChangeTheme={prefs.changeTheme} onChangeLocale={prefs.changeLocale} />
+    <DisplaySettings locale="en" displayPrefs={prefs.displayPrefs} touchMode={prefs.touchMode}
+      diagnosticsOpen={false} onUpdateDisplayPrefs={updateDisplay}
+      onToggleTouchMode={() => prefs.setTouchMode(previous => !previous)} onToggleDiagnostics={() => {}} />
   </>;
 }
 createRoot(mount).render(<Fixture />);

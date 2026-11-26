@@ -4,8 +4,8 @@ import {
   Clock,
   LayoutGrid,
   List,
-  MoreVertical,
   Search,
+  Settings,
   Star,
   X,
 } from 'lucide-react';
@@ -64,6 +64,8 @@ interface RustDeskShellProps {
   onChangeField: (field: ConnectionField, value: string) => void;
   onChangeForceRelay: (checked: boolean) => void;
   onClearSavedPassword: (deviceKey: string) => void;
+  onClearAllSavedPasswords?: () => void;
+  onResetDefaults?: () => void;
   onSelectDevice: (device: SavedDevice) => void;
   onToggleFavorite: (key: string) => void;
   onRemoveDevice: (key: string) => void;
@@ -114,6 +116,8 @@ export function RustDeskShell({
   onChangeField,
   onChangeForceRelay,
   onClearSavedPassword,
+  onClearAllSavedPasswords,
+  onResetDefaults,
   onSelectDevice,
   onToggleFavorite,
   onRemoveDevice,
@@ -221,11 +225,16 @@ export function RustDeskShell({
         directIpEnabled={directIpEnabled}
         webRtcOptIn={webRtcOptIn}
         idServer={idServer}
+        relayServer={relayServer}
+        serverKey={serverKey}
+        forceRelay={forceRelay}
         gatewayToken={savedGatewayToken}
         gatewayTokenReadFailed={gatewayTokenReadFailed}
         onSaveGatewayToken={onSaveGatewayToken}
         touchMode={touchMode}
         diagnosticsOpen={diagnosticsOpen}
+        savedPasswordCount={Object.keys(savedPasswords).length}
+        modalOpen={serverDialogOpen}
         onChangeSection={setSettingsSection}
         onChangeLocale={onChangeLocale}
         onChangeTheme={onChangeTheme}
@@ -235,6 +244,8 @@ export function RustDeskShell({
         onToggleTouchMode={onToggleTouchMode}
         onToggleDiagnostics={onToggleDiagnostics}
         onOpenServerDialog={() => openNetworkServerSetup()}
+        onClearAllSavedPasswords={onClearAllSavedPasswords}
+        onResetDefaults={onResetDefaults}
         onBack={() => {
           closeServerDialog();
           setSettingsOpen(false);
@@ -245,6 +256,7 @@ export function RustDeskShell({
     );
   }
 
+  const trimmedIdServer = idServer.trim();
 
   return (
     <div
@@ -253,7 +265,7 @@ export function RustDeskShell({
       onPointerDown={(e) => e.stopPropagation()}
     >
         <header className="rd-mobile-topbar" data-testid="main-topbar">
-          <div className="w-20 flex items-center justify-start">
+          <div className="flex items-center gap-1.5 min-w-0">
             {isLive && (
               <button
                 type="button"
@@ -266,13 +278,26 @@ export function RustDeskShell({
                 <X size={20} />
               </button>
             )}
+            <h1 className="text-[17px] font-semibold text-[var(--rd-topbar-ink)] m-0 tracking-[0.01em] truncate pl-1.5">
+              RustDesk Web
+            </h1>
           </div>
 
-          <h1 className="text-[18px] font-semibold text-[var(--rd-topbar-ink)] m-0 tracking-[0.01em] truncate">
-            RustDesk Web
-          </h1>
-
-          <div className="w-20 flex items-center justify-end gap-0.5">
+          <div className="flex items-center justify-end gap-1.5 shrink-0">
+            <button
+              type="button"
+              className={`rd-topbar-server-btn${trimmedIdServer ? ' configured' : ''}`}
+              data-testid="topbar-server-status"
+              aria-label={t(locale, 'idRelayServerTitle')}
+              data-tooltip={t(locale, 'idRelayServerTitle')}
+              data-tooltip-pos="bottom-end"
+              onClick={() => openNetworkServerSetup(false)}
+            >
+              <span className="rd-topbar-dot" aria-hidden="true" />
+              <span className={`truncate${trimmedIdServer ? ' font-mono-tabular' : ''}`}>
+                {trimmedIdServer || t(locale, 'serverUnconfiguredShort')}
+              </span>
+            </button>
 
             <button
               type="button"
@@ -283,7 +308,7 @@ export function RustDeskShell({
               data-tooltip-pos="bottom-end"
               onClick={() => setSettingsOpen(true)}
             >
-              <MoreVertical size={20} />
+              <Settings size={20} />
             </button>
           </div>
         </header>

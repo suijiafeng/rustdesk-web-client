@@ -44,6 +44,7 @@ interface SessionPanelsProps {
     authRequired: boolean;
     handleSelectDevice: (device: SavedDevice) => void;
     handleUpdateDisplayPrefs: (patch: Partial<DisplayPrefs>) => void;
+    handleResetDefaults: () => void;
   };
   controls: {
     send: (message: ClientMessage) => void;
@@ -121,14 +122,14 @@ export function SessionPanels({
     savedGatewayToken, gatewayToken, gatewayTokenReady, gatewayTokenRejected,
     gatewayTokenReadFailed, saveGatewayToken, devices, savedPasswords, passwordsReady,
     passwordStorageFailed, setPasswordStorageFailed, handleClearSavedPassword,
-    handleToggleFavorite, handleRemoveDevice,
+    handleClearAllSavedPasswords, handleToggleFavorite, handleRemoveDevice,
   } = savedDevices;
   const { pageZoomed, resetPageZoom, box, viewMode, setViewMode, setPan, setZoom, remoteW, remoteH, keyboardLayout, visibleViewport } = viewport;
   const { statsStore, decoderError } = video;
   const { sendText, sendChord, handleQuickKey } = keyboard;
   const { touchMode, handleToggleTouchMode } = pointer;
   const { connectSession, disconnect, requestRestart, handleDismissError, codecSupport } = gateway;
-  const { phase, detail, connectionError, peer, password, setPassword, authRequired, handleSelectDevice, handleUpdateDisplayPrefs } = connection;
+  const { phase, detail, connectionError, peer, password, setPassword, authRequired, handleSelectDevice, handleUpdateDisplayPrefs, handleResetDefaults } = connection;
   const {
     send, display, setDisplay, resolutionOptions, quality, setQuality, targetFps, setTargetFps,
     privacyEnabled, privacyPending, setPrivacyPending, clipboardSync, clipboardAllowed,
@@ -319,6 +320,8 @@ export function SessionPanels({
           }}
           onChangeForceRelay={setForceRelay}
           onClearSavedPassword={handleClearSavedPassword}
+          onClearAllSavedPasswords={handleClearAllSavedPasswords}
+          onResetDefaults={handleResetDefaults}
           onSelectDevice={handleSelectDevice}
           onToggleFavorite={handleToggleFavorite}
           onRemoveDevice={handleRemoveDevice}

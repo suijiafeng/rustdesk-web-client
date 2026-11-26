@@ -1,7 +1,8 @@
 import type React from 'react';
+import { useEffect } from 'react';
 import { ArrowLeft, Info, Link2, Monitor, Settings } from 'lucide-react';
 import { t } from '../../lib/i18n';
-import { AboutSettings, useDetectedCodecs } from './AboutSettings';
+import { AboutSettings, useProbedCodecSupport } from './AboutSettings';
 import { DisplaySettings } from './DisplaySettings';
 import { GeneralSettings } from './GeneralSettings';
 import { NetworkSettings } from './NetworkSettings';
@@ -10,9 +11,28 @@ import type { SettingsSection, SettingsViewProps } from './types';
 export type { SettingsSection } from './types';
 
 export function SettingsView(props: SettingsViewProps) {
-  const { locale, section, onChangeSection, onOpenServerDialog, onBack } =
-    props;
-  const detectedCodecs = useDetectedCodecs();
+  const { locale, section, modalOpen = false, onChangeSection, onOpenServerDialog, onBack } = props;
+  const codecSupport = useProbedCodecSupport();
+
+  useEffect(() => {
+    if (modalOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.isComposing) return;
+      if (document.querySelector('dialog[open], [role="listbox"]')) return;
+      const active = document.activeElement;
+      if (
+        active instanceof HTMLInputElement ||
+        active instanceof HTMLTextAreaElement ||
+        active instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+      event.preventDefault();
+      onBack();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [modalOpen, onBack]);
 
   const navItems: ReadonlyArray<{
     id: SettingsSection;
@@ -24,6 +44,8 @@ export function SettingsView(props: SettingsViewProps) {
     { id: 'display', label: t(locale, 'settingsDisplay'), icon: <Monitor size={17} className="shrink-0" /> },
     { id: 'about', label: t(locale, 'settingsAbout'), icon: <Info size={17} className="shrink-0" /> },
   ];
+
+  const activeNav = navItems.find((item) => item.id === section) ?? navItems[0];
 
   return (
     <div
@@ -66,15 +88,18 @@ export function SettingsView(props: SettingsViewProps) {
 
       <main className="rd-settings-main" key={section}>
         <div className="rd-settings-content-inner">
+          <h2 className="rd-settings-section-heading">{activeNav.label}</h2>
+
           {section === 'general' && (
             <GeneralSettings
               locale={props.locale}
               localePreference={props.localePreference}
               theme={props.theme}
-              touchMode={props.touchMode}
+              savedPasswordCount={props.savedPasswordCount}
               onChangeTheme={props.onChangeTheme}
               onChangeLocale={props.onChangeLocale}
-              onToggleTouchMode={props.onToggleTouchMode}
+              onClearAllSavedPasswords={props.onClearAllSavedPasswords}
+              onResetDefaults={props.onResetDefaults}
             />
           )}
 
@@ -82,6 +107,9 @@ export function SettingsView(props: SettingsViewProps) {
             <NetworkSettings
               locale={props.locale}
               idServer={props.idServer}
+              relayServer={props.relayServer}
+              serverKey={props.serverKey}
+              forceRelay={props.forceRelay}
               directIpEnabled={props.directIpEnabled}
               webRtcOptIn={props.webRtcOptIn}
               gatewayToken={props.gatewayToken}
@@ -97,18 +125,21 @@ export function SettingsView(props: SettingsViewProps) {
             <DisplaySettings
               locale={props.locale}
               displayPrefs={props.displayPrefs}
+              touchMode={props.touchMode}
               diagnosticsOpen={props.diagnosticsOpen}
+              codecSupport={codecSupport}
               onUpdateDisplayPrefs={props.onUpdateDisplayPrefs}
+              onToggleTouchMode={props.onToggleTouchMode}
               onToggleDiagnostics={props.onToggleDiagnostics}
             />
           )}
 
           {section === 'about' && (
-            <AboutSettings locale={props.locale} detectedCodecs={detectedCodecs} />
+            <AboutSettings locale={props.locale} codecSupport={codecSupport} />
           )}
         </div>
       </main>
-
     </div>
   );
 }
+

@@ -7,6 +7,7 @@ import {
   type SavedDevice,
 } from '../lib/devices';
 import {
+  clearAllDevicePasswords,
   clearLegacyPasswordStorage,
   restoreDevicePasswords,
   restoreGatewayToken,
@@ -133,6 +134,17 @@ export function useSavedDevices() {
     }
   }, []);
 
+  const handleClearAllSavedPasswords = useCallback(() => {
+    passwordMutation.current++;
+    passwordWrites.current.clear();
+    setSavedPasswords({});
+    try {
+      clearAllDevicePasswords();
+    } catch {
+      setPasswordStorageFailed(true);
+    }
+  }, []);
+
   const rememberDevicePassword = useCallback((key: string, password: string) => {
     const write = Symbol();
     passwordMutation.current++;
@@ -167,6 +179,7 @@ export function useSavedDevices() {
     passwordStorageFailed,
     setPasswordStorageFailed,
     handleClearSavedPassword,
+    handleClearAllSavedPasswords,
     rememberDevicePassword,
     handleToggleFavorite,
     handleRemoveDevice,

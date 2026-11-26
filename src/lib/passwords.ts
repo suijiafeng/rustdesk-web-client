@@ -175,3 +175,23 @@ export async function persistGatewayToken(token: string): Promise<void> {
 export function forgetDevicePassword(deviceKey: string) {
   window.localStorage.removeItem(PASSWORD_STORAGE_PREFIX + deviceKey);
 }
+
+export function clearAllDevicePasswords(): void {
+  try {
+    const keys = Object.keys(window.localStorage).filter((key) =>
+      key.startsWith(PASSWORD_STORAGE_PREFIX),
+    );
+    for (const key of keys) {
+      window.localStorage.removeItem(key);
+    }
+  } catch {
+    // Ignore storage access errors in restricted environments.
+  }
+  clearLegacyPasswordStorage();
+  try {
+    window.sessionStorage.removeItem(SESSION_KEY);
+  } catch {
+    // Session storage may be disabled.
+  }
+}
+

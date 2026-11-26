@@ -13,11 +13,16 @@ export interface SettingsViewProps {
   directIpEnabled: boolean;
   webRtcOptIn: boolean;
   idServer: string;
+  relayServer?: string;
+  serverKey?: string;
+  forceRelay?: boolean;
   gatewayToken: string;
   gatewayTokenReadFailed: boolean;
   onSaveGatewayToken: (value: string) => Promise<boolean>;
   touchMode: boolean;
   diagnosticsOpen: boolean;
+  savedPasswordCount?: number;
+  modalOpen?: boolean;
   onChangeSection: (next: SettingsSection) => void;
   onChangeLocale: (next: LocalePreference) => void;
   onChangeTheme: (next: ThemePreference) => void;
@@ -27,6 +32,8 @@ export interface SettingsViewProps {
   onToggleTouchMode: () => void;
   onToggleDiagnostics: () => void;
   onOpenServerDialog: () => void;
+  onClearAllSavedPasswords?: () => void;
+  onResetDefaults?: () => void;
   onBack: () => void;
 }
 

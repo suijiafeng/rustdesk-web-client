@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  getSavedPassword,
+  PASSWORD_STORAGE_PREFIX,
+  clearAllDevicePasswords,
   clearLegacyPasswordStorage,
+  getSavedPassword,
   removeSavedPassword,
   setSavedPassword,
 } from './passwords';
@@ -20,6 +22,38 @@ test('clears only the old password storage entries', () => {
   try {
     clearLegacyPasswordStorage();
     assert.deepEqual([...storage.keys()], ['rd_web_prefs']);
+  } finally {
+    Reflect.deleteProperty(globalThis, 'window');
+  }
+});
+
+test('clearAllDevicePasswords removes all saved device password entries without touching prefs or gateway token', () => {
+  const localObj: Record<string, string> = {
+    [`${PASSWORD_STORAGE_PREFIX}id:123456789`]: '{"iv":"a","data":"b"}',
+    [`${PASSWORD_STORAGE_PREFIX}direct:10.0.0.1:21118`]: '{"iv":"c","data":"d"}',
+    rd_web_saved_passwords: 'legacy',
+    rd_web_remember_password: '1',
+    rd_web_prefs: '{"peerId":"123456789"}',
+    rd_web_gateway_token_v1: '{"iv":"t","data":"k"}',
+  };
+  const sessionRemoved: string[] = [];
+  const localStorage = new Proxy(localObj, {
+    get(target, prop) {
+      if (prop === 'removeItem') return (k: string) => { delete target[k]; };
+      return target[prop as string];
+    },
+  });
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: {
+      localStorage,
+      sessionStorage: { removeItem: (k: string) => sessionRemoved.push(k) },
+    },
+  });
+  try {
+    clearAllDevicePasswords();
+    assert.deepEqual(Object.keys(localObj).sort(), ['rd_web_gateway_token_v1', 'rd_web_prefs']);
+    assert.deepEqual(sessionRemoved, ['rd_web_session_credentials_v1']);
   } finally {
     Reflect.deleteProperty(globalThis, 'window');
   }
