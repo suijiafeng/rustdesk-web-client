@@ -77,12 +77,10 @@ interface RustDeskShellProps {
   diagnosticsOpen: boolean;
   devices: SavedDevice[];
   savedPasswords: SavedPasswordMap;
-  rememberPassword: boolean;
   onChangeMode: (mode: ConnectionMode) => void;
   onToggleDirectIp: () => void;
   onChangeField: (field: ConnectionField, value: string) => void;
   onChangeForceRelay: (checked: boolean) => void;
-  onChangeRememberPassword: (checked: boolean) => void;
   onClearSavedPassword: (deviceKey: string) => void;
   onSelectDevice: (device: SavedDevice) => void;
   onToggleFavorite: (key: string) => void;
@@ -123,12 +121,10 @@ export function RustDeskShell({
   diagnosticsOpen,
   devices,
   savedPasswords,
-  rememberPassword,
   onChangeMode,
   onToggleDirectIp,
   onChangeField,
   onChangeForceRelay,
-  onChangeRememberPassword,
   onClearSavedPassword,
   onSelectDevice,
   onToggleFavorite,
@@ -155,6 +151,7 @@ export function RustDeskShell({
 
   const [heroInputError, setHeroInputError] = useState(false);
   const [heroErrorShake, setHeroErrorShake] = useState(false);
+  const [rememberPassword, setRememberPassword] = useState(false);
   const [passwordPromptOpen, setPasswordPromptOpen] = useState(false);
   const [pendingMode, setPendingMode] = useState<ConnectionMode>(mode);
 
@@ -260,17 +257,16 @@ export function RustDeskShell({
     setPendingMode(activeMode);
 
     const key = deviceKeyFor({ mode: activeMode, peerId, host, port });
-    const saved = rememberPassword ? getSavedPassword(savedPasswords, key) : '';
+    const saved = getSavedPassword(savedPasswords, key);
     const needsTokenPrompt = authRequired && !gatewayToken.trim();
     if (saved && !needsTokenPrompt && phase !== 'error') {
       onChangeField('password', saved);
-      onConnect({ mode: activeMode, password: saved, remember: rememberPassword });
+      onConnect({ mode: activeMode, password: saved, remember: true });
       return;
     }
 
-    if (saved) {
-      onChangeField('password', saved);
-    }
+    onChangeField('password', saved);
+    setRememberPassword(Boolean(saved));
     setPasswordPromptOpen(true);
   };
 
@@ -284,7 +280,7 @@ export function RustDeskShell({
     setPendingMode(device.mode);
 
     const key = deviceKeyFor(device);
-    const saved = rememberPassword ? getSavedPassword(savedPasswords, key) : '';
+    const saved = getSavedPassword(savedPasswords, key);
     const needsTokenPrompt = authRequired && !gatewayToken.trim();
     if (saved && !needsTokenPrompt) {
       onChangeField('password', saved);
@@ -298,12 +294,13 @@ export function RustDeskShell({
         host: device.host,
         port: device.port || '21118',
         password: saved,
-        remember: rememberPassword,
+        remember: true,
       });
       return;
     }
 
     onChangeField('password', saved);
+    setRememberPassword(Boolean(saved));
     setPasswordPromptOpen(true);
   };
 
@@ -789,9 +786,10 @@ export function RustDeskShell({
           authRequired={authRequired}
           isConnecting={isConnecting}
           onChangePassword={(val) => onChangeField('password', val)}
-          onChangeRememberPassword={onChangeRememberPassword}
+          onChangeRememberPassword={setRememberPassword}
           onClearSavedPassword={() => {
             onClearSavedPassword(pendingDeviceKey);
+            setRememberPassword(false);
             onChangeField('password', '');
           }}
           onChangeGatewayToken={(val) => onChangeField('gatewayToken', val)}

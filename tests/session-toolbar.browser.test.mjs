@@ -27,7 +27,7 @@ const cdp = (method, params = {}) => new Promise((resolve, reject) => {
   socket.send(JSON.stringify({ id, method, params }));
 });
 async function evaluate(expression) {
-  const result = await cdp('Runtime.evaluate', { expression, returnByValue: true });
+  const result = await cdp('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
   if (result.exceptionDetails) throw Error(JSON.stringify(result.exceptionDetails));
   return result.result.value;
 }
@@ -64,7 +64,9 @@ async function tapElement(el) {
   await tap(point.x, point.y);
 }
 const sent = () => evaluate("window.sent.filter(e => e.type === 'mouse' || e.type === 'quality')");
-const mock = `if (location.protocol === 'http:') localStorage.setItem("rd_web_prefs", JSON.stringify({ idServer: "localhost", peerId: "123456789" }));
+const mock = `if (location.protocol === 'http:') localStorage.setItem("rd_web_prefs", JSON.stringify({
+  idServer: "localhost", peerId: new URLSearchParams(location.search).get('peer') ?? "123456789",
+}));
 window.sent = [];
 const BrowserSocket = window.WebSocket;
 window.WebSocket = class extends EventTarget {
@@ -83,6 +85,10 @@ window.WebSocket = class extends EventTarget {
       gatewayVideo: { queuedBytes: 131072, droppedFrames: 42, recovering: true },
     }) }), 10);
     if (message.type === 'connect') setTimeout(() => {
+      if (new URLSearchParams(location.search).has('requireToken')) {
+        this.onmessage?.({ data: JSON.stringify({ type: 'status', state: 'error', detail: 'gateway token required' }) });
+        return;
+      }
       for (const reply of [
         { type: 'peer', platform: new URLSearchParams(location.search).get('platform') ?? 'Windows',
           hostname: 'Test host', currentDisplay: 0, displays: [], privacyAllowed: true },
@@ -267,7 +273,7 @@ try {
   assert.equal(await evaluate(`${operationRow}.getBoundingClientRect().top - ${functionRow}.getBoundingClientRect().bottom`), 4);
   assert.equal(await evaluate(`getComputedStyle(${functionRow}).backgroundColor`), 'rgba(0, 0, 0, 0)');
   await until(`getComputedStyle(${select('soft-mod-ctrl')}).borderColor === 'rgb(100, 117, 138)'`);
-  assert.equal(await css(select('soft-mod-ctrl'), 'backgroundColor'), 'rgb(48, 53, 60)');
+  await until(`getComputedStyle(${select('soft-mod-ctrl')}).backgroundColor === 'rgb(48, 53, 60)'`);
   assert.equal(await css(select('soft-shortcut-toggle'), 'backgroundColor'), 'rgb(48, 53, 60)');
   assert.ok(await evaluate(`Math.abs(${operationRow}.getBoundingClientRect().bottom - window.visualViewport.height) < 1`));
   assert.match(await switchLabel(), /切到电脑键盘|Switch to computer keyboard/);
@@ -322,7 +328,7 @@ try {
   await until(`getComputedStyle(${ctrl}).backgroundColor === 'rgb(229, 240, 255)'`);
   await setSystemTheme('dark');
   await until(`getComputedStyle(${ctrl}).borderColor === 'rgb(157, 189, 224)'`);
-  assert.equal(await css(ctrl, 'backgroundColor'), 'rgb(48, 72, 99)');
+  await until(`getComputedStyle(${ctrl}).backgroundColor === 'rgb(48, 72, 99)'`);
   await tapElement(select('soft-mod-shift'));
   await tapElement(`${virtualKeyboard}.querySelector('[data-key="Enter"]')`);
   await tapElement(`${virtualKeyboard}.querySelector('[data-key="Shift"]')`);
@@ -499,6 +505,77 @@ try {
   await until(shortcutOption(':PageDown'));
   await evaluate(settingsButton + '.click()');
   await evaluate(select('soft-hide') + '.click()');
+  const credentialPrefix = 'rd_web_device_password_v1:id:';
+  const rememberedPeers = ['901234567', '901234568'];
+  const samplePassword = 'example-test-password';
+  async function openPeer(peer, requireToken = false) {
+    const url = new URL(appUrl);
+    url.searchParams.set('peer', peer);
+    if (requireToken) url.searchParams.set('requireToken', '1');
+    await cdp('Page.navigate', { url: url.href });
+    await until(`window.sent && ${select('peer-id')}?.value.replace(/\\s/g, '') === '${peer}'`);
+    await evaluate(select('connect') + '.click()');
+  }
+  for (const peer of rememberedPeers) {
+    const storageKey = JSON.stringify(credentialPrefix + peer);
+    await evaluate(`localStorage.removeItem(${storageKey})`);
+    await openPeer(peer);
+    await until(select('password-confirm-connect'));
+    await evaluate(select('password') + '.focus()');
+    await cdp('Input.insertText', { text: samplePassword });
+    await evaluate(select('remember-password') + '.click()');
+    await evaluate(select('password-confirm-connect') + '.click()');
+    await until(`localStorage.getItem(${storageKey})`);
+    const payload = JSON.parse(await evaluate(`localStorage.getItem(${storageKey})`));
+    assert.ok(payload.iv && payload.data);
+    assert.ok(!JSON.stringify(payload).includes(samplePassword));
+  }
+  const [firstPeer, secondPeer] = rememberedPeers;
+  await evaluate('sessionStorage.clear()');
+  await openPeer(firstPeer, true);
+  await until("window.sent.some(event => event.type === 'connect')");
+  assert.equal(await evaluate("window.sent.find(event => event.type === 'connect').password"), samplePassword);
+  await until(select('connect'));
+  await evaluate(select('connect') + '.click()');
+  await until(select('clear-saved-password'));
+  assert.equal(await evaluate(select('password') + '.value'), samplePassword);
+  await evaluate(select('clear-saved-password') + '.click()');
+  assert.equal(await evaluate(`localStorage.getItem('${credentialPrefix + firstPeer}')`), null);
+  assert.ok(await evaluate(`localStorage.getItem('${credentialPrefix + secondPeer}')`));
+  await openPeer(firstPeer);
+  await until(select('password-confirm-connect'));
+  assert.equal(await evaluate(select('password') + '.value'), '');
+  await openPeer(secondPeer);
+  await until("window.sent.some(event => event.type === 'connect')");
+  assert.equal(await evaluate("window.sent.find(event => event.type === 'connect').password"), samplePassword);
+  await evaluate(`localStorage.removeItem('${credentialPrefix + secondPeer}')`);
+  const legacyPeer = '901234569';
+  const legacyKey = 'rd_web_session_credentials_v1';
+  await evaluate(`(async () => {
+    const key = await new Promise((resolve, reject) => {
+      const open = indexedDB.open('rd_web_keys', 1);
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        const db = open.result;
+        const read = db.transaction('keys').objectStore('keys').get('tab-passwords');
+        read.onsuccess = () => { db.close(); resolve(read.result); };
+        read.onerror = () => { db.close(); reject(read.error); };
+      };
+    });
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key,
+      new TextEncoder().encode(JSON.stringify({ 'id:${legacyPeer}': '${samplePassword}' })));
+    const base64 = bytes => btoa(String.fromCharCode(...bytes));
+    sessionStorage.setItem('${legacyKey}', JSON.stringify({ iv: base64(iv), data: base64(new Uint8Array(data)) }));
+  })()`);
+  assert.ok(await evaluate(`sessionStorage.getItem('${legacyKey}')`));
+  await openPeer(legacyPeer);
+  await until("window.sent.some(event => event.type === 'connect')");
+  assert.equal(await evaluate("window.sent.find(event => event.type === 'connect').password"), samplePassword);
+  assert.ok(await evaluate(`localStorage.getItem('${credentialPrefix + legacyPeer}')`));
+  assert.equal(await evaluate(`sessionStorage.getItem('${legacyKey}')`), null);
+  await evaluate(`localStorage.removeItem('${credentialPrefix + legacyPeer}')`);
+  console.log('Remembered passwords: encrypted per device, restored without session storage, migrated, and cleared independently.');
 } finally {
   socket.close();
   const closed = await fetch(`${debuggerUrl}/json/close/${tab.id}`);

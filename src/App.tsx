@@ -30,7 +30,10 @@ import {
 } from './lib/devices';
 import {
   clearLegacyPasswordStorage,
-  restoreTabPasswords, persistTabPasswords, forgetTabPasswords,
+  restoreDevicePasswords,
+  persistDevicePassword,
+  forgetDevicePassword,
+  PASSWORD_STORAGE_PREFIX,
   removeSavedPassword,
   setSavedPassword,
   type SavedPasswordMap,
@@ -261,38 +264,73 @@ export default function App() {
   }, []);
 
   const [savedPasswords, setSavedPasswords] = useState<SavedPasswordMap>({});
-  const [rememberPassword, setRememberPassword] = useState(false);
-
+  const passwordWrites = useRef(new Map<string, symbol>());
+  const passwordMutation = useRef(0);
   const [passwordsReady, setPasswordsReady] = useState(false);
   const [passwordStorageFailed, setPasswordStorageFailed] = useState(false);
   useEffect(() => {
     let active = true;
-    clearLegacyPasswordStorage();
-    void restoreTabPasswords().then(saved => {
-      if (active && saved) {
-        setSavedPasswords(saved);
-        setRememberPassword(true);
+    let revision = 0;
+    const restore = async () => {
+      const current = ++revision;
+      const mutation = passwordMutation.current;
+      try {
+        const saved = await restoreDevicePasswords();
+        if (active && current === revision && passwordMutation.current !== mutation) {
+          void restore();
+          return;
+        }
+        if (active && current === revision) setSavedPasswords(previous => {
+          for (const key of passwordWrites.current.keys()) {
+            if (previous[key]) saved[key] = previous[key];
+            else delete saved[key];
+          }
+          return saved;
+        });
+      } catch {
+        if (active && current === revision) setPasswordStorageFailed(true);
+      } finally {
+        if (active && current === revision) setPasswordsReady(true);
       }
-    }).catch(() => {
-      if (active) { forgetTabPasswords(); setPasswordStorageFailed(true); }
-    }).finally(() => { if (active) setPasswordsReady(true); });
-    return () => { active = false; };
+    };
+    const storageChanged = (event: StorageEvent) => {
+      if (event.key === null || event.key.startsWith(PASSWORD_STORAGE_PREFIX)) void restore();
+    };
+    clearLegacyPasswordStorage();
+    void restore();
+    window.addEventListener('storage', storageChanged);
+    return () => {
+      active = false;
+      window.removeEventListener('storage', storageChanged);
+    };
   }, []);
 
-  useEffect(() => {
-    if (!passwordsReady || !rememberPassword) return;
-    let active = true;
-    void persistTabPasswords(savedPasswords, () => active).catch(() => {
-      if (active) { forgetTabPasswords(); setPasswordStorageFailed(true); }
+  const handleClearSavedPassword = useCallback((key: string) => {
+    passwordMutation.current++;
+    passwordWrites.current.delete(key);
+    setSavedPasswords(previous => removeSavedPassword(previous, key));
+    try {
+      forgetDevicePassword(key);
+    } catch {
+      setPasswordStorageFailed(true);
+    }
+  }, []);
+
+  const rememberDevicePassword = useCallback((key: string, password: string) => {
+    const write = Symbol();
+    passwordMutation.current++;
+    passwordWrites.current.set(key, write);
+    setSavedPasswords(previous => setSavedPassword(previous, key, password));
+    const current = () => passwordWrites.current.get(key) === write;
+    void persistDevicePassword(key, password, current).catch(() => {
+      if (current()) setPasswordStorageFailed(true);
+    }).finally(() => {
+      if (current()) {
+        passwordWrites.current.delete(key);
+        passwordMutation.current++;
+      }
     });
-    return () => { active = false; };
-  }, [passwordsReady, rememberPassword, savedPasswords]);
-
-
-  const handleRememberPasswordChange = (enabled: boolean) => {
-    setRememberPassword(enabled);
-    if (!enabled) { forgetTabPasswords(); setSavedPasswords({}); }
-  };
+  }, []);
 
   const handleToggleFavorite = useCallback((key: string) => {
     setDevices((prev) => toggleFavoriteDevice(prev, key));
@@ -300,12 +338,8 @@ export default function App() {
 
   const handleRemoveDevice = useCallback((key: string) => {
     setDevices((prev) => removeDevice(prev, key));
-    setSavedPasswords((prev) => removeSavedPassword(prev, key));
-  }, []);
-
-  const handleClearSavedPassword = useCallback((key: string) => {
-    setSavedPasswords((prev) => removeSavedPassword(prev, key));
-  }, []);
+    handleClearSavedPassword(key);
+  }, [handleClearSavedPassword]);
 
   // Bilingual UI locale preference ('default' follows browser language, or explicit 'zh'/'en')
   const [localePreference, setLocalePreference] = useState<LocalePreference>(() => {
@@ -1136,7 +1170,7 @@ export default function App() {
       const targetPortStr = String(req?.port ?? port).trim() || '21118';
       const targetPort = Number(targetPortStr) || 21118;
       const targetPassword = req?.password ?? password;
-      const shouldRemember = req?.remember ?? rememberPassword;
+      const shouldRemember = req?.remember ?? false;
       const targetDeviceKey = deviceKeyFor({
         mode: activeMode,
         peerId: targetPeerId,
@@ -1319,9 +1353,9 @@ export default function App() {
                 msg.detail === 'encrypted' ? 'detailEncryptedSession' : 'linkPlain',
               );
               if (shouldRemember && targetPassword) {
-                setSavedPasswords((prev) => setSavedPassword(prev, targetDeviceKey, targetPassword));
+                rememberDevicePassword(targetDeviceKey, targetPassword);
               } else if (!shouldRemember) {
-                setSavedPasswords((prev) => removeSavedPassword(prev, targetDeviceKey));
+                handleClearSavedPassword(targetDeviceKey);
               }
               focusDesktopCapture();
             } else if (msg.state === 'connecting') {
@@ -1341,7 +1375,7 @@ export default function App() {
               setMenuOpen(false);
               if (msg.detail && /password/i.test(msg.detail)) {
                 // Clear stale remembered password so the next attempt prompts cleanly
-                setSavedPasswords((prev) => removeSavedPassword(prev, targetDeviceKey));
+                handleClearSavedPassword(targetDeviceKey);
               }
               if (msg.detail && /token/i.test(msg.detail)) {
                 setAuthRequired(true);
@@ -1550,7 +1584,8 @@ export default function App() {
       host,
       port,
       password,
-      rememberPassword,
+      rememberDevicePassword,
+      handleClearSavedPassword,
       peerId,
       idServer,
       relayServer,
@@ -2980,7 +3015,6 @@ export default function App() {
           diagnosticsOpen={diagnosticsOpen}
           devices={devices}
           savedPasswords={savedPasswords}
-          rememberPassword={rememberPassword}
           onChangeMode={setMode}
           onToggleDirectIp={handleToggleDirectIp}
           onChangeField={(field, val) => {
@@ -2994,7 +3028,6 @@ export default function App() {
             else if (field === 'gatewayToken') setGatewayToken(val);
           }}
           onChangeForceRelay={setForceRelay}
-          onChangeRememberPassword={handleRememberPasswordChange}
           onClearSavedPassword={handleClearSavedPassword}
           onSelectDevice={handleSelectDevice}
           onToggleFavorite={handleToggleFavorite}

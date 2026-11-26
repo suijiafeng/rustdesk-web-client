@@ -142,7 +142,7 @@ Official open-source hbbs/hbbr builds do not by themselves imply support for thi
 - Clipboard synchronization is enabled per session and supports plain UTF-8 text up to 256 KiB.
 - Remote text can only be written locally when the browser grants clipboard permission.
 - Clipboard synchronization does not run as a system-wide background service.
-- The optional remembered password is AES-256-GCM encrypted and stored in `sessionStorage`; the non-exportable key is stored in IndexedDB.
+- The optional remembered password is AES-256-GCM encrypted and stored per device in this browser’s local storage; the non-exportable key is stored in IndexedDB.
 - Device records and display settings use `localStorage`. Legacy plaintext password values are cleared on startup.
 
 Same-origin scripts can access browser storage. Client-side encryption is not a substitute for securing the web origin, browser profile, and hosting environment.
