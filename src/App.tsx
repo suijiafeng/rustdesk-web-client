@@ -1,3 +1,4 @@
+import { EMPTY_STATS, useVideoPipeline } from './hooks/useVideoPipeline';
 import type { SoftKeyboardMode } from './hooks/useKeyboardViewport';
 import { useClipboardSync } from './hooks/useClipboardSync';
 import { usePreferences } from './hooks/usePreferences';
@@ -18,9 +19,9 @@ import {
   type ConnectionPhase,
 } from './components/RustDeskShell';
 import { SessionHandle } from './components/SessionHandle';
-import { SessionMenu, type SessionStats } from './components/SessionMenu';
+import { SessionMenu } from './components/SessionMenu';
 import { SoftKeyboardBar } from './components/SoftKeyboardBar';
-import { probeCodecs, RemoteDecoder, webCodecsStatus } from './lib/decoder';
+import { probeCodecs, webCodecsStatus } from './lib/decoder';
 import {
   deviceKeyFor,
   upsertRecentDevice,
@@ -81,28 +82,7 @@ import {
   type QualityLevel,
   type ServerMessage,
 } from './lib/protocol';
-import {
-  computeFrameRates,
-  createFrameStats,
-  recordRenderedFrame,
-  recordRxFrame,
-  type FrameStatsState,
-} from './lib/stats';
-
-const EMPTY_STATS: SessionStats = {
-  codec: '—',
-  width: 0,
-  height: 0,
-  fps: 0,
-  rxFps: 0,
-  renderFps: 0,
-  decodeQueueSize: 0,
-  delayMs: 0,
-  bitrate: 0,
-  decoded: 0,
-  dropped: 0,
-  streamState: 'waiting',
-};
+import { createFrameStats } from './lib/stats';
 
 function detectCoarsePointer(): boolean {
   if (typeof window === 'undefined') return false;
@@ -113,7 +93,6 @@ function detectCoarsePointer(): boolean {
 }
 
 export default function App() {
-  const initialWebCodecs = webCodecsStatus();
   const isCoarseDevice = detectCoarsePointer();
   const {
     directIpEnabled,
@@ -198,8 +177,19 @@ export default function App() {
   const [peer, setPeer] = useState<PeerMessage | null>(null);
   const { shortcutModifier, showCtrlAltDel } = remoteKeyboardProfile(peer?.platform);
   const [display, setDisplay] = useState(0);
-  const [stats, setStats] = useState<SessionStats>(EMPTY_STATS);
-  const [decoderError, setDecoderError] = useState(initialWebCodecs.ok ? '' : initialWebCodecs.reason);
+  const wsRef = useRef<WebSocket | RemoteSocket | null>(null);
+  // Send JSON helper
+  const send = useCallback((msg: ClientMessage) => {
+    const sock = wsRef.current;
+    if (sock && sock.readyState === WebSocket.OPEN) {
+      sock.send(JSON.stringify(msg));
+    }
+  }, []);
+
+  const {
+    stats, setStats, decoderError, setDecoderError, decoderRef, sizeRef,
+    frameStatsRef, statAccRef, ensureDecoder, noteFrame,
+  } = useVideoPipeline({ phase, send });
   const [rtt, setRtt] = useState(0);
   const [gatewayVideo, setGatewayVideo] = useState<Extract<ServerMessage, { type: 'pong' }>['gatewayVideo']>();
   const [quality, setQuality] = useState<QualityLevel>(() =>
@@ -306,25 +296,11 @@ export default function App() {
   const cursorCanvasRef = useRef<HTMLCanvasElement>(null);
   const captureRef = useRef<HTMLInputElement>(null);
   const softKeyboardInputRef = useRef<HTMLInputElement>(null);
-  const wsRef = useRef<WebSocket | RemoteSocket | null>(null);
-  const decoderRef = useRef<RemoteDecoder | null>(null);
-  const sizeRef = useRef({ width: 1280, height: 720 });
   const phaseRef = useRef<ConnectionPhase>(phase);
   phaseRef.current = phase;
 
   const chromeRef = useRef({ menu: false, dialog: true });
   chromeRef.current = { menu: menuOpen, dialog: connectDialog || phase !== 'live' };
-
-  // Frame sampling-rate telemetry refs (avoiding 60Hz React setState per frame)
-  const frameStatsRef = useRef<FrameStatsState>(createFrameStats());
-  const statAccRef = useRef({
-    width: 0,
-    height: 0,
-    decoded: 0,
-    dropped: 0,
-    lastDelayMs: 0,
-    lastCodec: '—',
-  });
 
   // Mouse & touch gesture refs (unified deterministic TouchGestureState FSM)
   const cursorRef = useRef({ x: 640, y: 360 });
@@ -397,14 +373,6 @@ export default function App() {
   const remoteInput = shouldEnableRemotePointerInput(phase, connectDialog, menuOpen, isTouchLayout);
   const remoteInputRef = useRef(remoteInput);
   remoteInputRef.current = remoteInput;
-
-  // Send JSON helper
-  const send = useCallback((msg: ClientMessage) => {
-    const sock = wsRef.current;
-    if (sock && sock.readyState === WebSocket.OPEN) {
-      sock.send(JSON.stringify(msg));
-    }
-  }, []);
 
   const clipboardAllowed = phase === 'live' && peer?.clipboardAllowed !== false && !displayPrefs.disableClipboard;
   const clipboard = useClipboardSync({
@@ -724,106 +692,6 @@ export default function App() {
       openSoftKeyboard();
     }
   };
-
-  const publishStatsSnapshot = useCallback((nowMs: number) => {
-    const rates = computeFrameRates(frameStatsRef.current, nowMs);
-    const decMetrics = decoderRef.current?.getMetrics();
-    const acc = statAccRef.current;
-    const decoded = decMetrics ? decMetrics.renderedCount : acc.decoded;
-    const dropped = decMetrics ? decMetrics.droppedCount : acc.dropped;
-    const decodeQueueSize = decMetrics?.decodeQueueSize ?? 0;
-    setStats((prev) => {
-      const nextWidth = acc.width > 0 ? acc.width : prev.width;
-      const nextHeight = acc.height > 0 ? acc.height : prev.height;
-      const nextCodec = acc.lastCodec !== '—' ? acc.lastCodec : prev.codec;
-      if (
-        prev.codec === nextCodec &&
-        prev.width === nextWidth &&
-        prev.height === nextHeight &&
-        prev.fps === rates.fps &&
-        prev.rxFps === rates.rxFps &&
-        prev.renderFps === rates.renderFps &&
-        prev.decodeQueueSize === decodeQueueSize &&
-        prev.bitrate === rates.bitrate &&
-        prev.delayMs === acc.lastDelayMs &&
-        prev.decoded === decoded &&
-        prev.dropped === dropped &&
-        prev.streamState === rates.streamState
-      ) {
-        return prev;
-      }
-      return {
-        codec: nextCodec,
-        width: nextWidth,
-        height: nextHeight,
-        fps: rates.fps,
-        rxFps: rates.rxFps,
-        renderFps: rates.renderFps,
-        decodeQueueSize,
-        delayMs: acc.lastDelayMs,
-        bitrate: rates.bitrate,
-        decoded,
-        dropped,
-        streamState: rates.streamState,
-      };
-    });
-  }, []);
-
-  const ensureDecoder = useCallback(() => {
-    if (!decoderRef.current) {
-      decoderRef.current = new RemoteDecoder({
-        onOutput: (w, h, renderedCount, nowMs) => {
-          const sizeChanged = sizeRef.current.width !== w || sizeRef.current.height !== h;
-          sizeRef.current = { width: w, height: h };
-          statAccRef.current.width = w;
-          statAccRef.current.height = h;
-          statAccRef.current.decoded = renderedCount;
-          recordRenderedFrame(frameStatsRef.current, nowMs);
-          if (renderedCount === 1 || sizeChanged) {
-            publishStatsSnapshot(nowMs);
-          }
-        },
-        onError: (msg) => {
-          setDecoderError(msg);
-        },
-        onNeedRefresh: () => {
-          send({ type: 'refresh' });
-        },
-      });
-    }
-    return decoderRef.current;
-  }, [publishStatsSnapshot, send]);
-
-  const noteFrame = useCallback(
-    (codecName: string, w: number, h: number, byteLen: number, delayMs: number) => {
-      const now = performance.now();
-      const firstOrCodecChange =
-        frameStatsRef.current.totalRx === 0 ||
-        statAccRef.current.lastCodec !== codecName ||
-        (w > 0 && statAccRef.current.width !== w) ||
-        (h > 0 && statAccRef.current.height !== h);
-
-      recordRxFrame(frameStatsRef.current, now, byteLen);
-      statAccRef.current.lastCodec = codecName;
-      statAccRef.current.lastDelayMs = Math.max(0, Math.round(delayMs));
-      if (w > 0) statAccRef.current.width = w;
-      if (h > 0) statAccRef.current.height = h;
-
-      if (firstOrCodecChange) {
-        publishStatsSnapshot(now);
-      }
-    },
-    [publishStatsSnapshot],
-  );
-
-  // Publish real-time sampling FPS, bitrate, and idle-screen decay at a steady 4Hz cadence
-  useEffect(() => {
-    if (phase !== 'live') return;
-    const timer = window.setInterval(() => {
-      publishStatsSnapshot(performance.now());
-    }, 250);
-    return () => window.clearInterval(timer);
-  }, [phase, publishStatsSnapshot]);
 
   const connectSession = useCallback(
     async (req?: ConnectRequest, retry = false) => {
