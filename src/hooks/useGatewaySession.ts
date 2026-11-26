@@ -229,6 +229,7 @@ export function useGatewaySession(context: GatewaySessionContext) {
       setDecoderError('');
       setMenuOpen(false);
       setSoftKeys(false);
+      phaseRef.current = 'connecting';
       setPhase('connecting');
       setStatusDetail('detailOpeningSocket');
 
@@ -330,11 +331,13 @@ export function useGatewaySession(context: GatewaySessionContext) {
       };
 
       sock.onerror = () => {
-        if (wsRef.current !== sock || receivedTerminalError) return;
+        if (wsRef.current !== sock || receivedTerminalError || phaseRef.current === 'error') return;
+        const wasLive = phaseRef.current === 'live';
         phaseRef.current = 'error';
         setPhase('error');
         setConnectDialog(true);
-        setStatusDetail('detailGatewayError');
+        setMenuOpen(false);
+        setStatusDetail(wasLive ? 'detailSessionDisconnected' : 'detailGatewayError');
       };
 
       sock.onclose = () => {
@@ -343,11 +346,13 @@ export function useGatewaySession(context: GatewaySessionContext) {
         if (receivedTerminalError || phaseRef.current === 'error') {
           return;
         }
-        if (phaseRef.current === 'connecting') {
+        if (phaseRef.current === 'connecting' || phaseRef.current === 'live') {
+          const wasLive = phaseRef.current === 'live';
           phaseRef.current = 'error';
           setPhase('error');
           setConnectDialog(true);
-          setStatusDetail('detailGatewayClosed');
+          setMenuOpen(false);
+          setStatusDetail(wasLive ? 'detailSessionDisconnected' : 'detailGatewayClosed');
         } else {
           phaseRef.current = 'idle';
           setPhase('idle');
@@ -428,9 +433,14 @@ export function useGatewaySession(context: GatewaySessionContext) {
     setRestartState(null);
     finishPendingClick();
     clearLongPress();
-    send({ type: 'disconnect' });
+    // Native WebRTC can close synchronously while processing disconnect.
     if (wsRef.current) {
       wsRef.current.onclose = null;
+      wsRef.current.onerror = null;
+      wsRef.current.onmessage = null;
+    }
+    send({ type: 'disconnect' });
+    if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
     }
@@ -440,6 +450,7 @@ export function useGatewaySession(context: GatewaySessionContext) {
     setConnectDialog(false);
     setSoftKeys(false);
     resetDiagnostics();
+    phaseRef.current = 'idle';
     setPhase('idle');
     setStatusDetail('detailDisconnected');
   }, [clearLongPress, finishPendingClick, resetDiagnostics, send, setStatusDetail]);

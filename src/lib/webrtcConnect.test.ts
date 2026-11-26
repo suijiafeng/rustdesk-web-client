@@ -232,6 +232,10 @@ test('unsafe-eval CSP failures keep an explicit safe diagnosis and the offer pha
 for (const reason of [
   'WebRTC signaling timed out', 'That target address is not allowed.', 'key mismatch: rendezvous server key signature is invalid',
   'ID does not exist', 'remote desktop is offline', 'key mismatch', 'key overuse', 'punch hole failed',
+  'The gateway access token is missing or incorrect.', 'Too many failed attempts. Try again shortly.',
+  'That target port is not allowed.', 'Invalid identity server key',
+  'server public key must be 32 bytes of standard base64', 'WebRTC peer signature verification failed',
+  'This peer or ID server did not offer WebRTC', 'Incompatible ID server',
 ]) {
   test(`signaling retains the fixed reason: ${reason}`, async t => {
     const f = fixture(t);
@@ -241,8 +245,49 @@ for (const reason of [
     const text = errorText(f);
     assert.ok(text.startsWith(`${reason} [stage=waiting answer;`));
     assert.match(text, /signaling server error received/);
+    const shouldFallback = ['WebRTC signaling timed out', 'punch hole failed',
+      'This peer or ID server did not offer WebRTC', 'Incompatible ID server'].includes(reason);
+    assert.equal((f.failure() as Error).name, shouldFallback ? 'Error' : 'WebRtcTerminalError');
   });
 }
+
+test('an invalid signed answer is terminal before applying SDP or submitting credentials', async t => {
+  const f = fixture(t);
+  await f.openSignal();
+  f.signal.message({ type: 'answer', answer: encodeEndpoint({ type: 'answer', sdp }), signedPk: Buffer.alloc(96).toString('base64') });
+  await f.outcome;
+  assert.equal((f.failure() as Error).name, 'WebRtcTerminalError');
+  assert.match(errorText(f), /signature verification failed/);
+  assert.equal(f.pc.remoteDescriptions, 0);
+  assert.equal(f.pc.channel.sent.length, 0);
+});
+
+test('a mismatched signed peer certificate is terminal without a second transport login', async t => {
+  const f = fixture(t);
+  await f.openSignal();
+  await f.answer();
+  f.pc.channel.open();
+  const identity = IdPkProto.encode(IdPkProto.create({ id: peerId, pk: boxKey.publicKey,
+    dtls_fingerprint: fingerprint.replaceAll('A1', 'B2') })).finish();
+  f.pc.channel.receive(encodeMessage({ signed_id: { id: nacl.sign(identity, peerKey.secretKey) } }));
+  await f.outcome;
+  assert.equal((f.failure() as Error).name, 'WebRtcTerminalError');
+  assert.match(errorText(f), /certificate does not match/);
+  assert.equal(f.pc.channel.sent.length, 0);
+});
+
+test('a signed but malformed peer identity is terminal without leaking its payload', async t => {
+  const f = fixture(t);
+  await f.openSignal();
+  await f.answer();
+  f.pc.channel.open();
+  const malformedIdentity = new Uint8Array([0x0a, 0xff]);
+  f.pc.channel.receive(encodeMessage({ signed_id: { id: nacl.sign(malformedIdentity, peerKey.secretKey) } }));
+  await f.outcome;
+  assert.equal((f.failure() as Error).name, 'WebRtcTerminalError');
+  assert.match(errorText(f), /WebRTC peer identity is malformed/);
+  assert.equal(f.pc.channel.sent.length, 0);
+});
 
 test('peer identity timeout retains its phase and the original five-second deadline', async t => {
   const f = fixture(t);

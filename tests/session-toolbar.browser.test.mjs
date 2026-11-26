@@ -92,6 +92,7 @@ window.WebSocket = class extends EventTarget {
       return new BrowserSocket(url, protocols);
     }
     window.openedConnections.push(this.pathname);
+    if (this.pathname === '/ws') window.sessionSocket = this;
     this.readyState = 0;
     setTimeout(() => { this.readyState = 1; this.onopen?.(); }, 10);
   }
@@ -100,8 +101,8 @@ window.WebSocket = class extends EventTarget {
     if (this.pathname === '/ws/webrtc') {
       if (message.type === 'offer') {
         window.webRtcOffer = message;
-        window.rejectWebRtcOffer = () => this.onmessage?.({
-          data: JSON.stringify({ type: 'error', message: 'Incompatible ID server' }),
+        window.rejectWebRtcOffer = (reason = 'Incompatible ID server') => this.onmessage?.({
+          data: JSON.stringify({ type: 'error', message: reason }),
         });
       }
       return;
@@ -127,9 +128,9 @@ window.WebSocket = class extends EventTarget {
       if (webRtcTest && new URLSearchParams(location.search).has('holdGateway')) {
         window.finishGatewayConnect = connected;
       } else connected();
-    }, 10);
+    }, testParams.has('requireToken') ? 150 : 10);
   }
-  close() { this.readyState = 3; }
+  close() { this.readyState = 3; this.onclose?.(new CloseEvent('close', { code: 1000, wasClean: true })); }
 };`;
 async function connect(platform = 'Windows', diagnostics = false) {
   const url = new URL(appUrl);
@@ -585,7 +586,9 @@ try {
   await openPeer(firstPeer, true);
   await until("window.sent.some(event => event.type === 'connect')");
   assert.equal(await evaluate("window.sent.find(event => event.type === 'connect').password"), samplePassword);
-  await until(select('connect'));
+  // The connect button remains mounted but disabled until the rejection arrives.
+  await until(select('error-action-password'));
+  await until(`${select('connect')} && !${select('connect')}.disabled`);
   await evaluate(select('connect') + '.click()');
   await until(select('clear-saved-password'));
   assert.equal(await evaluate(select('password') + '.value'), samplePassword);
@@ -768,6 +771,27 @@ try {
   assert.equal(await evaluate(fallbackTip), null);
   assert.deepEqual(await evaluate('window.openedConnections'), ['/ws/webrtc']);
 
+  for (const reason of [
+    'The gateway access token is missing or incorrect.', 'Too many failed attempts. Try again shortly.',
+    'ID does not exist', 'remote desktop is offline', 'key mismatch', 'key overuse',
+    'That target address is not allowed.', 'That target port is not allowed.',
+    'WebRTC peer signature verification failed',
+  ]) {
+    await beginWebRtcTest();
+    await until('window.webRtcOffer');
+    await evaluate(`window.rejectWebRtcOffer(${JSON.stringify(reason)})`);
+    await until("window.__rd?.state === 'error'");
+    assert.deepEqual(await evaluate('window.openedConnections'), ['/ws/webrtc']);
+    assert.equal(await evaluate(fallbackTip), null);
+    assert.equal(await evaluate("window.sent.filter(event => event.type === 'connect').length"), 0);
+    if (reason.includes('gateway access token')) {
+      assert.match(await evaluate(select('error-title') + '.textContent'), /Invalid Gateway Token|网关令牌无效/);
+    } else {
+      assert.ok((await evaluate(select('error-technical-details') + '.textContent')).includes(reason), reason);
+    }
+  }
+  console.log('WebRTC terminal failures: authentication, backoff, offline/unknown IDs, key and target policies never open a second gateway connection.');
+
   directPriorityUrl.searchParams.delete('holdGateway');
   directPriorityUrl.searchParams.set('noWebRtcCapability', '1');
   await beginWebRtcTest();
@@ -857,6 +881,36 @@ try {
     return [message.quality, message.customQuality, message.fps];
   })()`), ['custom', 100, 15]);
   console.log('Quality: legacy preferences migrate, continuous ratios reach login/live updates, presets preserve FPS, and desktop/mobile choices survive reconnecting.');
+
+  await cdp('Emulation.setTouchEmulationEnabled', { enabled: false });
+  await cdp('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
+  for (const failure of ['close', 'error']) {
+    await connect();
+    await until("window.__rd?.state === 'live'");
+    await evaluate(`window.sessionSocket.${failure === 'close' ? 'close()' : 'onerror?.(new Event("error"))'}`);
+    await until(select('error-action-retry'));
+    assert.match(await evaluate(select('error-title') + '.textContent'), /Connection Interrupted|连接已中断/);
+    const sentBeforeRetry = await evaluate("window.sent.filter(event => event.type === 'connect').length");
+    await delay(200);
+    assert.equal(await evaluate("window.sent.filter(event => event.type === 'connect').length"), sentBeforeRetry);
+    await evaluate(select('error-action-retry') + '.click()');
+    await until(select('password-confirm-connect'));
+    await evaluate(select('password-confirm-connect') + '.click()');
+    await until("window.__rd?.state === 'live'");
+    assert.equal(await evaluate("window.sent.filter(event => event.type === 'connect').length"), sentBeforeRetry + 1);
+    assert.equal(await evaluate(select('error-banner')), null);
+  }
+  await evaluate(`window.sessionSocket.onmessage?.({ data: JSON.stringify({ type: 'status', state: 'error', detail: 'Wrong Password' }) }); window.sessionSocket.close()`);
+  await until(select('error-action-password'));
+  assert.match(await evaluate(select('error-title') + '.textContent'), /Incorrect Password|密码错误/);
+  await connect();
+  await until("window.__rd?.state === 'live'");
+  await openDesktopToolbar();
+  await evaluate(select('toolbar-disconnect') + '.click()');
+  await until("window.__rd?.state === 'idle'");
+  assert.equal(await evaluate(select('error-banner')), null);
+  assert.equal(await evaluate("window.sent.at(-1).type"), 'disconnect');
+  console.log('Session interruptions: close/error show recovery actions, retries are explicit, terminal errors stay intact, and user disconnect stays silent.');
 } finally {
   socket.close();
   const closed = await fetch(`${debuggerUrl}/json/close/${tab.id}`);

@@ -69,7 +69,7 @@ export class RemoteSocket {
         this.session.start();
       })().catch(error => {
         if (abort.signal.aborted || this.mode === 'closed') return;
-        if (error?.name === 'WebRtcLoginError' || this.mode === 'webrtc') {
+        if (error?.name === 'WebRtcLoginError' || error?.name === 'WebRtcTerminalError' || this.mode === 'webrtc') {
           this.onmessage?.(new MessageEvent('message', { data: JSON.stringify({
             type: 'status', state: 'error', detail: error.message,
           }) }));

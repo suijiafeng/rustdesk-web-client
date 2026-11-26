@@ -15,7 +15,12 @@ function openIdentity(signed: Uint8Array, key: Uint8Array, expectedId: string) {
   if (key.length !== 32) throw new Error('Invalid identity server key');
   const opened = nacl.sign.open(signed, key);
   if (!opened) throw new Error('WebRTC peer signature verification failed');
-  const identity = IdPkProto.toObject(IdPkProto.decode(opened), { bytes: Uint8Array, defaults: true });
+  let identity: ReturnType<typeof IdPkProto.toObject>;
+  try {
+    identity = IdPkProto.toObject(IdPkProto.decode(opened), { bytes: Uint8Array, defaults: true });
+  } catch {
+    throw new Error('WebRTC peer identity is malformed');
+  }
   if (identity.id !== expectedId || identity.pk.length !== 32) throw new Error('WebRTC peer identity mismatch');
   return identity;
 }

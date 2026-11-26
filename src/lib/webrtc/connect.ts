@@ -6,29 +6,35 @@ import type { NativeConnection } from './session';
 
 const ROUTE_STATS_TIMEOUT_MS = 300;
 const DIRECT_CANDIDATE_TYPES = new Set(['host', 'srflx', 'prflx']);
-// Only fixed protocol errors are safe to include; browser SDP errors and server text may contain addresses or credentials.
-const SAFE_FAILURE_REASONS = new Set([
-  'WebRTC connection timed out', 'WebRTC connection failed',
-  'WebRTC signaling unavailable', 'WebRTC signaling closed', 'WebRTC signaling failed', 'WebRTC signaling timed out',
-  'WebRTC peer response timed out', 'WebRTC peer closed during identity verification',
-  'WebRTC peer closed before login', 'WebRTC peer did not provide its signed identity',
-  'WebRTC peer signature verification failed', 'WebRTC peer identity mismatch',
-  'WebRTC certificate does not match the signed peer identity',
-  'Invalid identity server key', 'Invalid WebRTC certificate fingerprint',
-  'Invalid WebRTC endpoint', 'Invalid WebRTC session description', 'Invalid ICE candidate',
-  'WebRTC data channel failed', 'WebRTC channel is closed', 'WebRTC send timed out',
-  'ID server closed WebRTC signaling', 'This peer or ID server did not offer WebRTC',
-  'Incompatible ID server', 'Invalid ID server or peer ID',
-  'ID does not exist', 'remote desktop is offline', 'key mismatch', 'key overuse', 'punch hole failed',
-  'Invalid signaling message', 'Send a WebRTC offer first', 'Unexpected ICE candidate',
+// These failures will also reject the gateway route. Never repeat credentials or
+// downgrade identity verification by trying a second transport after them.
+const TERMINAL_FAILURE_REASONS = new Set([
+  'The gateway access token is missing or incorrect.', 'Too many failed attempts. Try again shortly.',
+  'Invalid ID server or peer ID', 'ID does not exist', 'remote desktop is offline', 'key mismatch', 'key overuse',
   'That target address is not allowed.', 'That target port is not allowed.',
-  'host closed the connection', 'timed out waiting for host response',
-  'server public key must be 32 bytes of standard base64',
-  'rendezvous server closed connection during key exchange',
+  'Invalid identity server key', 'server public key must be 32 bytes of standard base64',
   'key mismatch: rendezvous server key signature is invalid',
   'missing signed_params in rendezvous KeyExchange', 'invalid signed_params signature in rendezvous KeyExchange',
   'invalid signed_params domain prefix', 'signed_params mismatch in rendezvous KeyExchange',
-  'The gateway access token is missing or incorrect.', 'Too many failed attempts. Try again shortly.',
+  'WebRTC peer did not provide its signed identity', 'WebRTC peer signature verification failed',
+  'WebRTC peer identity is malformed',
+  'WebRTC peer identity mismatch', 'WebRTC certificate does not match the signed peer identity',
+  'Invalid WebRTC certificate fingerprint',
+]);
+// Only fixed protocol errors are safe to include; browser SDP errors and server text may contain addresses or credentials.
+const SAFE_FAILURE_REASONS = new Set([
+  ...TERMINAL_FAILURE_REASONS,
+  'WebRTC connection timed out', 'WebRTC connection failed',
+  'WebRTC signaling unavailable', 'WebRTC signaling closed', 'WebRTC signaling failed', 'WebRTC signaling timed out',
+  'WebRTC peer response timed out', 'WebRTC peer closed during identity verification',
+  'WebRTC peer closed before login',
+  'Invalid WebRTC endpoint', 'Invalid WebRTC session description', 'Invalid ICE candidate',
+  'WebRTC data channel failed', 'WebRTC channel is closed', 'WebRTC send timed out',
+  'ID server closed WebRTC signaling', 'This peer or ID server did not offer WebRTC',
+  'Incompatible ID server', 'punch hole failed',
+  'Invalid signaling message', 'Send a WebRTC offer first', 'Unexpected ICE candidate',
+  'host closed the connection', 'timed out waiting for host response',
+  'rendezvous server closed connection during key exchange',
 ]);
 const SAFE_ERROR_NAMES = new Set([
   'Error', 'EvalError', 'TypeError', 'SyntaxError', 'RangeError', 'OperationError',
@@ -124,7 +130,11 @@ export function connectWebRtc(url: string, request: ConnectRequest, abort: Abort
       if (signalServerError) context.push('signaling server error received');
       if (signalTransportError) context.push('signaling transport error');
       if (signalCloseCode !== undefined) context.push(`signaling close code=${signalCloseCode}`);
-      return new Error(`${reason} [${context.join('; ')}]`);
+      const diagnostic = new Error(`${reason} [${context.join('; ')}]`);
+      if ((source && TERMINAL_FAILURE_REASONS.has(source.message)) || phase === 'answer identity') {
+        diagnostic.name = 'WebRtcTerminalError';
+      }
+      return diagnostic;
     };
     const timer = setTimeout(() => fail(new Error('WebRTC connection timed out')), 12_000);
     const dispose = () => {

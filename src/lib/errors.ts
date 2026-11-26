@@ -25,6 +25,16 @@ export function formatConnectionError(locale: Locale, rawMessage: string): Forma
   }
 
   // 1. Authentication & password errors
+  if (lower.includes('too many failed attempts')) {
+    return { kind: 'generic', title: t(locale, 'errTitleRateLimited'), message: t(locale, 'errMsgRateLimited') };
+  }
+  if (lower.includes('two-factor authentication') || lower.includes('two factor authentication')) {
+    return {
+      kind: 'generic',
+      title: t(locale, 'errTitleTwoFactorUnsupported'),
+      message: t(locale, 'errMsgTwoFactorUnsupported'),
+    };
+  }
   if (lower.includes('gateway access token') || lower.includes('令牌') || /\btoken\b/.test(lower)) {
     return {
       kind: 'auth',
@@ -75,6 +85,20 @@ export function formatConnectionError(locale: Locale, rawMessage: string): Forma
   }
 
   // 3. Network, DNS, server key, peer offline, timeout, and gateway errors
+  if (lower.includes('session disconnected unexpectedly') || lower.includes('远程会话意外断开')) {
+    return {
+      kind: 'network',
+      title: t(locale, 'errTitleDisconnected'),
+      message: t(locale, 'errMsgDisconnected'),
+    };
+  }
+  if (lower.includes('target address is not allowed') || lower.includes('target port is not allowed')) {
+    return {
+      kind: 'network',
+      title: t(locale, 'errTitleTargetPolicy'),
+      message: t(locale, lower.includes('target port') ? 'errMsgTargetPortPolicy' : 'errMsgTargetAddressPolicy'),
+    };
+  }
   if (
     lower.includes('dns lookup') ||
     lower.includes('enotfound') ||

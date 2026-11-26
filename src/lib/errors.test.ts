@@ -31,6 +31,50 @@ test('classifies gateway access token error into auth error', () => {
   assert.equal(res.title, '网关令牌无效');
 });
 
+test('explains unsupported two-factor authentication without suggesting a password change', () => {
+  for (const raw of [
+    'The host requires two-factor authentication, which this web client does not support yet.',
+    'The host requires two-factor authentication, which is not yet enabled on this gateway.',
+  ]) {
+    assert.equal(formatConnectionError('en', raw).title, 'Two-Factor Authentication Required');
+    const zh = formatConnectionError('zh', raw);
+    assert.equal(zh.kind, 'generic');
+    assert.match(zh.message, /双重验证/);
+    assert.doesNotMatch(zh.message, /密码/);
+  }
+});
+
+test('explains authentication backoff instead of an unexpected session failure', () => {
+  const raw = 'Too many failed attempts. Try again shortly. [stage=waiting answer]';
+  assert.equal(formatConnectionError('en', raw).title, 'Too Many Attempts');
+  assert.match(formatConnectionError('zh', raw).message, /稍后重试/);
+});
+
+test('keeps interrupted sessions distinct from gateway startup errors in both locales', () => {
+  for (const raw of ['The remote session disconnected unexpectedly.', '远程会话意外断开。']) {
+    const en = formatConnectionError('en', raw);
+    assert.equal(en.kind, 'network');
+    assert.equal(en.title, 'Connection Interrupted');
+    assert.match(en.message, /network and retry/);
+    const zh = formatConnectionError('zh', raw);
+    assert.equal(zh.title, '连接已中断');
+    assert.match(zh.message, /检查网络后重试/);
+  }
+});
+
+test('distinguishes address and port restrictions without calling every target a private network', () => {
+  for (const locale of ['zh', 'en'] as const) {
+    const address = formatConnectionError(locale, 'That target address is not allowed.');
+    const port = formatConnectionError(locale, 'That target port is not allowed.');
+    assert.equal(address.kind, 'network');
+    assert.equal(port.kind, 'network');
+    assert.notEqual(address.message, port.message);
+    assert.match(address.message, locale === 'zh' ? /此地址/ : /target address/);
+    assert.match(port.message, locale === 'zh' ? /此端口/ : /target port/);
+    assert.doesNotMatch(address.message, /private|内网/);
+  }
+});
+
 test('classifies offline errors with device availability guidance', () => {
   const res = formatConnectionError(
     'zh',
