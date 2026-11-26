@@ -1,19 +1,27 @@
+import { useId, useRef, useState } from 'react';
 import { Server, X } from 'lucide-react';
 import { t, type Locale } from '../../lib/i18n';
+import { isValidServerPublicKey } from '../../../shared/serverKey';
+import { useDialogFocus } from '../../hooks/useDialogFocus';
 
 export type ServerField = 'idServer' | 'relayServer' | 'serverKey';
 
-interface IdServerModalProps {
-  locale: Locale;
+export interface ServerSettings {
   idServer: string;
   relayServer: string;
   serverKey: string;
   forceRelay: boolean;
+}
+
+interface IdServerModalProps extends ServerSettings {
+  locale: Locale;
   idServerError: boolean;
+  connectionSetup?: boolean;
   onChangeField: (field: ServerField, value: string) => void;
   onChangeForceRelay: (checked: boolean) => void;
   onClearError: () => void;
   onClose: () => void;
+  onSave?: (settings: ServerSettings) => void;
 }
 
 export function IdServerModal({
@@ -23,11 +31,24 @@ export function IdServerModal({
   serverKey,
   forceRelay,
   idServerError,
+  connectionSetup = false,
   onChangeField,
   onChangeForceRelay,
   onClearError,
   onClose,
+  onSave,
 }: IdServerModalProps) {
+  const [draft, setDraft] = useState<ServerSettings>({ idServer, relayServer, serverKey, forceRelay });
+  const [submitted, setSubmitted] = useState(false);
+  const [keyTouched, setKeyTouched] = useState(false);
+  const idInput = useRef<HTMLInputElement>(null);
+  const keyInput = useRef<HTMLInputElement>(null);
+  const dialogId = useId();
+  const dialogRef = useDialogFocus(onClose);
+  const keyInvalid = Boolean(draft.serverKey.trim()) && !isValidServerPublicKey(draft.serverKey);
+  const showKeyError = (submitted || keyTouched) && keyInvalid;
+  const showIdError = idServerError || (submitted && connectionSetup && !draft.idServer.trim());
+
   return (
     <div
       className="rd-password-scrim"
@@ -38,18 +59,44 @@ export function IdServerModal({
       }}
     >
       <form
+        ref={dialogRef}
+        tabIndex={-1}
         className="rd-password-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={`${dialogId}-title`}
         data-testid="id-server-modal"
         onSubmit={(e) => {
           e.preventDefault();
-          onClose();
+          setSubmitted(true);
+          if (connectionSetup && !draft.idServer.trim()) {
+            idInput.current?.focus();
+            return;
+          }
+          if (keyInvalid) {
+            keyInput.current?.focus();
+            return;
+          }
+          const settings = {
+            ...draft,
+            idServer: draft.idServer.trim(),
+            relayServer: draft.relayServer.trim(),
+            serverKey: draft.serverKey.trim(),
+          };
+          onChangeField('idServer', settings.idServer);
+          onChangeField('relayServer', settings.relayServer);
+          onChangeField('serverKey', settings.serverKey);
+          onChangeForceRelay(settings.forceRelay);
+          onClearError();
+          if (onSave) onSave(settings);
+          else onClose();
         }}
       >
         <div className="flex items-center justify-between gap-2 mb-3">
           <div className="flex items-center gap-2">
             <Server size={17} className="text-[var(--accent)]" />
-            <h2 className="text-base font-semibold text-[var(--ink)] m-0">
-              {t(locale, 'idRelayServerTitle')}
+            <h2 id={`${dialogId}-title`} className="text-base font-semibold text-[var(--ink)] m-0">
+              {t(locale, connectionSetup ? 'settingsNeededTitle' : 'idRelayServerTitle')}
             </h2>
           </div>
           <button
@@ -68,20 +115,25 @@ export function IdServerModal({
           <label className="flex flex-col gap-1 text-xs font-medium text-[var(--ink-soft)]">
             <span>{t(locale, 'idServer')}</span>
             <input
+              ref={idInput}
               type="text"
-              className={`rd-input font-mono-tabular${idServerError ? ' has-error' : ''}`}
+              className={`rd-input font-mono-tabular${showIdError ? ' has-error' : ''}`}
               data-testid="id-server"
-              aria-invalid={idServerError || undefined}
-              value={idServer}
+              aria-invalid={showIdError || undefined}
+              aria-describedby={showIdError ? `${dialogId}-server-error` : undefined}
+              value={draft.idServer}
               autoFocus
               autoComplete="off"
               spellCheck={false}
               placeholder="hbbs.example.com:21116"
               onChange={(e) => {
                 onClearError();
-                onChangeField('idServer', e.target.value);
+                setDraft(previous => ({ ...previous, idServer: e.target.value }));
               }}
             />
+            {showIdError && <span id={`${dialogId}-server-error`} role="alert" className="text-[var(--bad)]">
+              {t(locale, 'idServerRequired')}
+            </span>}
           </label>
 
           <label className="flex flex-col gap-1 text-xs font-medium text-[var(--ink-soft)]">
@@ -90,33 +142,41 @@ export function IdServerModal({
               type="text"
               className="rd-input font-mono-tabular"
               data-testid="relay-server"
-              value={relayServer}
+              value={draft.relayServer}
               autoComplete="off"
               spellCheck={false}
               placeholder={t(locale, 'optional')}
-              onChange={(e) => onChangeField('relayServer', e.target.value)}
+              onChange={(e) => setDraft(previous => ({ ...previous, relayServer: e.target.value }))}
             />
           </label>
 
           <label className="flex flex-col gap-1 text-xs font-medium text-[var(--ink-soft)]">
             <span>{t(locale, 'serverPublicKey')}</span>
             <input
+              ref={keyInput}
               type="text"
-              className="rd-input font-mono-tabular"
+              className={`rd-input font-mono-tabular${showKeyError ? ' has-error' : ''}`}
               data-testid="server-key"
-              value={serverKey}
+              value={draft.serverKey}
+              aria-invalid={showKeyError || undefined}
+              aria-describedby={`${dialogId}-key-hint${showKeyError ? ` ${dialogId}-key-error` : ''}`}
               autoComplete="off"
               spellCheck={false}
-              placeholder={t(locale, 'base64Optional')}
-              onChange={(e) => onChangeField('serverKey', e.target.value)}
+              placeholder="id_ed25519.pub"
+              onBlur={() => setKeyTouched(true)}
+              onChange={(e) => setDraft(previous => ({ ...previous, serverKey: e.target.value }))}
             />
+            <span id={`${dialogId}-key-hint`} className="font-normal">{t(locale, 'serverPublicKeyHint')}</span>
+            {showKeyError && <span id={`${dialogId}-key-error`} role="alert" className="text-[var(--bad)]">
+              {t(locale, 'serverPublicKeyInvalid')}
+            </span>}
           </label>
 
           <label className="rd-check-row">
             <input
               type="checkbox"
-              checked={forceRelay}
-              onChange={(e) => onChangeForceRelay(e.target.checked)}
+              checked={draft.forceRelay}
+              onChange={(e) => setDraft(previous => ({ ...previous, forceRelay: e.target.checked }))}
             />
             <span>{t(locale, 'forceRelay')}</span>
           </label>

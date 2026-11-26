@@ -177,10 +177,10 @@ export function formatConnectionError(locale: Locale, rawMessage: string): Forma
     };
   }
 
-  // 4. Fallback for other host/protocol messages
+  // 4. Keep unknown protocol messages in the banner's expandable technical details.
   return {
     kind: 'generic',
     title: t(locale, 'errTitleGeneric'),
-    message: raw,
+    message: t(locale, 'errMsgUnexpected'),
   };
 }

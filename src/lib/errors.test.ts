@@ -116,7 +116,7 @@ test('falls back cleanly for empty or unknown error messages', () => {
 
   const custom = formatConnectionError('en', 'Custom host policy rejected session');
   assert.equal(custom.kind, 'generic');
-  assert.equal(custom.message, 'Custom host policy rejected session');
+  assert.equal(custom.message, 'The session ended unexpectedly. Please try again.');
 });
 
 test('classifies non-RustDesk HTTP and protobuf wire-type errors cleanly in zh and en', () => {

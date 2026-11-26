@@ -4,14 +4,13 @@ import { t } from '../../lib/i18n';
 import { AboutSettings, useDetectedCodecs } from './AboutSettings';
 import { DisplaySettings } from './DisplaySettings';
 import { GeneralSettings } from './GeneralSettings';
-import { IdServerModal } from './IdServerModal';
 import { NetworkSettings } from './NetworkSettings';
 import type { SettingsSection, SettingsViewProps } from './types';
 
 export type { SettingsSection } from './types';
 
 export function SettingsView(props: SettingsViewProps) {
-  const { locale, section, serverDialogOpen, onChangeSection, onSetServerDialogOpen, onBack } =
+  const { locale, section, onChangeSection, onOpenServerDialog, onBack } =
     props;
   const detectedCodecs = useDetectedCodecs();
 
@@ -90,7 +89,7 @@ export function SettingsView(props: SettingsViewProps) {
               gatewayToken={props.gatewayToken}
               gatewayTokenReadFailed={props.gatewayTokenReadFailed}
               onSaveGatewayToken={props.onSaveGatewayToken}
-              onOpenServerDialog={() => onSetServerDialogOpen(true)}
+              onOpenServerDialog={onOpenServerDialog}
               onToggleDirectIp={props.onToggleDirectIp}
               onChangeWebRtcOptIn={props.onChangeWebRtcOptIn}
             />
@@ -112,20 +111,6 @@ export function SettingsView(props: SettingsViewProps) {
         </div>
       </main>
 
-      {serverDialogOpen && (
-        <IdServerModal
-          locale={props.locale}
-          idServer={props.idServer}
-          relayServer={props.relayServer}
-          serverKey={props.serverKey}
-          forceRelay={props.forceRelay}
-          idServerError={props.idServerError}
-          onChangeField={props.onChangeServerField}
-          onChangeForceRelay={props.onChangeForceRelay}
-          onClearError={props.onClearIdServerError}
-          onClose={() => onSetServerDialogOpen(false)}
-        />
-      )}
     </div>
   );
 }

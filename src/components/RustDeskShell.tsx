@@ -18,6 +18,7 @@ import { ConnectForm, ConnectPasswordPrompt, useConnectForm } from './ConnectFor
 
 import { PeerList } from './PeerList';
 import { SettingsView, type SettingsSection } from './settings/SettingsView';
+import { IdServerModal } from './settings/IdServerModal';
 
 export type { ConnectionField, ConnectionMode, ConnectionPhase, ConnectRequest } from '../types';
 
@@ -124,6 +125,7 @@ export function RustDeskShell({
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general');
   const [serverDialogOpen, setServerDialogOpen] = useState(false);
   const [idServerError, setIdServerError] = useState(false);
+  const [connectAfterServerSetup, setConnectAfterServerSetup] = useState(false);
 
   const [listTab, setListTab] = useState<ListTab>('recent');
   const [viewLayout, setViewLayout] = useState<'grid' | 'list'>(isDesktop ? 'grid' : 'list');
@@ -148,8 +150,7 @@ export function RustDeskShell({
   }, [devices, listTab, searchQuery]);
 
   const openNetworkServerSetup = (highlightIdServer = false) => {
-    setSettingsSection('network');
-    setSettingsOpen(true);
+    setConnectAfterServerSetup(highlightIdServer);
     setIdServerError(highlightIdServer);
     setServerDialogOpen(true);
   };
@@ -182,8 +183,37 @@ export function RustDeskShell({
     openNetworkServerSetup,
   });
 
+  const closeServerDialog = () => {
+    setServerDialogOpen(false);
+    setIdServerError(false);
+    setConnectAfterServerSetup(false);
+    connectForm.cancelServerSetup();
+  };
+  const serverDialog = serverDialogOpen && (
+    <IdServerModal
+      locale={locale}
+      idServer={idServer}
+      relayServer={relayServer}
+      serverKey={serverKey}
+      forceRelay={forceRelay}
+      idServerError={idServerError}
+      connectionSetup={connectAfterServerSetup}
+      onChangeField={onChangeField}
+      onChangeForceRelay={onChangeForceRelay}
+      onClearError={() => setIdServerError(false)}
+      onClose={closeServerDialog}
+      onSave={settings => {
+        setServerDialogOpen(false);
+        setIdServerError(false);
+        setConnectAfterServerSetup(false);
+        if (connectAfterServerSetup) connectForm.continueAfterServerSetup(settings);
+      }}
+    />
+  );
+
   if (settingsOpen) {
     return (
+      <>
       <SettingsView
         locale={locale}
         localePreference={localePreference}
@@ -193,16 +223,11 @@ export function RustDeskShell({
         directIpEnabled={directIpEnabled}
         webRtcOptIn={webRtcOptIn}
         idServer={idServer}
-        relayServer={relayServer}
-        serverKey={serverKey}
-        forceRelay={forceRelay}
         gatewayToken={savedGatewayToken}
         gatewayTokenReadFailed={gatewayTokenReadFailed}
         onSaveGatewayToken={onSaveGatewayToken}
         touchMode={touchMode}
         diagnosticsOpen={diagnosticsOpen}
-        serverDialogOpen={serverDialogOpen}
-        idServerError={idServerError}
         onChangeSection={setSettingsSection}
         onChangeLocale={onChangeLocale}
         onChangeTheme={onChangeTheme}
@@ -211,19 +236,14 @@ export function RustDeskShell({
         onChangeWebRtcOptIn={onChangeWebRtcOptIn}
         onToggleTouchMode={onToggleTouchMode}
         onToggleDiagnostics={onToggleDiagnostics}
-        onChangeServerField={onChangeField}
-        onChangeForceRelay={onChangeForceRelay}
-        onSetServerDialogOpen={(open) => {
-          setServerDialogOpen(open);
-          if (!open) setIdServerError(false);
-        }}
-        onClearIdServerError={() => setIdServerError(false)}
+        onOpenServerDialog={() => openNetworkServerSetup()}
         onBack={() => {
-          setServerDialogOpen(false);
-          setIdServerError(false);
+          closeServerDialog();
           setSettingsOpen(false);
         }}
       />
+      {serverDialog}
+      </>
     );
   }
 
@@ -392,6 +412,7 @@ export function RustDeskShell({
       </main>
 
       <ConnectPasswordPrompt model={connectForm} />
+      {serverDialog}
     </div>
   );
 }

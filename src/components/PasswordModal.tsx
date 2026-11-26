@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { X } from 'lucide-react';
 import { t, type Locale } from '../lib/i18n';
+import { useDialogFocus } from '../hooks/useDialogFocus';
 
 interface PasswordModalProps {
   locale: Locale;
@@ -35,6 +36,8 @@ export function PasswordModal({
   onSubmit,
   onClose,
 }: PasswordModalProps) {
+  const titleId = useId();
+  const dialogRef = useDialogFocus(onClose);
   return (
     <div
       className="rd-password-scrim"
@@ -45,12 +48,17 @@ export function PasswordModal({
       }}
     >
       <form
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
         className="rd-password-dialog"
         data-testid="password-modal"
         onSubmit={onSubmit}
       >
         <div className="flex items-center justify-between gap-2 mb-1.5">
-          <h2 className="text-base font-semibold text-[var(--ink)] m-0">
+          <h2 id={titleId} className="text-base font-semibold text-[var(--ink)] m-0">
             {t(locale, 'passwordPromptTitle')}
           </h2>
           <button

@@ -6,6 +6,7 @@ import { getSavedPassword, type SavedPasswordMap } from '../lib/passwords';
 import type { ConnectionField, ConnectionMode, ConnectionPhase, ConnectRequest } from '../types';
 import { ErrorBanner } from './ErrorBanner';
 import { PasswordModal } from './PasswordModal';
+import type { ServerSettings } from './settings/IdServerModal';
 
 interface ConnectFormProps {
   locale: Locale;
@@ -67,6 +68,7 @@ export function useConnectForm(props: ConnectFormProps) {
   const [promptGatewayToken, setPromptGatewayToken] = useState('');
   const [passwordPromptOpen, setPasswordPromptOpen] = useState(false);
   const [pendingMode, setPendingMode] = useState<ConnectionMode>(mode);
+  const pendingConnectionRef = useRef<ConnectRequest | null>(null);
 
   const peerInputRef = useRef<HTMLInputElement>(null);
   const hostInputRef = useRef<HTMLInputElement>(null);
@@ -124,80 +126,75 @@ export function useConnectForm(props: ConnectFormProps) {
     port,
   });
 
-  const handleHeroSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (activeMode === 'id') {
-      if (!peerId.replace(/\s+/g, '')) {
-        triggerHeroInputError();
-        peerInputRef.current?.focus();
-        return;
-      }
-      if (!idServer.trim()) {
-        openNetworkServerSetup(true);
-        return;
-      }
-    } else if (!host.trim()) {
-      triggerHeroInputError();
-      hostInputRef.current?.focus();
-      return;
-    }
-
+  const beginConnection = (request: ConnectRequest) => {
+    const requestedMode = request.mode ?? activeMode;
+    pendingConnectionRef.current = request;
     setHeroInputError(false);
     setHeroErrorShake(false);
-    setPendingMode(activeMode);
-
-    const key = deviceKeyFor({ mode: activeMode, peerId, host, port });
+    setPendingMode(requestedMode);
+    const key = deviceKeyFor({
+      mode: requestedMode, peerId: request.peerId ?? peerId,
+      host: request.host ?? host, port: request.port ?? port,
+    });
     const saved = getSavedPassword(savedPasswords, key);
+    onChangeField('password', saved);
     if (saved && !gatewayTokenNeedsInput && phase !== 'error') {
-      onChangeField('password', saved);
-      onConnect({ mode: activeMode, password: saved, remember: true });
+      onConnect({ ...request, mode: requestedMode, password: saved, remember: true });
       return;
     }
-
-    onChangeField('password', saved);
     setRememberPassword(Boolean(saved));
     setPromptGatewayToken(gatewayToken);
     setPasswordPromptOpen(true);
   };
 
+  const requestConnection = (request: ConnectRequest) => {
+    const requestedMode = request.mode ?? activeMode;
+    if (requestedMode === 'id') {
+      if (!(request.peerId ?? peerId).replace(/\s+/g, '')) {
+        triggerHeroInputError();
+        peerInputRef.current?.focus();
+        return;
+      }
+      if (!(request.idServer ?? idServer).trim()) {
+        pendingConnectionRef.current = request;
+        setPendingMode(requestedMode);
+        openNetworkServerSetup(true);
+        return;
+      }
+    } else if (!(request.host ?? host).trim()) {
+      triggerHeroInputError();
+      hostInputRef.current?.focus();
+      return;
+    }
+    beginConnection(request);
+  };
+  const retryConnection = () => requestConnection({ mode: activeMode, peerId, host, port });
+  const handleHeroSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    retryConnection();
+  };
+  const continueAfterServerSetup = (settings: ServerSettings) => {
+    const request = pendingConnectionRef.current;
+    if (request) beginConnection({ ...request, ...settings });
+  };
+  const cancelServerSetup = () => {
+    pendingConnectionRef.current = null;
+  };
+
   const handleDeviceRowTap = (device: SavedDevice) => {
     onSelectDevice(device);
-    setHeroInputError(false);
-    if (device.mode === 'id' && !(device.idServer?.trim() || idServer.trim())) {
-      openNetworkServerSetup(true);
-      return;
-    }
-    setPendingMode(device.mode);
-
-    const key = deviceKeyFor(device);
-    const saved = getSavedPassword(savedPasswords, key);
-    if (saved && !gatewayTokenNeedsInput) {
-      onChangeField('password', saved);
-      onConnect({
-        mode: device.mode,
-        peerId: device.peerId,
-        idServer: device.idServer || idServer,
-        relayServer: device.relayServer ?? relayServer,
-        serverKey: device.serverKey ?? serverKey,
-        forceRelay: device.forceRelay ?? forceRelay,
-        host: device.host,
-        port: device.port || '21118',
-        password: saved,
-        remember: true,
-      });
-      return;
-    }
-
-    onChangeField('password', saved);
-    setRememberPassword(Boolean(saved));
-    setPromptGatewayToken(gatewayToken);
-    setPasswordPromptOpen(true);
+    requestConnection({
+      mode: device.mode, peerId: device.peerId, idServer: device.idServer || idServer,
+      relayServer: device.relayServer ?? relayServer, serverKey: device.serverKey ?? serverKey,
+      forceRelay: device.forceRelay ?? forceRelay, host: device.host, port: device.port || '21118',
+    });
   };
 
   const handleConfirmPasswordConnect = (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordPromptOpen(false);
     onConnect({
+      ...pendingConnectionRef.current,
       mode: pendingMode,
       password,
       remember: rememberPassword,
@@ -230,7 +227,9 @@ export function useConnectForm(props: ConnectFormProps) {
     hostInputRef,
     handleIdInputChange,
     handleHeroSubmit,
-    setPendingMode,
+    retryConnection,
+    continueAfterServerSetup,
+    cancelServerSetup,
     setPromptGatewayToken,
     setPasswordPromptOpen,
     handleDeviceRowTap,
@@ -256,7 +255,6 @@ export function ConnectForm({ model }: { model: ConnectFormModel }) {
     host,
     port,
     directIpEnabled,
-    gatewayToken,
     onChangeMode,
     onChangeField,
     onDisconnect,
@@ -279,9 +277,7 @@ export function ConnectForm({ model }: { model: ConnectFormModel }) {
     hostInputRef,
     handleIdInputChange,
     handleHeroSubmit,
-    setPendingMode,
-    setPromptGatewayToken,
-    setPasswordPromptOpen,
+    retryConnection,
   } = model;
   return (
     <>
@@ -529,14 +525,11 @@ export function ConnectForm({ model }: { model: ConnectFormModel }) {
             locale={locale}
             rawError={decoderError || detail}
             onDismiss={onDismissError}
+            onRetry={retryConnection}
             onOpenNetworkSettings={
               activeMode === 'id' ? () => openNetworkServerSetup(false) : undefined
             }
-            onRetryPassword={() => {
-              setPendingMode(activeMode);
-              setPromptGatewayToken(gatewayToken);
-              setPasswordPromptOpen(true);
-            }}
+            onRetryPassword={retryConnection}
           />
         )}
       </section>

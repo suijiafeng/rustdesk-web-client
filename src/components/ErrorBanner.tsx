@@ -1,4 +1,4 @@
-import { AlertCircle, KeyRound, Settings, X } from 'lucide-react';
+import { AlertCircle, KeyRound, RotateCw, Settings, X } from 'lucide-react';
 import { formatConnectionError } from '../lib/errors';
 import { t, type Locale } from '../lib/i18n';
 
@@ -6,6 +6,7 @@ interface ErrorBannerProps {
   locale: Locale;
   rawError: string;
   onDismiss: () => void;
+  onRetry?: () => void;
   onOpenNetworkSettings?: () => void;
   onRetryPassword?: () => void;
 }
@@ -14,6 +15,7 @@ export function ErrorBanner({
   locale,
   rawError,
   onDismiss,
+  onRetry,
   onOpenNetworkSettings,
   onRetryPassword,
 }: ErrorBannerProps) {
@@ -34,9 +36,15 @@ export function ErrorBanner({
           {formatted.message}
         </p>
 
-        {(formatted.kind === 'network' && onOpenNetworkSettings) ||
+        {onRetry || (formatted.kind === 'network' && onOpenNetworkSettings) ||
         (formatted.kind === 'auth' && onRetryPassword) ? (
           <div className="mt-2 flex flex-wrap items-center gap-2">
+            {onRetry && formatted.kind !== 'auth' && (
+              <button type="button" className="rd-err-action-btn" data-testid="error-action-retry" onClick={onRetry}>
+                <RotateCw size={13} />
+                <span>{t(locale, 'actionRetryConnection')}</span>
+              </button>
+            )}
             {formatted.kind === 'network' && onOpenNetworkSettings && (
               <button
                 type="button"
@@ -61,6 +69,12 @@ export function ErrorBanner({
             )}
           </div>
         ) : null}
+        {rawError.trim() && rawError.trim() !== formatted.message && (
+          <details className="mt-2 text-xs text-[var(--ink-soft)]" data-testid="error-technical-details">
+            <summary className="cursor-pointer">{t(locale, 'technicalDetails')}</summary>
+            <p className="m-0 mt-1 break-words whitespace-pre-wrap">{rawError}</p>
+          </details>
+        )}
       </div>
 
       <button
