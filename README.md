@@ -152,7 +152,7 @@ Enable it only after preparing both the gateway and signaling infrastructure:
 
 The signaling endpoint is `/ws/webrtc`. WebRTC identity is verified using server/device signatures and DTLS fingerprint data. Only after you explicitly enable it and the gateway reports support will eligible ID connections attempt WebRTC first, opening the gateway connection if signaling, networking, or identity verification fails. A rejected host login does not automatically retry on the gateway. Direct IP and forced relay connections use the gateway path.
 
-Official open-source hbbs/hbbr builds do not by themselves imply support for this signaling protocol. Use a compatible server or apply [server-patches/hbbs/README.md](server-patches/hbbs/README.md).
+Official open-source hbbs/hbbr builds do not by themselves imply support for this signaling protocol. The hbbs patches, image build, and deployment instructions are maintained in the separate [suijiafeng/hbbs-webrtc](https://github.com/suijiafeng/hbbs-webrtc) repository. This web client does not build or patch hbbs.
 
 ## Clipboard and local data
 
@@ -185,7 +185,6 @@ The host operating system may capture multi-finger gestures before the browser r
 | `server.ts` | HTTP, health, static frontend, WebSocket upgrade, and server startup |
 | `server/` | RustDesk protocol, sessions, media, input, and signaling forwarding |
 | `shared/` | Protocol and WebRTC message definitions shared across layers |
-| `server-patches/hbbs/` | Optional hbbs signaling adaptation and instructions |
 | `docs/` | Architecture notes and screenshots |
 | `Dockerfile` | Node.js build and runtime image |
 | `docker-compose.yml` | Local container deployment |

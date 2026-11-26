@@ -152,7 +152,7 @@ curl http://127.0.0.1:21120/api/health
 
 信令入口为 `/ws/webrtc`。建立身份后会校验服务器签名、设备签名和 DTLS 指纹；只有用户主动开启且网关报告支持时，符合条件的 ID 连接才会先尝试浏览器 WebRTC，信令、网络或身份校验失败后建立网关连接。被控端拒绝登录时不会自动通过网关重试。IP 直连和强制中继使用网关路径。
 
-官方开源 hbbs/hbbr 不等于已支持该信令协议。请使用兼容服务端，或应用 [server-patches/hbbs/README.md](server-patches/hbbs/README.md)。
+官方开源 hbbs/hbbr 不等于已支持该信令协议。hbbs 补丁、镜像构建和部署说明统一在独立仓库 [suijiafeng/hbbs-webrtc](https://github.com/suijiafeng/hbbs-webrtc) 维护，本 Web 客户端不构建或修改 hbbs。
 
 ## 剪贴板和本地数据
 
@@ -183,7 +183,6 @@ curl http://127.0.0.1:21120/api/health
 | `server.ts` | HTTP、健康检查、静态页面、WebSocket 升级和服务启动 |
 | `server/` | RustDesk 协议、会话、音视频、输入和信令转发 |
 | `shared/` | 各层共享的协议和 WebRTC 消息定义 |
-| `server-patches/hbbs/` | 可选 hbbs 信令适配及说明 |
 | `docs/` | 架构说明和截图 |
 | `Dockerfile` | Node.js 构建与运行镜像 |
 | `docker-compose.yml` | 本地容器部署 |
