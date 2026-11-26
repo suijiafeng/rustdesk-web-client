@@ -2,6 +2,7 @@ import dns from 'node:dns/promises';
 import net from 'node:net';
 import nacl from 'tweetnacl';
 import { blake2b } from '@noble/hashes/blake2.js';
+import { privateTargetsAllowed, targetAddressAllowed, targetHostAllowed, targetPortAllowed } from './security.ts';
 
 export const MAX_FRAME_LENGTH = 0x3fff_ffff;
 export const KX_VERSION_LATEST = 1;
@@ -274,17 +275,28 @@ export class EncryptedFramedStream {
     host: string,
     port: number,
     timeoutMs: number,
+    { signal, peerConnection = false }: { signal?: AbortSignal; peerConnection?: boolean } = {},
   ): Promise<EncryptedFramedStream> {
     const cleanHost = host.trim();
-    if (!cleanHost || /\s/.test(cleanHost)) {
-      throw new Error(`DNS lookup failed for "${host}" (EINVAL)`);
+    if (!targetHostAllowed(cleanHost)) {
+      throw new Error('That target address is not allowed.');
+    }
+    if (!targetPortAllowed(port, peerConnection, process.env)) {
+      throw new Error('That target port is not allowed.');
     }
 
-    const targets = await resolveDialTargets(cleanHost, Math.min(timeoutMs, 5_000));
+    signal?.throwIfAborted();
+    const resolved = await resolveDialTargets(cleanHost, Math.min(timeoutMs, 5_000));
+    signal?.throwIfAborted();
+    const allowPrivate = privateTargetsAllowed(process.env);
+    const targets = resolved.filter(({ address }) => targetAddressAllowed(address, allowPrivate));
+    if (targets.length === 0) throw new Error('That target address is not allowed.');
+
     const deadline = Date.now() + timeoutMs;
     let lastError: Error | null = null;
 
     for (let i = 0; i < targets.length; i++) {
+      signal?.throwIfAborted();
       const target = targets[i];
       const remaining = deadline - Date.now();
       if (remaining <= 50) {
@@ -295,13 +307,17 @@ export class EncryptedFramedStream {
       const attemptTimeout = slotsLeft > 1 ? Math.max(1_500, Math.floor(remaining / slotsLeft)) : remaining;
 
       try {
-        return await dialSingleAddress(target.address, target.family, cleanHost, port, attemptTimeout);
+        return await dialSingleAddress(target.address, target.family, cleanHost, port, attemptTimeout, signal);
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
       }
     }
 
     throw lastError ?? new Error(`timed out connecting to ${cleanHost}:${port}`);
+  }
+
+  get remoteAddress(): string | undefined {
+    return this.socket.remoteAddress;
   }
 
   private fail(err: Error) {
@@ -457,9 +473,10 @@ function dialSingleAddress(
   displayHost: string,
   port: number,
   timeoutMs: number,
+  signal?: AbortSignal,
 ): Promise<EncryptedFramedStream> {
   return new Promise((resolve, reject) => {
-    const socket = net.createConnection({ host: address, port, family });
+    const socket = net.createConnection({ host: address, port, family, signal });
     let settled = false;
 
     const onError = (err: Error) => {

@@ -1,5 +1,4 @@
 import crypto from 'node:crypto';
-import dns from 'node:dns/promises';
 import net from 'node:net';
 
 export const RENDEZVOUS_PORT = 21116;
@@ -115,27 +114,15 @@ export function formatHostPort(host: string, port: number): string {
 
 /**
  * Computes RustDesk direct login username (IP:port or [IPv6]:port).
- * Resolves hostnames to IPv4 first (falling back to IPv6) to match TCP dial order.
+ * Uses the connected address for a hostname.
  */
-export async function directUsername(host: string, port: number): Promise<string> {
+export function directUsername(host: string, port: number, remoteAddress?: string): string {
   const trimmed = sanitizeHostInput(host);
   if (isIpStr(trimmed) && hostHasPort(trimmed)) {
     return trimmed;
   }
   const parsed = checkPort(trimmed, port);
-  if (net.isIP(parsed.host) !== 0) {
-    return formatHostPort(parsed.host, parsed.port);
-  }
-  try {
-    const records = await dns.lookup(parsed.host, { all: true });
-    const preferred = records.find((r) => r.family === 4) ?? records[0];
-    if (preferred?.address) {
-      return formatHostPort(preferred.address, parsed.port);
-    }
-  } catch {
-    // Fall back to host:port when DNS resolution is unavailable
-  }
-  return formatHostPort(parsed.host, parsed.port);
+  return formatHostPort(net.isIP(parsed.host) ? parsed.host : remoteAddress ?? parsed.host, parsed.port);
 }
 
 /**

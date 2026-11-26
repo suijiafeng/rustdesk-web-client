@@ -84,9 +84,16 @@ NODE_ENV=production yarn start
 | `PORT` | `3000` | HTTP and WebSocket listener port |
 | `RUSTDESK_GATEWAY_TOKEN` | empty | Private token required for public gateways |
 | `RUSTDESK_ALLOWED_ORIGINS` | empty | Comma-separated WebSocket Origin allowlist |
+| `RUSTDESK_REQUIRE_ORIGIN` | `false` | Require an Origin header on WebSocket upgrades |
+| `RUSTDESK_ALLOW_PRIVATE_TARGETS` | `false` in production, `true` in development | Allow TCP connections to LAN and loopback targets |
+| `RUSTDESK_ALLOWED_TARGET_PORTS` | empty | Comma-separated extra TCP ports for ID and relay servers in production |
 | `RUSTDESK_ENABLE_WEBRTC` | `false` | Set to `true` to enable the optional WebRTC signaling path |
 
 In production, `RUSTDESK_GATEWAY_TOKEN` must be a real value rather than an empty or placeholder token. The gateway token and the RustDesk host password are separate credentials.
+
+Production permits TCP ports `21114–21119` for ID and relay servers. Peer connections accept the port entered by the user or the dynamic NAT port supplied by the ID server. Every connection uses the same target IP checks. For a LAN deployment, set `RUSTDESK_ALLOW_PRIVATE_TARGETS=true`. Link-local and known cloud metadata addresses are always blocked.
+
+Both WebSocket endpoints share a limit of 128 connections per gateway instance, with up to 4 simultaneous connections and 24 upgrades per minute per source IP. Repeated token failures trigger a temporary backoff. The gateway uses the TCP peer address, so clients behind the same reverse proxy share its quota.
 
 The health endpoint is available at `/api/health`:
 

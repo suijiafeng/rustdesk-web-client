@@ -84,9 +84,16 @@ NODE_ENV=production yarn start
 | `PORT` | `3000` | HTTP 和 WebSocket 共用端口 |
 | `RUSTDESK_GATEWAY_TOKEN` | 空 | 公网网关应设置的私有令牌 |
 | `RUSTDESK_ALLOWED_ORIGINS` | 空 | 用逗号分隔的 WebSocket Origin 白名单 |
+| `RUSTDESK_REQUIRE_ORIGIN` | `false` | 要求 WebSocket 升级请求携带 Origin 头 |
+| `RUSTDESK_ALLOW_PRIVATE_TARGETS` | 生产为 `false`，开发为 `true` | 允许连接局域网和回环目标 |
+| `RUSTDESK_ALLOWED_TARGET_PORTS` | 空 | 生产环境额外允许的 ID 和中继服务器 TCP 端口，用逗号分隔 |
 | `RUSTDESK_ENABLE_WEBRTC` | `false` | 设为 `true` 时启用可选 WebRTC 信令入口 |
 
 生产模式不会接受空令牌或占位令牌。网关令牌与 RustDesk 被控端密码是两个独立凭据。
+
+生产环境允许 ID 和中继服务器使用 TCP `21114–21119`。对端连接支持用户填写的直连端口，以及 ID 服务器下发的 NAT 动态端口。所有连接统一校验目标 IP。局域网部署可设置 `RUSTDESK_ALLOW_PRIVATE_TARGETS=true`，链路本地地址及已知云元数据地址始终会被拦截。
+
+两个 WebSocket 入口共享每个网关实例最多 128 条连接的限额，每个来源 IP 最多同时 4 条连接，每分钟最多 24 次升级。多次令牌校验失败会触发短时退避。网关以 TCP 对端地址为准，经由同一反向代理的客户端共享额度。
 
 健康检查位于 `/api/health`：
 

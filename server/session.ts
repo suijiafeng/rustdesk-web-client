@@ -1,6 +1,7 @@
 import { decodeClipboard } from './clipboard.ts';
 import type { WebSocket } from 'ws';
 import { tokenMatches } from './auth.ts';
+import type { GatewayAdmission } from './admission.ts';
 import {
   type ClientMessage,
   type CodecCaps,
@@ -15,7 +16,6 @@ import {
 import { CursorShapes } from './cursor.ts';
 import { decodeMessage, encodeMessage } from './protos.ts';
 import { type ConnectedHost, connectDirect, connectViaId } from './rustdeskClient.ts';
-import { targetHostAllowed } from './security.ts';
 import { GatewayVideoBuffer } from './videoBuffer.ts';
 import {
   CODEC_AV1,
@@ -30,6 +30,7 @@ import {
 
 export interface GatewayConfig {
   token: string;
+  admission?: GatewayAdmission;
 }
 
 function permissions(conn: ConnectedHost) {
@@ -141,6 +142,12 @@ function extractEncodedFrames(
 
 export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
   let state: 'awaiting-connect' | 'connecting' | 'live' | 'closed' = 'awaiting-connect';
+  const connection = new AbortController();
+  const connectDeadline = setTimeout(() => {
+    cleanup(false);
+    ws.terminate();
+  }, 15_000);
+  connectDeadline.unref();
   let resolutionDisplay = 0;
   let sizes: { width: number; height: number }[] = [];
   let hostConn: ConnectedHost | null = null;
@@ -157,13 +164,9 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
 
   let isAlive = true;
 
-  const sendJson = (payload: Record<string, unknown>, onSent?: () => void) => {
+  const sendJson = (payload: Record<string, unknown>) => {
     if (ws.readyState === ws.OPEN) {
-      ws.send(JSON.stringify(payload), () => {
-        onSent?.();
-      });
-    } else {
-      onSent?.();
+      ws.send(JSON.stringify(payload));
     }
   };
 
@@ -201,6 +204,8 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
   const cleanup = (sendClosedStatus: boolean) => {
     if (state === 'closed') return;
     state = 'closed';
+    clearTimeout(connectDeadline);
+    connection.abort();
     clearInterval(heartbeat);
     clearTimeout(recoveryTimer);
     if (hostConn) {
@@ -210,6 +215,7 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
     if (sendClosedStatus) {
       sendJson({ type: 'status', state: 'closed', detail: 'disconnected' });
     }
+    if (ws.readyState === ws.OPEN) ws.close(1000);
   };
 
   const scheduleVideoRecovery = (conn: ConnectedHost) => {
@@ -473,7 +479,6 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
 
     if (parsed.type === 'disconnect') {
       cleanup(true);
-      ws.close();
       return;
     }
 
@@ -483,14 +488,19 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
         return;
       }
 
-      if (!tokenMatches(config.token, parsed.token ?? '')) {
+      clearTimeout(connectDeadline);
+      const canAuthenticate = config.admission?.canAuthenticate() ?? true;
+      const givenToken = typeof parsed.token === 'string' ? parsed.token : '';
+      if (!canAuthenticate || !tokenMatches(config.token, givenToken)) {
+        if (canAuthenticate) config.admission?.recordTokenFailure();
         sendJson({
           type: 'status',
           state: 'error',
-          detail: 'The gateway access token is missing or incorrect.',
+          detail: canAuthenticate
+            ? 'The gateway access token is missing or incorrect.'
+            : 'Too many failed attempts. Try again shortly.',
         });
         cleanup(false);
-        ws.close();
         return;
       }
 
@@ -502,23 +512,9 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
           detail: 'This browser cannot decode VP8, VP9, H.264, HEVC, or AV1.',
         });
         cleanup(false);
-        ws.close();
         return;
       }
       sessionCodecs = codecs;
-
-      const targetHost = (parsed.mode === 'id' ? parsed.idServer ?? '' : parsed.host ?? '').replace(/:\d+$/, '');
-      const relayHost = parsed.mode === 'id' && parsed.relayServer ? parsed.relayServer.replace(/:\d+$/, '') : '';
-      if (!targetHostAllowed(targetHost) || (relayHost && !targetHostAllowed(relayHost))) {
-        sendJson({
-          type: 'status',
-          state: 'error',
-          detail: 'That target address is not allowed.',
-        });
-        cleanup(false);
-        ws.close();
-        return;
-      }
 
       state = 'connecting';
       sendJson({ type: 'status', state: 'connecting', detail: 'dialing the host' });
@@ -539,6 +535,7 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
                   preferCodec: parsed.codec,
                 },
                 codecs,
+                connection.signal,
               )
             : await connectDirect(
                 {
@@ -550,6 +547,7 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
                   preferCodec: parsed.codec,
                 },
                 codecs,
+                connection.signal,
               );
 
         if ((state as string) !== 'connecting') {
@@ -562,11 +560,7 @@ export function serveSocket(ws: WebSocket, config: GatewayConfig): void {
         void startHostPump(conn);
       } catch (err) {
         if ((state as string) !== 'closed') {
-          sendJson({ type: 'status', state: 'error', detail: humanizeError(err) }, () => {
-            if (ws.readyState === ws.OPEN) {
-              ws.close(1000, 'connect error');
-            }
-          });
+          sendJson({ type: 'status', state: 'error', detail: humanizeError(err) });
           cleanup(false);
         }
       }

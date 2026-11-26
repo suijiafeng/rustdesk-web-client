@@ -1,14 +1,15 @@
 import type { WebSocket } from 'ws';
+import type { GatewayAdmission } from './admission.ts';
 import { checkPort, RENDEZVOUS_PORT, tokenMatches } from './auth.ts';
-import { targetHostAllowed } from './security.ts';
 import { EncryptedFramedStream } from './bytesCodec.ts';
 import { secureRendezvous } from './handshake.ts';
 import { decodeRendezvous, encodeRendezvous } from './protos.ts';
 import { decodeEndpoint, MAX_CANDIDATES, sdpFingerprint, validateCandidate } from '../shared/webrtc.ts';
 
 // This endpoint only forwards signaling. Passwords, media and control stay in the browser.
-export function serveWebRtcSignal(ws: WebSocket, token: string): void {
+export function serveWebRtcSignal(ws: WebSocket, token: string, admission?: GatewayAdmission): void {
   let state: 'waiting' | 'dialing' | 'ready' | 'closed' = 'waiting';
+  const connection = new AbortController();
   let stream: EncryptedFramedStream | null = null;
   let peerId = '';
   let sessionKey = '';
@@ -20,6 +21,7 @@ export function serveWebRtcSignal(ws: WebSocket, token: string): void {
   };
   const close = () => {
     state = 'closed';
+    connection.abort();
     clearTimeout(deadline);
     retries.forEach(clearTimeout);
     retries.clear();
@@ -43,7 +45,9 @@ export function serveWebRtcSignal(ws: WebSocket, token: string): void {
       const message = JSON.parse(data.toString());
       if (state === 'waiting') {
         if (message.type !== 'offer') throw new Error('Send a WebRTC offer first');
+        if (admission && !admission.canAuthenticate()) throw new Error('Too many failed attempts. Try again shortly.');
         if (typeof message.token !== 'string' || !tokenMatches(token, message.token)) {
+          admission?.recordTokenFailure();
           throw new Error('The gateway access token is missing or incorrect.');
         }
         if (typeof message.peerId !== 'string' || !/^\d{6,16}$/.test(message.peerId) ||
@@ -56,8 +60,7 @@ export function serveWebRtcSignal(ws: WebSocket, token: string): void {
         peerId = message.peerId;
         state = 'dialing';
         const dial = checkPort(message.idServer, RENDEZVOUS_PORT);
-        if (!targetHostAllowed(dial.host)) throw new Error('Invalid ID server');
-        const connected = await EncryptedFramedStream.connect(dial.host, dial.port, 5_000);
+        const connected = await EncryptedFramedStream.connect(dial.host, dial.port, 5_000, { signal: connection.signal });
         if ((state as string) === 'closed') { connected.close(); return; }
         stream = connected;
         if (message.key.trim()) await secureRendezvous(connected, message.key);
@@ -66,6 +69,7 @@ export function serveWebRtcSignal(ws: WebSocket, token: string): void {
           id: peerId, licence_key: message.key.trim(), nat_type: 0,
           conn_type: 0, version: '1.5.3', webrtc_sdp_offer: message.offer,
         } }));
+        if ((state as string) === 'closed') return;
         state = 'ready';
         send({ type: 'ready' });
         while (state === 'ready') {

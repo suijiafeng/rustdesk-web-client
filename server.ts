@@ -3,7 +3,9 @@ import express from 'express';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { Duplex } from 'node:stream';
 import { WebSocketServer } from 'ws';
+import { GatewayAdmissionLimiter } from './server/admission.ts';
 import { serveWebRtcSignal } from './server/webrtcSignal.ts';
 import { originAllowed, productionTokenProblem, redactLog } from './server/security.ts';
 import { serveSocket } from './server/session.ts';
@@ -19,6 +21,14 @@ function normalizeGatewayToken(raw: string | undefined): string {
   return trimmed;
 }
 
+function rejectUpgrade(socket: Duplex, status: string): void {
+  const deadline = setTimeout(() => socket.destroy(), 1_000);
+  deadline.unref();
+  socket.once('error', () => socket.destroy());
+  socket.once('close', () => clearTimeout(deadline));
+  socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`, () => socket.destroy());
+}
+
 async function startServer() {
   const app = express();
   const port = Number(process.env.PORT) || 3000;
@@ -29,6 +39,7 @@ async function startServer() {
   }
 
   const webRtcEnabled = process.env.RUSTDESK_ENABLE_WEBRTC?.trim().toLowerCase() === 'true';
+  const requireOrigin = process.env.RUSTDESK_REQUIRE_ORIGIN?.trim().toLowerCase() === 'true';
 
   app.disable('x-powered-by');
   app.use((_req, res, next) => {
@@ -64,6 +75,7 @@ async function startServer() {
 
   const httpServer = http.createServer(app);
   const wss = new WebSocketServer({ noServer: true, maxPayload: 4 * 1024 * 1024 });
+  const admissionLimiter = new GatewayAdmissionLimiter();
 
   wss.on('error', (err) => {
     const message = err instanceof Error ? err.message : String(err);
@@ -90,26 +102,30 @@ async function startServer() {
 
     const origin = typeof request.headers.origin === 'string' ? request.headers.origin : '';
     const allowlist = process.env.RUSTDESK_ALLOWED_ORIGINS ?? '';
-    if (!originAllowed(origin, request.headers.host ?? '', allowlist)) {
+    if (!originAllowed(origin, request.headers.host ?? '', allowlist, requireOrigin)) {
       socket.destroy();
       return;
     }
 
-    if (pathname === '/ws/webrtc') {
-      if (!webRtcEnabled) {
-        socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
-        return;
-      }
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        serveWebRtcSignal(ws, gatewayToken);
-      });
-    } else if (pathname === '/ws') {
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        serveSocket(ws, { token: gatewayToken });
-      });
-    } else {
+    if (pathname !== '/ws' && pathname !== '/ws/webrtc') {
       socket.destroy();
+      return;
     }
+    if (pathname === '/ws/webrtc' && !webRtcEnabled) {
+      rejectUpgrade(socket, '403 Forbidden');
+      return;
+    }
+
+    const admission = admissionLimiter.acquire(request.socket.remoteAddress ?? '');
+    if (!admission) {
+      rejectUpgrade(socket, '429 Too Many Requests');
+      return;
+    }
+    socket.once('close', admission.release);
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      if (pathname === '/ws/webrtc') serveWebRtcSignal(ws, gatewayToken, admission);
+      else serveSocket(ws, { token: gatewayToken, admission });
+    });
   });
 
   if (process.env.NODE_ENV !== 'production') {
