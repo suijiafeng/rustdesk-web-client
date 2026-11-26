@@ -71,6 +71,7 @@ export function useConnectForm(props: ConnectFormProps) {
   const [passwordPromptOpen, setPasswordPromptOpen] = useState(false);
   const [pendingMode, setPendingMode] = useState<ConnectionMode>(mode);
   const pendingConnectionRef = useRef<ConnectRequest | null>(null);
+  const submittedConnectionRef = useRef<ConnectRequest | null>(null);
 
   const peerInputRef = useRef<HTMLInputElement>(null);
   const hostInputRef = useRef<HTMLInputElement>(null);
@@ -140,8 +141,11 @@ export function useConnectForm(props: ConnectFormProps) {
     });
     const saved = getSavedPassword(savedPasswords, key);
     onChangeField('password', saved);
-    if (saved && !gatewayTokenNeedsInput && phase !== 'error') {
-      onConnect({ ...request, mode: requestedMode, password: saved, remember: true });
+    if (saved && !gatewayTokenNeedsInput) {
+      setPasswordPromptOpen(false);
+      const submitted = { ...request, mode: requestedMode, password: saved, remember: true };
+      submittedConnectionRef.current = submitted;
+      onConnect(submitted);
       return;
     }
     setRememberPassword(Boolean(saved));
@@ -149,7 +153,23 @@ export function useConnectForm(props: ConnectFormProps) {
     setPasswordPromptOpen(true);
   };
 
+  useEffect(() => {
+    const submitted = submittedConnectionRef.current;
+    if (phase !== 'error' || !submitted ||
+        !['PASSWORD_INVALID', 'PASSWORD_REQUIRED'].includes(props.connectionError?.code ?? '')) return;
+    // Only a password rejection needs another password prompt. Network errors
+    // must not force valid saved credentials through an extra confirmation.
+    submittedConnectionRef.current = null;
+    pendingConnectionRef.current = submitted;
+    setPendingMode(submitted.mode ?? activeMode);
+    onChangeField('password', '');
+    setRememberPassword(submitted.remember === true);
+    setPromptGatewayToken(gatewayToken);
+    setPasswordPromptOpen(true);
+  }, [phase, props.connectionError]);
+
   const requestConnection = (request: ConnectRequest) => {
+    if (isConnecting || isLive) return;
     const requestedMode = request.mode ?? activeMode;
     if (requestedMode === 'id') {
       if (!(request.peerId ?? peerId).replace(/\s+/g, '')) {
@@ -195,13 +215,15 @@ export function useConnectForm(props: ConnectFormProps) {
   const handleConfirmPasswordConnect = (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordPromptOpen(false);
-    onConnect({
+    const submitted = {
       ...pendingConnectionRef.current,
       mode: pendingMode,
       password,
       remember: rememberPassword,
       gatewayToken: gatewayTokenNeedsInput ? promptGatewayToken : undefined,
-    });
+    };
+    submittedConnectionRef.current = submitted;
+    onConnect(submitted);
   };
 
   const handleIdInputChange = (raw: string) => {
