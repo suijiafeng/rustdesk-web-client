@@ -64,9 +64,11 @@ async function tapElement(el) {
   await tap(point.x, point.y);
 }
 const sent = () => evaluate("window.sent.filter(e => e.type === 'mouse' || e.type === 'quality')");
-const mock = `if (location.protocol === 'http:') localStorage.setItem("rd_web_prefs", JSON.stringify({
+const mock = `const testParams = new URLSearchParams(location.search);
+if (location.protocol === 'http:' && !testParams.has('preservePrefs')) localStorage.setItem("rd_web_prefs", JSON.stringify({
   idServer: "localhost", peerId: new URLSearchParams(location.search).get('peer') ?? "123456789",
   forceRelay: new URLSearchParams(location.search).has('forceRelay'),
+  ...(testParams.has('webRtcOptIn') ? { webRtcOptIn: true } : {}),
 }));
 window.sent = [];
 const tokenTest = new URLSearchParams(location.search).has('tokenTest');
@@ -75,7 +77,7 @@ window.openedConnections = [];
 if (tokenTest || webRtcTest) {
   const browserFetch = window.fetch.bind(window);
   window.fetch = (input, options) => input === '/api/health'
-    ? Promise.resolve(Response.json({ authRequired: tokenTest, webRtcEnabled: webRtcTest }))
+    ? Promise.resolve(Response.json({ authRequired: tokenTest, webRtcEnabled: webRtcTest && !testParams.has('noWebRtcCapability') }))
     : browserFetch(input, options);
 }
 const BrowserSocket = window.WebSocket;
@@ -690,6 +692,35 @@ try {
   const fallbackTip = select('webrtc-fallback-tip');
   const fallbackDismiss = select('webrtc-fallback-dismiss');
   await beginWebRtcTest();
+  await until('window.finishGatewayConnect');
+  assert.deepEqual(await evaluate('window.openedConnections'), ['/ws']);
+  assert.equal(await evaluate(fallbackTip), null);
+
+  await cdp('Page.navigate', { url: directPriorityUrl.href });
+  await openNetworkSettings();
+  const webRtcSwitch = select('settings-toggle-webrtc');
+  assert.equal(await evaluate(webRtcSwitch + '.checked'), false);
+  await evaluate(webRtcSwitch + '.click()');
+  await until("JSON.parse(localStorage.getItem('rd_web_prefs')).webRtcOptIn === true");
+  const savedPreferenceUrl = new URL(directPriorityUrl);
+  savedPreferenceUrl.searchParams.set('preservePrefs', '1');
+  await cdp('Page.navigate', { url: savedPreferenceUrl.href });
+  await openNetworkSettings();
+  assert.equal(await evaluate(webRtcSwitch + '.checked'), true);
+  await evaluate(webRtcSwitch + '.click()');
+  await until("JSON.parse(localStorage.getItem('rd_web_prefs')).webRtcOptIn === false");
+  await cdp('Page.reload');
+  await openNetworkSettings();
+  assert.equal(await evaluate(webRtcSwitch + '.checked'), false);
+  await evaluate(select('mobile-settings-back') + '.click()');
+  await submitWebRtcConnection();
+  await until('window.finishGatewayConnect');
+  assert.deepEqual(await evaluate('window.openedConnections'), ['/ws']);
+  assert.equal(await evaluate(fallbackTip), null);
+  console.log('WebRTC opt-in: old preferences default off, the network switch persists both choices, and disabled connections open the gateway immediately.');
+
+  directPriorityUrl.searchParams.set('webRtcOptIn', '1');
+  await beginWebRtcTest();
   await until('window.webRtcOffer');
   assert.deepEqual(await evaluate('window.openedConnections'), ['/ws/webrtc']);
   assert.equal(await evaluate("window.sent.some(event => event.type === 'connect')"), false);
@@ -731,6 +762,12 @@ try {
   assert.deepEqual(await evaluate('window.openedConnections'), ['/ws/webrtc']);
 
   directPriorityUrl.searchParams.delete('holdGateway');
+  directPriorityUrl.searchParams.set('noWebRtcCapability', '1');
+  await beginWebRtcTest();
+  await until(`${select('stage')}.dataset.remoteActive === 'true'`);
+  assert.deepEqual(await evaluate('window.openedConnections'), ['/ws']);
+  assert.equal(await evaluate(fallbackTip), null);
+  directPriorityUrl.searchParams.delete('noWebRtcCapability');
   directPriorityUrl.searchParams.set('forceRelay', '1');
   await beginWebRtcTest();
   await until(`${select('stage')}.dataset.remoteActive === 'true'`);

@@ -15,6 +15,7 @@ interface GatewaySessionContext extends Omit<SessionMessageContext, 'connection'
   password: string;
   gatewayToken: string;
   webRtcEnabled: boolean;
+  webRtcOptIn: boolean;
   setWebRtcEnabled: Dispatch<SetStateAction<boolean>>;
   phase: ConnectionPhase;
   peer: PeerMessage | null;
@@ -79,6 +80,7 @@ export function useGatewaySession(context: GatewaySessionContext) {
     password,
     gatewayToken,
     webRtcEnabled,
+    webRtcOptIn,
     setWebRtcEnabled,
     phase,
     peer,
@@ -235,7 +237,9 @@ export function useGatewaySession(context: GatewaySessionContext) {
       setPhase('connecting');
       setStatusDetail('detailOpeningSocket');
 
-      const sock = webRtcEnabled && activeMode === 'id' && !targetForceRelay ? new RemoteSocket(wsUrl()) : new WebSocket(wsUrl());
+      const sock = webRtcOptIn && webRtcEnabled && activeMode === 'id' && !targetForceRelay
+        ? new RemoteSocket(wsUrl())
+        : new WebSocket(wsUrl());
       sock.binaryType = 'arraybuffer';
       wsRef.current = sock;
       let receivedTerminalError = false;
@@ -366,6 +370,7 @@ export function useGatewaySession(context: GatewaySessionContext) {
       forceRelay,
       gatewayToken,
       webRtcEnabled,
+      webRtcOptIn,
       ensureDecoder,
       noteFrame,
       placeCursor,

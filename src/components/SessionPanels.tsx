@@ -113,6 +113,7 @@ export function SessionPanels({
     changeLocale, changeTheme, mode, directIpEnabled, host, port, peerId, idServer,
     relayServer, serverKey, forceRelay, setMode, handleToggleDirectIp, setHost, setPort,
     setPeerId, setIdServer, setRelayServer, setServerKey, setForceRelay,
+    webRtcOptIn, setWebRtcOptIn,
   } = preferences;
   const {
     savedGatewayToken, gatewayToken, gatewayTokenReady, gatewayTokenRejected,
@@ -283,6 +284,7 @@ export function SessionPanels({
           onUpdateDisplayPrefs={handleUpdateDisplayPrefs}
           mode={mode}
           directIpEnabled={directIpEnabled}
+          webRtcOptIn={webRtcOptIn}
           phase={phase}
           host={host}
           port={port}
@@ -305,6 +307,7 @@ export function SessionPanels({
           savedPasswords={savedPasswords}
           onChangeMode={setMode}
           onToggleDirectIp={handleToggleDirectIp}
+          onChangeWebRtcOptIn={setWebRtcOptIn}
           onChangeField={(field, val) => {
             if (field === 'host') setHost(val);
             else if (field === 'port') setPort(val);

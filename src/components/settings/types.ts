@@ -12,6 +12,7 @@ export interface SettingsViewProps {
   displayPrefs: DisplayPrefs;
   section: SettingsSection;
   directIpEnabled: boolean;
+  webRtcOptIn: boolean;
   idServer: string;
   relayServer: string;
   serverKey: string;
@@ -28,6 +29,7 @@ export interface SettingsViewProps {
   onChangeTheme: (next: ThemePreference) => void;
   onUpdateDisplayPrefs: (patch: Partial<DisplayPrefs>) => void;
   onToggleDirectIp: () => void;
+  onChangeWebRtcOptIn: (checked: boolean) => void;
   onToggleTouchMode: () => void;
   onToggleDiagnostics: () => void;
   onChangeServerField: (field: ServerField, value: string) => void;

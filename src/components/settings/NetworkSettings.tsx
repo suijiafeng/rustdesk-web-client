@@ -6,20 +6,24 @@ export function NetworkSettings({
   locale,
   idServer,
   directIpEnabled,
+  webRtcOptIn,
   gatewayToken,
   gatewayTokenReadFailed,
   onSaveGatewayToken,
   onOpenServerDialog,
   onToggleDirectIp,
+  onChangeWebRtcOptIn,
 }: {
   locale: Locale;
   idServer: string;
   directIpEnabled: boolean;
+  webRtcOptIn: boolean;
   gatewayToken: string;
   gatewayTokenReadFailed: boolean;
   onSaveGatewayToken: (value: string) => Promise<boolean>;
   onOpenServerDialog: () => void;
   onToggleDirectIp: () => void;
+  onChangeWebRtcOptIn: (checked: boolean) => void;
 }) {
   const [editingToken, setEditingToken] = useState(false);
   const [tokenDraft, setTokenDraft] = useState('');
@@ -75,6 +79,18 @@ export function NetworkSettings({
           </div>
           <input type="checkbox" role="switch" className="ui-switch" checked={directIpEnabled}
             data-testid="settings-toggle-direct-ip" onChange={onToggleDirectIp} />
+        </label>
+
+        <label className="settings-option-row">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Network size={17} className="text-[var(--accent)] shrink-0" aria-hidden="true" />
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-[var(--ink)]">{t(locale, 'enableWebRtcLabel')}</div>
+              <div className="text-xs text-[var(--ink-soft)]">{t(locale, 'enableWebRtcHint')}</div>
+            </div>
+          </div>
+          <input type="checkbox" role="switch" className="ui-switch" checked={webRtcOptIn}
+            data-testid="settings-toggle-webrtc" onChange={event => onChangeWebRtcOptIn(event.target.checked)} />
         </label>
 
         <div className="settings-option-row">

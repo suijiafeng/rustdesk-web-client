@@ -86,11 +86,13 @@ export function SettingsView(props: SettingsViewProps) {
               locale={props.locale}
               idServer={props.idServer}
               directIpEnabled={props.directIpEnabled}
+              webRtcOptIn={props.webRtcOptIn}
               gatewayToken={props.gatewayToken}
               gatewayTokenReadFailed={props.gatewayTokenReadFailed}
               onSaveGatewayToken={props.onSaveGatewayToken}
               onOpenServerDialog={() => onSetServerDialogOpen(true)}
               onToggleDirectIp={props.onToggleDirectIp}
+              onChangeWebRtcOptIn={props.onChangeWebRtcOptIn}
             />
           )}
 

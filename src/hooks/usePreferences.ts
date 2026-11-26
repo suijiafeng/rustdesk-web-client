@@ -27,6 +27,7 @@ interface SavedConnectionPrefs {
   relayServer?: string;
   serverKey?: string;
   forceRelay?: boolean;
+  webRtcOptIn?: boolean;
 }
 
 function loadSavedPrefs(): SavedConnectionPrefs {
@@ -63,6 +64,7 @@ export function usePreferences(isCoarseDevice: boolean) {
     typeof prefs.serverKey === 'string' ? prefs.serverKey : '',
   );
   const [forceRelay, setForceRelay] = useState(Boolean(prefs.forceRelay));
+  const [webRtcOptIn, setWebRtcOptIn] = useState(prefs.webRtcOptIn === true);
 
   useEffect(() => {
     try {
@@ -76,12 +78,13 @@ export function usePreferences(isCoarseDevice: boolean) {
         relayServer,
         serverKey,
         forceRelay,
+        webRtcOptIn,
       };
       window.localStorage.setItem(PREFS_STORAGE_KEY, JSON.stringify(next));
     } catch {
       // Ignore storage quota or private-mode errors
     }
-  }, [mode, directIpEnabled, host, port, peerId, idServer, relayServer, serverKey, forceRelay]);
+  }, [mode, directIpEnabled, host, port, peerId, idServer, relayServer, serverKey, forceRelay, webRtcOptIn]);
 
   const handleToggleDirectIp = useCallback(() => {
     setDirectIpEnabled((prev) => {
@@ -177,6 +180,8 @@ export function usePreferences(isCoarseDevice: boolean) {
     setServerKey,
     forceRelay,
     setForceRelay,
+    webRtcOptIn,
+    setWebRtcOptIn,
     handleToggleDirectIp,
     localePreference,
     locale,

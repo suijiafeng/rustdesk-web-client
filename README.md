@@ -138,7 +138,7 @@ For remote access, place the gateway behind HTTPS and forward WebSocket upgrades
 
 ## WebRTC
 
-WebRTC is opt-in. When disabled, every session uses the existing gateway path.
+WebRTC is opt-in and defaults off in **Settings → Network → WebRTC (experimental)**. The browser remembers this choice. When disabled, every session uses the existing gateway path.
 
 Enable it only after preparing both the gateway and signaling infrastructure:
 
@@ -148,8 +148,9 @@ Enable it only after preparing both the gateway and signaling infrastructure:
 4. Enable the corresponding WebRTC setting on supported hosts.
 5. Set the same ID server and public key in **Settings → Network**.
 6. Ensure UDP connectivity and host firewall rules allow WebRTC.
+7. Turn on **WebRTC (experimental)** in **Settings → Network** for this browser.
 
-The signaling endpoint is `/ws/webrtc`. WebRTC identity is verified using server/device signatures and DTLS fingerprint data. For eligible ID connections the browser attempts WebRTC first and opens the gateway connection only if signaling, networking, or identity verification fails. A rejected host login does not automatically retry on the gateway. Direct IP and forced relay connections use the gateway path.
+The signaling endpoint is `/ws/webrtc`. WebRTC identity is verified using server/device signatures and DTLS fingerprint data. Only after you explicitly enable it and the gateway reports support will eligible ID connections attempt WebRTC first, opening the gateway connection if signaling, networking, or identity verification fails. A rejected host login does not automatically retry on the gateway. Direct IP and forced relay connections use the gateway path.
 
 Official open-source hbbs/hbbr builds do not by themselves imply support for this signaling protocol. Use a compatible server or apply [server-patches/hbbs/README.md](server-patches/hbbs/README.md).
 

@@ -34,6 +34,7 @@ interface RustDeskShellProps {
   onUpdateDisplayPrefs: (patch: Partial<DisplayPrefs>) => void;
   mode: ConnectionMode;
   directIpEnabled: boolean;
+  webRtcOptIn: boolean;
   phase: ConnectionPhase;
   host: string;
   port: string;
@@ -56,6 +57,7 @@ interface RustDeskShellProps {
   savedPasswords: SavedPasswordMap;
   onChangeMode: (mode: ConnectionMode) => void;
   onToggleDirectIp: () => void;
+  onChangeWebRtcOptIn: (checked: boolean) => void;
   onChangeField: (field: ConnectionField, value: string) => void;
   onChangeForceRelay: (checked: boolean) => void;
   onClearSavedPassword: (deviceKey: string) => void;
@@ -81,6 +83,7 @@ export function RustDeskShell({
   onUpdateDisplayPrefs,
   mode,
   directIpEnabled,
+  webRtcOptIn,
   phase,
   host,
   port,
@@ -103,6 +106,7 @@ export function RustDeskShell({
   savedPasswords,
   onChangeMode,
   onToggleDirectIp,
+  onChangeWebRtcOptIn,
   onChangeField,
   onChangeForceRelay,
   onClearSavedPassword,
@@ -187,6 +191,7 @@ export function RustDeskShell({
         displayPrefs={displayPrefs}
         section={settingsSection}
         directIpEnabled={directIpEnabled}
+        webRtcOptIn={webRtcOptIn}
         idServer={idServer}
         relayServer={relayServer}
         serverKey={serverKey}
@@ -203,6 +208,7 @@ export function RustDeskShell({
         onChangeTheme={onChangeTheme}
         onUpdateDisplayPrefs={onUpdateDisplayPrefs}
         onToggleDirectIp={onToggleDirectIp}
+        onChangeWebRtcOptIn={onChangeWebRtcOptIn}
         onToggleTouchMode={onToggleTouchMode}
         onToggleDiagnostics={onToggleDiagnostics}
         onChangeServerField={onChangeField}
