@@ -75,21 +75,24 @@ export function RemoteStage({
         width={remoteW}
         height={remoteH}
         style={{
-          left: `${view.panX}px`,
-          top: `${view.panY}px`,
-          width: `${remoteW * view.scale}px`,
-          height: `${remoteH * view.scale}px`,
+          left: 0,
+          top: 0,
+          width: remoteW,
+          height: remoteH,
+          transform: `translate3d(${view.panX}px, ${view.panY}px, 0) scale(${view.scale})`,
+          transformOrigin: '0 0',
         }}
       />
 
       <div
         ref={cursorElRef}
         className="remote-cursor"
-        style={enlargeCursor ? { transform: 'scale(2)', transformOrigin: '0 0' } : undefined}
+        style={{ left: 0, top: 0 }}
         data-testid="remote-cursor"
         hidden={!showRemoteCursor}
         aria-hidden="true"
       >
+        <div style={{ transform: `scale(${enlargeCursor ? 2 : 1})`, transformOrigin: '0 0' }}>
         {cursorShape ? (
           <canvas
             ref={cursorCanvasRef}
@@ -100,6 +103,7 @@ export function RemoteStage({
         ) : (
           <MousePointer2 size={18} fill="#fff" stroke="#171717" />
         )}
+        </div>
       </div>
 
       <input

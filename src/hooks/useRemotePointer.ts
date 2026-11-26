@@ -209,8 +209,7 @@ export function useRemotePointer({
     if (el) {
       const screen = mapFromRemote(cx, cy, viewRef.current);
       if (el.style.visibility) el.style.removeProperty('visibility');
-      el.style.left = `${screen.x}px`;
-      el.style.top = `${screen.y}px`;
+      el.style.transform = `translate3d(${screen.x}px, ${screen.y}px, 0)`;
     }
   }, []);
 
@@ -237,8 +236,7 @@ export function useRemotePointer({
     const el = cursorElRef.current;
     if (!el) return;
     const screen = mapFromRemote(cursorRef.current.x, cursorRef.current.y, view);
-    el.style.left = `${screen.x}px`;
-    el.style.top = `${screen.y}px`;
+    el.style.transform = `translate3d(${screen.x}px, ${screen.y}px, 0)`;
   }, [view.scale, view.panX, view.panY, virtualCursorVisible]);
 
   useEffect(() => {
