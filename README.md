@@ -133,7 +133,7 @@ Enable it only after preparing both the gateway and signaling infrastructure:
 5. Set the same ID server and public key in **Settings → Network**.
 6. Ensure UDP connectivity and host firewall rules allow WebRTC.
 
-The signaling endpoint is `/ws/webrtc`. WebRTC identity is verified using server/device signatures and DTLS fingerprint data. If signaling, networking, or verification fails, the session closes the attempted channel and falls back to the gateway path.
+The signaling endpoint is `/ws/webrtc`. WebRTC identity is verified using server/device signatures and DTLS fingerprint data. For eligible ID connections the browser attempts WebRTC first and opens the gateway connection only if signaling, networking, or identity verification fails. A rejected host login does not automatically retry on the gateway. Direct IP and forced relay connections use the gateway path.
 
 Official open-source hbbs/hbbr builds do not by themselves imply support for this signaling protocol. Use a compatible server or apply [server-patches/hbbs/README.md](server-patches/hbbs/README.md).
 

@@ -8,21 +8,30 @@ export class RemoteSocket {
   onmessage: ((event: MessageEvent) => void) | null = null;
   onerror: ((event: Event) => void) | null = null;
   onclose: ((event: CloseEvent) => void) | null = null;
-  private gateway: WebSocket;
-  private mode: 'gateway' | 'trying' | 'webrtc' | 'closed' = 'gateway';
+  private gateway: WebSocket | null = null;
+  private mode: 'pending' | 'gateway' | 'trying' | 'webrtc' | 'closed' = 'pending';
   private abort: AbortController | null = null;
   private session: ReturnType<typeof createNativeSession> | null = null;
 
-  constructor(private url: string) { this.gateway = this.openGateway(); }
-
-  private openGateway(connect?: string): WebSocket {
-    const socket = new WebSocket(this.url);
-    socket.binaryType = 'arraybuffer';
-    socket.onopen = event => {
-      if (this.mode === 'closed' || socket !== this.gateway) { socket.close(); return; }
+  constructor(private url: string) {
+    // Let the caller provide the connection request without opening a gateway socket.
+    queueMicrotask(() => {
+      if (this.mode !== 'pending') return;
       this.readyState = WebSocket.OPEN;
-      if (connect) socket.send(connect);
-      else this.onopen?.(event);
+      this.onopen?.(new Event('open'));
+    });
+  }
+
+  private openGateway(connect: string): void {
+    this.mode = 'gateway';
+    this.readyState = WebSocket.CONNECTING;
+    const socket = new WebSocket(this.url);
+    this.gateway = socket;
+    socket.binaryType = this.binaryType;
+    socket.onopen = () => {
+      if (this.mode !== 'gateway' || socket !== this.gateway) return;
+      this.readyState = WebSocket.OPEN;
+      socket.send(connect);
     };
     socket.onmessage = event => { if (this.mode === 'gateway' && socket === this.gateway) this.onmessage?.(event); };
     socket.onerror = event => { if (this.mode === 'gateway' && socket === this.gateway) this.onerror?.(event); };
@@ -31,16 +40,19 @@ export class RemoteSocket {
       this.readyState = WebSocket.CLOSED;
       this.onclose?.(event);
     };
-    return socket;
   }
 
   send(data: string): void {
-    if (this.mode === 'closed') return;
+    if (this.mode === 'gateway') {
+      if (this.gateway?.readyState === WebSocket.OPEN) this.gateway.send(data);
+      return;
+    }
+    if (this.mode === 'closed' || this.mode === 'trying') return;
     const message = JSON.parse(data) as ClientMessage;
     if (this.mode === 'webrtc') { this.session?.send(message); return; }
-    if (message.type === 'connect' && message.mode === 'id' && !message.forceRelay &&
+    if (message.type !== 'connect') return;
+    if (message.mode === 'id' && !message.forceRelay && /^\d{6,16}$/.test(message.peerId ?? '') &&
         typeof RTCPeerConnection !== 'undefined' && globalThis.isSecureContext) {
-      if (this.mode === 'trying') return;
       this.mode = 'trying';
       this.abort = new AbortController();
       const abort = this.abort;
@@ -52,26 +64,23 @@ export class RemoteSocket {
         const conn = await connectWebRtc(this.url, message, abort.signal);
         if (abort.signal.aborted) { conn.stream.close(); return; }
         this.mode = 'webrtc';
-        this.gateway.close();
         this.session = createNativeSession(conn, selectCodecs(message.codecs),
           value => this.onmessage?.(new MessageEvent('message', { data: value })), () => this.close(), message.codec);
         this.session.start();
       })().catch(async error => {
         if (abort.signal.aborted || this.mode === 'closed') return;
-        if (error?.name === 'WebRtcLoginError') {
+        if (error?.name === 'WebRtcLoginError' || this.mode === 'webrtc') {
           this.onmessage?.(new MessageEvent('message', { data: JSON.stringify({
             type: 'status', state: 'error', detail: error.message,
           }) }));
           this.close();
           return;
         }
-        this.mode = 'gateway';
-        if (this.gateway.readyState === WebSocket.OPEN) this.gateway.send(data);
-        else this.gateway = this.openGateway(data);
+        this.openGateway(data);
       });
       return;
     }
-    if (this.mode === 'gateway') this.gateway.send(data);
+    this.openGateway(data);
   }
 
   close(): void {
@@ -80,7 +89,7 @@ export class RemoteSocket {
     this.readyState = WebSocket.CLOSED;
     this.abort?.abort();
     this.session?.close();
-    this.gateway.close();
+    this.gateway?.close();
     this.onclose?.(new CloseEvent('close', { code: 1000, wasClean: true }));
   }
 }

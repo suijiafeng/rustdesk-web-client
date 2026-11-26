@@ -66,26 +66,44 @@ async function tapElement(el) {
 const sent = () => evaluate("window.sent.filter(e => e.type === 'mouse' || e.type === 'quality')");
 const mock = `if (location.protocol === 'http:') localStorage.setItem("rd_web_prefs", JSON.stringify({
   idServer: "localhost", peerId: new URLSearchParams(location.search).get('peer') ?? "123456789",
+  forceRelay: new URLSearchParams(location.search).has('forceRelay'),
 }));
 window.sent = [];
 const tokenTest = new URLSearchParams(location.search).has('tokenTest');
-if (tokenTest) {
+const webRtcTest = new URLSearchParams(location.search).has('webRtcTest');
+window.openedConnections = [];
+if (tokenTest || webRtcTest) {
   const browserFetch = window.fetch.bind(window);
   window.fetch = (input, options) => input === '/api/health'
-    ? Promise.resolve(Response.json({ authRequired: true, webRtcEnabled: false }))
+    ? Promise.resolve(Response.json({ authRequired: tokenTest, webRtcEnabled: webRtcTest }))
     : browserFetch(input, options);
 }
 const BrowserSocket = window.WebSocket;
 window.WebSocket = class extends EventTarget {
+  static CONNECTING = 0;
   static OPEN = 1;
+  static CLOSED = 3;
   constructor(url, protocols) {
     super();
-    if (!String(url).endsWith('/ws')) return new BrowserSocket(url, protocols);
+    this.pathname = new URL(url, location.href).pathname;
+    if (this.pathname !== '/ws' && !(webRtcTest && this.pathname === '/ws/webrtc')) {
+      return new BrowserSocket(url, protocols);
+    }
+    window.openedConnections.push(this.pathname);
     this.readyState = 0;
     setTimeout(() => { this.readyState = 1; this.onopen?.(); }, 10);
   }
   send(data) {
     const message = JSON.parse(data);
+    if (this.pathname === '/ws/webrtc') {
+      if (message.type === 'offer') {
+        window.webRtcOffer = message;
+        window.rejectWebRtcOffer = () => this.onmessage?.({
+          data: JSON.stringify({ type: 'error', message: 'Incompatible ID server' }),
+        });
+      }
+      return;
+    }
     window.sent.push(message);
     if (message.type === 'ping') setTimeout(() => this.onmessage?.({ data: JSON.stringify({
       type: 'pong', seq: message.seq, clientTs: message.clientTs, serverTs: Date.now(),
@@ -648,6 +666,32 @@ try {
   await until(select('gateway-token'));
   assert.equal(await evaluate(select('gateway-token') + '.value'), '');
   console.log('Gateway token: hidden by default, encrypted and reused after reload, and prompts again after clearing.');
+
+  const directPriorityUrl = new URL(appUrl);
+  directPriorityUrl.searchParams.set('webRtcTest', '1');
+  directPriorityUrl.searchParams.set('peer', '901234571');
+  async function beginWebRtcTest() {
+    await cdp('Page.navigate', { url: directPriorityUrl.href });
+    await until(`window.openedConnections && ${select('connect')}`);
+    await evaluate(select('connect') + '.click()');
+    await until(select('password-confirm-connect'));
+    await evaluate(select('password-confirm-connect') + '.click()');
+  }
+  await beginWebRtcTest();
+  await until('window.webRtcOffer');
+  assert.deepEqual(await evaluate('window.openedConnections'), ['/ws/webrtc']);
+  assert.equal(await evaluate("window.sent.some(event => event.type === 'connect')"), false);
+  await evaluate('window.rejectWebRtcOffer()');
+  await until(`${select('stage')}.dataset.remoteActive === 'true'`);
+  assert.deepEqual(await evaluate('window.openedConnections'), ['/ws/webrtc', '/ws']);
+  assert.equal(await evaluate("window.sent.filter(event => event.type === 'connect').length"), 1);
+
+  directPriorityUrl.searchParams.set('forceRelay', '1');
+  await beginWebRtcTest();
+  await until(`${select('stage')}.dataset.remoteActive === 'true'`);
+  assert.deepEqual(await evaluate('window.openedConnections'), ['/ws']);
+  assert.equal(await evaluate("window.sent.find(event => event.type === 'connect').forceRelay"), true);
+  console.log('WebRTC priority: signal first, open the gateway only after fallback, and preserve forced relay.');
 } finally {
   socket.close();
   const closed = await fetch(`${debuggerUrl}/json/close/${tab.id}`);
