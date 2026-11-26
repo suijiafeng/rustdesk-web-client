@@ -122,6 +122,7 @@ export function createClientMessageHandler(context: ClientMessageContext) {
                   key: parsed.key ?? '',
                   forceRelay: Boolean(parsed.forceRelay),
                   quality: parsed.quality,
+                  customQuality: parsed.customQuality,
                   fps: parsed.fps,
                   preferCodec: parsed.codec,
                 },
@@ -134,6 +135,7 @@ export function createClientMessageHandler(context: ClientMessageContext) {
                   port: Number(parsed.port ?? 0),
                   password: parsed.password ?? '',
                   quality: parsed.quality,
+                  customQuality: parsed.customQuality,
                   fps: parsed.fps,
                   preferCodec: parsed.codec,
                 },
@@ -219,10 +221,14 @@ export function createClientMessageHandler(context: ClientMessageContext) {
       forwardToHost(hostMsg);
     },
     quality: parsed => {
-      const refreshVideo = Boolean(state.sessionCodecs && decodingPreferenceChanged(state.sessionCodecs, state.preferredCodec, parsed.codec));
-      if (refreshVideo) state.preferredCodec = parsed.codec;
-      const hostMsg = toHostMessage(refreshVideo ? parsed : { ...parsed, codec: undefined }, state.sessionCodecs);
-      forwardToHost(hostMsg, refreshVideo);
+      try {
+        const refreshVideo = Boolean(state.sessionCodecs && decodingPreferenceChanged(state.sessionCodecs, state.preferredCodec, parsed.codec));
+        const hostMsg = toHostMessage(refreshVideo ? parsed : { ...parsed, codec: undefined }, state.sessionCodecs);
+        if (refreshVideo) state.preferredCodec = parsed.codec;
+        forwardToHost(hostMsg, refreshVideo);
+      } catch (error) {
+        sendJson({ type: 'error', message: humanizeError(error) });
+      }
     },
     mouse: forwardControl,
     key: forwardControl,

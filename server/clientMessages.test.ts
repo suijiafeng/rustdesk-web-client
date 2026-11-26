@@ -153,3 +153,19 @@ test('quality sends decoder changes before refresh and forwarding failures close
   assert.equal(f.replies.at(-1)?.state, 'error');
   assert.deepEqual(f.closed, [false]);
 });
+
+test('continuous quality updates preserve FPS, switch back to presets and reject invalid values without closing', async t => {
+  const f = fixture(t);
+  await f.send({ type: 'quality', quality: 'custom', customQuality: 100, fps: 25 });
+  assert.equal(f.writes[0].misc.option.image_quality ?? 0, 0);
+  assert.equal(f.writes[0].misc.option.custom_image_quality, 50 * 256);
+  assert.equal(f.writes[0].misc.option.custom_fps, 25);
+  await f.send({ type: 'quality', quality: 'best', customQuality: 100, fps: 25 });
+  assert.equal(f.writes[1].misc.option.image_quality, 4);
+  assert.equal(f.writes[1].misc.option.custom_image_quality, undefined);
+  await f.send({ type: 'quality', quality: 'custom', customQuality: 201, codec: 'vp9' });
+  assert.equal(f.writes.length, 2);
+  assert.equal(f.state.preferredCodec, 'vp8');
+  assert.match(String(f.replies.at(-1)?.message), /even percentage/);
+  assert.deepEqual(f.closed, []);
+});

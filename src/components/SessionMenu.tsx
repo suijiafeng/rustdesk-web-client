@@ -59,6 +59,7 @@ export interface SessionMenuProps {
   stats: SessionStats;
   rtt: number;
   quality: QualityLevel;
+  customQuality: number;
   targetFps: number;
   preferredCodec: PreferredCodec;
   privacyEnabled: boolean;
@@ -74,7 +75,7 @@ export interface SessionMenuProps {
   onReverseScrollChange: (reverse: boolean) => void;
   onSwitchDisplay: (index: number) => void;
   onQuickKey: (name: 'Esc' | 'Tab' | 'Ctrl+C' | 'Ctrl+V' | 'Ctrl+Alt+Del' | 'Lock') => void;
-  onChangeQuality: (quality: QualityLevel, fps: number, codec?: PreferredCodec) => void;
+  onChangeQuality: (quality: QualityLevel, fps: number, codec?: PreferredCodec, customQuality?: number) => void;
 }
 
 export function SessionMenu(props: MobileSessionPanelProps) {
@@ -101,6 +102,7 @@ function DesktopSessionMenu({
   stats,
   rtt,
   quality,
+  customQuality,
   targetFps,
   preferredCodec,
   onClose,
@@ -258,9 +260,19 @@ function DesktopSessionMenu({
                 </label>}
                 <label className="session-setting-row"><Sliders /><span>{t(locale, 'qualityAndFps')}</span>
                   <AdaptiveSelect label={t(locale, 'qualityAndFps')} testId="quality-select" value={quality}
-                    options={[{ value: 'low', label: t(locale, 'qualityLow') }, { value: 'balanced', label: t(locale, 'qualityBalanced') }, { value: 'best', label: t(locale, 'qualityBest') }]}
-                    onChange={value => { onChangeQuality(value as QualityLevel, targetFps); onNotify(t(locale, 'requestSent')+' · '+t(locale, value === 'low' ? 'qualityLow' : value === 'best' ? 'qualityBest' : 'qualityBalanced')); }} />
+                    options={[{ value: 'low', label: t(locale, 'qualityLow') }, { value: 'balanced', label: t(locale, 'qualityBalanced') }, { value: 'best', label: t(locale, 'qualityBest') }, { value: 'custom', label: t(locale, 'qualityCustom') }]}
+                    onChange={value => { onChangeQuality(value as QualityLevel, targetFps); onNotify(t(locale, 'requestSent')+' · '+t(locale, value === 'low' ? 'qualityLow' : value === 'best' ? 'qualityBest' : value === 'custom' ? 'qualityCustom' : 'qualityBalanced')); }} />
                 </label>
+                {quality === 'custom' && <div className="rd-slider-group">
+                  <label className="rd-slider-row">
+                    <input type="range" className="rd-range" min={20} max={200} step={2}
+                      value={customQuality} aria-label={t(locale, 'qualityRatioLabel')} data-testid="session-custom-quality"
+                      onChange={event => onChangeQuality('custom', targetFps, preferredCodec, Number(event.target.value))} />
+                    <span className="rd-slider-val font-mono-tabular">{customQuality}%</span>
+                    <span className="rd-slider-label">{t(locale, 'qualityRatioLabel')}</span>
+                  </label>
+                  <p className="text-xs text-[var(--ink-soft)]">{t(locale, 'qualityRatioHint')}</p>
+                </div>}
                 <label className="session-setting-row"><Gauge /><span>{t(locale, 'targetFps')}</span>
                   <AdaptiveSelect label={t(locale, 'targetFps')} testId="fps-select" value={String(targetFps)}
                     options={[...new Set([15,30,60,targetFps])].sort((a,b) => a-b).map(n => ({ value: String(n), label: `${n} FPS` }))}

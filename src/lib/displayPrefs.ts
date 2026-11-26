@@ -2,7 +2,7 @@ import type { CodecSupport, QualityLevel } from './protocol';
 
 export type DefaultViewStyle = 'original' | 'fit';
 export type ScrollStyle = 'auto' | 'scrollbar';
-export type ImageQualityPreset = 'best' | 'balanced' | 'low' | 'custom';
+export type ImageQualityPreset = QualityLevel;
 export type PreferredCodec = 'auto' | 'vp8' | 'vp9' | 'h264' | 'h265' | 'av1';
 
 export interface DisplayPrefs {
@@ -10,7 +10,7 @@ export interface DisplayPrefs {
   scrollStyle: ScrollStyle;
   qualityPreset: ImageQualityPreset;
   customBitrate: number;
-  customFps: number;
+  targetFps: number;
   codec: PreferredCodec;
   viewOnly: boolean;
   showRemoteCursor: boolean;
@@ -31,7 +31,7 @@ export const DEFAULT_DISPLAY_PREFS: DisplayPrefs = {
   scrollStyle: 'auto',
   qualityPreset: 'balanced',
   customBitrate: 50,
-  customFps: 30,
+  targetFps: 30,
   codec: 'auto',
   viewOnly: false,
   showRemoteCursor: true,
@@ -79,8 +79,14 @@ export function normalizeDisplayPrefs(raw: unknown): DisplayPrefs {
     viewStyle,
     scrollStyle,
     qualityPreset,
-    customBitrate: clampInt(obj.customBitrate, 10, 200, DEFAULT_DISPLAY_PREFS.customBitrate),
-    customFps: clampInt(obj.customFps, 10, 60, DEFAULT_DISPLAY_PREFS.customFps),
+    // Keep the stored field name for existing browsers; the value is a quality ratio in percent.
+    customBitrate: Math.round(clampInt(obj.customBitrate, 20, 200, DEFAULT_DISPLAY_PREFS.customBitrate) / 2) * 2,
+    // Older preferences coupled FPS to the preset. Migrate their effective value once.
+    targetFps: obj.targetFps !== undefined
+      ? clampInt(obj.targetFps, 10, 60, DEFAULT_DISPLAY_PREFS.targetFps)
+      : qualityPreset === 'best' ? 60 : qualityPreset === 'low' ? 15
+      : qualityPreset === 'custom' ? clampInt(obj.customFps, 10, 60, DEFAULT_DISPLAY_PREFS.targetFps)
+      : DEFAULT_DISPLAY_PREFS.targetFps,
     codec,
     viewOnly: Boolean(obj.viewOnly),
     followWindow: obj.followWindow === true,
@@ -114,25 +120,6 @@ export function persistDisplayPrefs(prefs: DisplayPrefs): void {
   } catch {
     // Ignore storage quota or private-mode errors
   }
-}
-
-export function resolveQualityLevel(
-  preset: ImageQualityPreset,
-  customBitrate: number,
-): QualityLevel {
-  if (preset === 'best' || preset === 'balanced' || preset === 'low') {
-    return preset;
-  }
-  if (customBitrate >= 75) return 'best';
-  if (customBitrate <= 30) return 'low';
-  return 'balanced';
-}
-
-export function resolveTargetFps(preset: ImageQualityPreset, customFps: number): number {
-  if (preset === 'best') return 60;
-  if (preset === 'balanced') return 30;
-  if (preset === 'low') return 15;
-  return clampInt(customFps, 10, 60, 30);
 }
 
 export function filterCodecSupport(

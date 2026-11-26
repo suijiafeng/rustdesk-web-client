@@ -6,8 +6,6 @@ import {
   applyWheelDirection,
   filterCodecSupport,
   normalizeDisplayPrefs,
-  resolveQualityLevel,
-  resolveTargetFps,
 } from './displayPrefs';
 
 test('normalizeDisplayPrefs restores safe defaults and clamps bounds', () => {
@@ -33,7 +31,7 @@ test('normalizeDisplayPrefs restores safe defaults and clamps bounds', () => {
   assert.equal(normalized.scrollStyle, 'scrollbar');
   assert.equal(normalized.qualityPreset, 'custom');
   assert.equal(normalized.customBitrate, 200);
-  assert.equal(normalized.customFps, 10);
+  assert.equal(normalized.targetFps, 10);
   assert.equal(normalized.codec, 'vp9');
   assert.equal(normalized.viewOnly, true);
   assert.equal(normalized.showRemoteCursor, false);
@@ -43,19 +41,25 @@ test('normalizeDisplayPrefs restores safe defaults and clamps bounds', () => {
   assert.equal(normalized.swapMouseButtons, true);
 });
 
-test('resolveQualityLevel and resolveTargetFps map presets and custom values', () => {
-  assert.equal(resolveQualityLevel('best', 50), 'best');
-  assert.equal(resolveQualityLevel('balanced', 50), 'balanced');
-  assert.equal(resolveQualityLevel('low', 50), 'low');
-  assert.equal(resolveQualityLevel('custom', 25), 'low');
-  assert.equal(resolveQualityLevel('custom', 50), 'balanced');
-  assert.equal(resolveQualityLevel('custom', 90), 'best');
+test('legacy quality preferences migrate their effective FPS and retain a continuous quality ratio', () => {
+  assert.equal(normalizeDisplayPrefs({ qualityPreset: 'best', customFps: 30 }).targetFps, 60);
+  assert.equal(normalizeDisplayPrefs({ qualityPreset: 'low', customFps: 30 }).targetFps, 15);
+  assert.equal(normalizeDisplayPrefs({ qualityPreset: 'custom', customFps: 45 }).targetFps, 45);
+  const custom = normalizeDisplayPrefs({ qualityPreset: 'custom', customBitrate: 75, customFps: 45 });
+  assert.equal(custom.qualityPreset, 'custom');
+  assert.equal(custom.customBitrate, 76);
+  assert.equal(normalizeDisplayPrefs({ customBitrate: 10 }).customBitrate, 20);
+  assert.equal(normalizeDisplayPrefs({ customBitrate: 100 }).customBitrate, 100);
+});
 
-  assert.equal(resolveTargetFps('best', 30), 60);
-  assert.equal(resolveTargetFps('balanced', 30), 30);
-  assert.equal(resolveTargetFps('low', 30), 15);
-  assert.equal(resolveTargetFps('custom', 45), 45);
-  assert.equal(resolveTargetFps('custom', 120), 60);
+test('new FPS preferences remain independent of quality presets after persistence', () => {
+  for (const qualityPreset of ['low', 'balanced', 'best', 'custom']) {
+    const prefs = normalizeDisplayPrefs({ qualityPreset, targetFps: 25, customFps: 60 });
+    assert.equal(prefs.targetFps, 25);
+    assert.equal(normalizeDisplayPrefs(JSON.parse(JSON.stringify(prefs))).targetFps, 25);
+  }
+  assert.equal(normalizeDisplayPrefs({ targetFps: 999 }).targetFps, 60);
+  assert.equal(normalizeDisplayPrefs({ targetFps: 0 }).targetFps, 10);
 });
 
 test('filterCodecSupport disables AV1 in auto mode when faster codecs exist, isolates explicit codecs, and falls back gracefully', () => {

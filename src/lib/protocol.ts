@@ -108,7 +108,7 @@ export interface CodecSupport {
   reported: boolean;
 }
 
-export type QualityLevel = 'low' | 'balanced' | 'best';
+export type QualityLevel = 'low' | 'balanced' | 'best' | 'custom';
 
 export type ClientMessage =
   | { type: 'privacy'; enabled: boolean }
@@ -129,6 +129,7 @@ export type ClientMessage =
       token?: string;
       codecs: CodecSupport;
       quality?: QualityLevel;
+      customQuality?: number;
       fps?: number;
       codec?: string;
     }
@@ -152,7 +153,7 @@ export type ClientMessage =
   | { type: 'followWindow'; enabled: boolean }
   | { type: 'switchDisplay'; display: number }
   | { type: 'refresh' }
-  | { type: 'quality'; quality: QualityLevel; fps: number; codec?: string }
+  | { type: 'quality'; quality: QualityLevel; customQuality?: number; fps: number; codec?: string }
   | { type: 'ping'; seq: number; clientTs: number }
   | { type: 'disconnect' };
 

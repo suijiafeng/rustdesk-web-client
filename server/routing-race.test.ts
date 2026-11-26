@@ -6,7 +6,7 @@ import { passwordResponse } from './auth.ts';
 import { EncryptedFramedStream } from './bytesCodec.ts';
 import { selectCodecs } from './control.ts';
 import { decodeMessage, decodeRendezvous, encodeAddrMangle, encodeMessage, encodeRendezvous } from './protos.ts';
-import { connectViaId } from './rustdeskClient.ts';
+import { connectDirect, connectViaId } from './rustdeskClient.ts';
 
 type Route = 'direct' | 'relay';
 type Behavior = 'ready' | 'stall' | 'close';
@@ -18,7 +18,7 @@ function completion() {
 }
 
 async function routingFixture(t: TestContext, options: {
-  direct?: Behavior; relay?: Behavior; loginError?: string; defaultForceRelay?: boolean;
+  direct?: Behavior; relay?: Behavior; loginError?: string; defaultForceRelay?: boolean; directIp?: boolean;
 } = {}) {
   const envNames = ['NODE_ENV', 'RUSTDESK_ALLOW_PRIVATE_TARGETS', 'RUSTDESK_DEFAULT_FORCE_RELAY'] as const;
   const savedEnv = new Map(envNames.map((key) => [key, process.env[key]]));
@@ -31,6 +31,7 @@ async function routingFixture(t: TestContext, options: {
   const streams: Partial<Record<Route, EncryptedFramedStream>> = {};
   const routeSockets: Partial<Record<Route, net.Socket>> = {};
   const loginCounts = { direct: 0, relay: 0 };
+  const loginOptions: Partial<Record<Route, Record<string, number>>> = {};
   const connected = { direct: completion(), relay: completion() };
   const closed = { direct: completion(), relay: completion() };
   const controller = new AbortController();
@@ -67,7 +68,8 @@ async function routingFixture(t: TestContext, options: {
     const login = decodeMessage(raw).login_request;
     assert.ok(login, 'only the winner sends a login request');
     loginCounts[route]++;
-    assert.equal(login.username, peerId);
+    loginOptions[route] = login.option;
+    assert.equal(login.username, options.directIp ? `127.0.0.1:${(direct.address() as net.AddressInfo).port}` : peerId);
     assert.deepEqual(Buffer.from(login.password), passwordResponse(password, hash.salt, hash.challenge));
     await stream.sendRaw(encodeMessage({ login_response: options.loginError
       ? { error: options.loginError }
@@ -123,19 +125,34 @@ async function routingFixture(t: TestContext, options: {
     await once(server, 'listening');
   }
   return {
-    controller, connected, closed, loginCounts,
+    controller, connected, closed, loginCounts, loginOptions,
     get relayRequests() { return relayRequests; },
     get requestedForceRelay() { return requestedForceRelay; },
     get directSocket() { return routeSockets.direct; },
-    connect(forceRelay = false) {
+    connect(forceRelay = false, quality: { quality?: string; customQuality?: number; fps?: number } = {}) {
+      if (options.directIp) return connectDirect({
+        host: '127.0.0.1', port: (direct.address() as net.AddressInfo).port, password, ...quality,
+      }, selectCodecs({ vp8: true, reported: true }), controller.signal);
       return connectViaId({
         peerId, password, idServer: `127.0.0.1:${(hbbs.address() as net.AddressInfo).port}`,
-        relayServer: '', key: '', forceRelay,
+        relayServer: '', key: '', forceRelay, ...quality,
       }, selectCodecs({ vp8: true, reported: true }), controller.signal);
     },
     sendHash(route: Route) { return streams[route]!.sendRaw(encodeMessage({ hash })); },
   };
 }
+
+test('custom quality reaches login over ID direct, relay and direct-IP routes', { timeout: 5_000 }, async t => {
+  for (const mode of ['id-direct', 'id-relay', 'direct-ip']) await t.test(mode, async t => {
+    const fixture = await routingFixture(t, { directIp: mode === 'direct-ip' });
+    const connected = await fixture.connect(mode === 'id-relay', { quality: 'custom', customQuality: 120, fps: 25 });
+    const options = fixture.loginOptions[connected.route]!;
+    assert.equal(options.image_quality ?? 0, 0);
+    assert.equal(options.custom_image_quality, 60 * 256);
+    assert.equal(options.custom_fps, 25);
+    connected.stream.close();
+  });
+});
 
 test('a stalled direct handshake does not delay relay by the direct TCP timeout', { timeout: 5_000 }, async (t) => {
   const fixture = await routingFixture(t, { direct: 'stall' });

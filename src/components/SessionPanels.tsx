@@ -357,6 +357,7 @@ export function SessionPanels({
           stats={stats}
           rtt={rtt}
           quality={quality}
+          customQuality={displayPrefs.customBitrate}
           targetFps={targetFps}
           preferredCodec={displayPrefs.codec}
           privacyEnabled={privacyEnabled}
@@ -385,18 +386,17 @@ export function SessionPanels({
             send({ type: 'switchDisplay', display: idx });
           }}
           onQuickKey={handleQuickKey}
-          onChangeQuality={(q, fps, nextCodec) => {
+          onChangeQuality={(q, fps, nextCodec, customQuality) => {
             setQuality(q);
             setTargetFps(fps);
             const activeCodec = nextCodec ?? displayPrefsRef.current.codec;
-            if (nextCodec && nextCodec !== displayPrefsRef.current.codec) {
-              setDisplayPrefs((prev) => {
-                const updated = { ...prev, codec: nextCodec };
-                persistDisplayPrefs(updated);
-                return updated;
-              });
-            }
-            send({ type: 'quality', quality: q, fps, codec: activeCodec });
+            const ratio = customQuality ?? displayPrefsRef.current.customBitrate;
+            setDisplayPrefs(prev => {
+              const updated = { ...prev, qualityPreset: q, targetFps: fps, codec: activeCodec, customBitrate: ratio };
+              persistDisplayPrefs(updated);
+              return updated;
+            });
+            send({ type: 'quality', quality: q, customQuality: q === 'custom' ? ratio : undefined, fps, codec: activeCodec });
           }}
         />
       )}

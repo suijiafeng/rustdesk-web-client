@@ -3,7 +3,7 @@ import type { SessionStats } from '../components/SessionMenu';
 import type { ConnectionMode, ConnectionPhase, ConnectRequest } from '../types';
 import { probeCodecs, webCodecsStatus, type RemoteDecoder } from '../lib/decoder';
 import { deviceKeyFor } from '../lib/devices';
-import { filterCodecSupport, resolveQualityLevel, resolveTargetFps } from '../lib/displayPrefs';
+import { filterCodecSupport } from '../lib/displayPrefs';
 import { t } from '../lib/i18n';
 import { decodeFrame, wsUrl, type PeerMessage, type QualityLevel, type ServerMessage } from '../lib/protocol';
 import { RemoteSocket } from '../lib/remoteSocket';
@@ -208,14 +208,9 @@ export function useGatewaySession(context: GatewaySessionContext) {
         lastCodec: '—',
       };
 
-      const initialQuality = resolveQualityLevel(
-        displayPrefsRef.current.qualityPreset,
-        displayPrefsRef.current.customBitrate,
-      );
-      const initialFps = resolveTargetFps(
-        displayPrefsRef.current.qualityPreset,
-        displayPrefsRef.current.customFps,
-      );
+      const initialQuality = displayPrefsRef.current.qualityPreset;
+      const customQuality = initialQuality === 'custom' ? displayPrefsRef.current.customBitrate : undefined;
+      const initialFps = displayPrefsRef.current.targetFps;
 
       setPeer(null);
       setPrivacyEnabled(false);
@@ -261,6 +256,7 @@ export function useGatewaySession(context: GatewaySessionContext) {
               token: targetGatewayToken,
               codecs: support,
               quality: initialQuality,
+              customQuality,
               fps: initialFps,
               codec: preferredCodec,
             }),
@@ -276,6 +272,7 @@ export function useGatewaySession(context: GatewaySessionContext) {
               token: targetGatewayToken,
               codecs: support,
               quality: initialQuality,
+              customQuality,
               fps: initialFps,
               codec: preferredCodec,
             }),

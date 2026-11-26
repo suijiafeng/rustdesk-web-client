@@ -775,6 +775,81 @@ try {
   assert.equal(await evaluate("window.sent.find(event => event.type === 'connect').forceRelay"), true);
   assert.equal(await evaluate(fallbackTip), null);
   console.log('WebRTC fallback: show the failure through gateway connection, allow dismissal, clear on retry, and ignore cancelled attempts or forced relay.');
+
+  async function chooseQuality(testId, index) {
+    await evaluate(select(testId) + '.click()');
+    await until(list);
+    await evaluate(`${list}.children[${index}].click()`);
+  }
+  async function changeRange(testId, value) {
+    await evaluate(`(() => {
+      const input = ${select(testId)};
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '${value}');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`);
+  }
+  await evaluate(`localStorage.setItem('rd_web_display_prefs', JSON.stringify({
+    qualityPreset: 'custom', customBitrate: 75, customFps: 25,
+  }))`);
+  await cdp('Page.navigate', { url: appUrl });
+  await openNetworkSettings();
+  await evaluate(select('settings-tab-display') + '.click()');
+  await until(select('settings-custom-bitrate'));
+  assert.equal(await evaluate(select('settings-custom-bitrate') + '.value'), '76');
+  assert.equal(await evaluate(select('settings-custom-fps') + '.value'), '25');
+  assert.match(await evaluate(select('settings-custom-quality-controls') + '.textContent'), /Mbps/);
+  await changeRange('settings-custom-bitrate', 100);
+  await chooseQuality('settings-quality', 0);
+  assert.equal(await evaluate(select('settings-custom-bitrate')), null);
+  assert.equal(await evaluate(select('settings-custom-fps') + '.value'), '25');
+  await changeRange('settings-custom-fps', 35);
+  await chooseQuality('settings-quality', 3);
+  assert.equal(await evaluate(select('settings-custom-bitrate') + '.value'), '100');
+  assert.equal(await evaluate(select('settings-custom-fps') + '.value'), '35');
+  await evaluate(select('mobile-settings-back') + '.click()');
+  await submitWebRtcConnection();
+  await until(`${select('stage')}.dataset.remoteActive === 'true'`);
+  let qualityConnect = await evaluate("window.sent.find(event => event.type === 'connect')");
+  assert.deepEqual([qualityConnect.quality, qualityConnect.customQuality, qualityConnect.fps], ['custom', 100, 35]);
+  await openDesktopToolbar();
+  await evaluate(select('toolbar-open-menu') + '.click()');
+  await until(select('menu-tab-display'));
+  await evaluate(select('menu-tab-display') + '.click()');
+  await until(select('session-custom-quality'));
+  await changeRange('session-custom-quality', 200);
+  await until("window.sent.filter(event => event.type === 'quality').at(-1)?.customQuality === 200");
+  await chooseQuality('quality-select', 0);
+  assert.equal(await evaluate(select('session-custom-quality')), null);
+  assert.match(await evaluate(select('fps-select') + '.textContent'), /35 FPS/);
+  await chooseQuality('quality-select', 3);
+  assert.equal(await evaluate(select('session-custom-quality') + '.value'), '200');
+  await chooseQuality('fps-select', 0);
+  await until("JSON.parse(localStorage.getItem('rd_web_display_prefs')).targetFps === 15");
+  await connect();
+  await until(`${select('stage')}.dataset.remoteActive === 'true'`);
+  qualityConnect = await evaluate("window.sent.find(event => event.type === 'connect')");
+  assert.deepEqual([qualityConnect.quality, qualityConnect.customQuality, qualityConnect.fps], ['custom', 200, 15]);
+
+  await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 740, deviceScaleFactor: 1, mobile: true });
+  await cdp('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+  await connect();
+  await until(select('mobile-dock-expand'));
+  await tapElement(select('mobile-dock-expand'));
+  await tapElement(select('dock-display'));
+  await until(select('session-custom-quality'));
+  assert.equal(await evaluate(select('session-custom-quality') + '.value'), '200');
+  const mouseBeforeQuality = await evaluate("window.sent.filter(event => event.type === 'mouse').length");
+  await changeRange('session-custom-quality', 100);
+  await chooseQuality('quality-select', 1);
+  assert.match(await evaluate(select('fps-select') + '.textContent'), /15 FPS/);
+  await chooseQuality('quality-select', 3);
+  assert.equal(await evaluate(select('session-custom-quality') + '.value'), '100');
+  assert.equal(await evaluate("window.sent.filter(event => event.type === 'mouse').length"), mouseBeforeQuality);
+  assert.deepEqual(await evaluate(`(() => {
+    const message = window.sent.filter(event => event.type === 'quality').at(-1);
+    return [message.quality, message.customQuality, message.fps];
+  })()`), ['custom', 100, 15]);
+  console.log('Quality: legacy preferences migrate, continuous ratios reach login/live updates, presets preserve FPS, and desktop/mobile choices survive reconnecting.');
 } finally {
   socket.close();
   const closed = await fetch(`${debuggerUrl}/json/close/${tab.id}`);

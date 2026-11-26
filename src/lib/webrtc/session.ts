@@ -417,9 +417,14 @@ export function createNativeSession(
           ? { change_display_resolution: { display, resolution } }
           : { change_resolution: resolution } };
       } else if (parsed.type === 'quality') {
-        refreshVideo = Boolean(sessionCodecs && decodingPreferenceChanged(sessionCodecs, preferredCodec, parsed.codec));
-        if (refreshVideo) preferredCodec = parsed.codec;
-        hostMsg = toHostMessage(refreshVideo ? parsed : { ...parsed, codec: undefined }, sessionCodecs);
+        try {
+          refreshVideo = Boolean(sessionCodecs && decodingPreferenceChanged(sessionCodecs, preferredCodec, parsed.codec));
+          hostMsg = toHostMessage(refreshVideo ? parsed : { ...parsed, codec: undefined }, sessionCodecs);
+          if (refreshVideo) preferredCodec = parsed.codec;
+        } catch (error) {
+          sendJson({ type: 'error', message: humanizeError(error) });
+          return;
+        }
       } else {
         hostMsg = toHostMessage(parsed, sessionCodecs);
       }

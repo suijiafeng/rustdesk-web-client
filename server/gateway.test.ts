@@ -813,5 +813,32 @@ test('buildLoginOptions forwards custom quality, fps, and codec negotiation safe
   assert.equal(liveMsg.misc.option.supported_decoding.ability_av1, 0);
 });
 
+test('custom quality percentages round-trip through the native packed ratio for login and live updates', () => {
+  const caps = selectCodecs();
+  for (const percent of [20, 50, 74, 76, 100, 150, 200]) {
+    const login = buildLoginOptions(caps, 'custom', 25, 'vp8', percent);
+    const live = toHostMessage({ type: 'quality', quality: 'custom', customQuality: percent, fps: 25 }, caps) as { misc: { option: Record<string, number> } };
+    for (const options of [login, live.misc.option]) {
+      const wire = decodeMessage(encodeMessage({ misc: { option: options } })).misc.option;
+      assert.equal(options.image_quality, 0);
+      assert.equal(wire.image_quality ?? 0, 0);
+      assert.equal(wire.custom_fps, 25);
+      assert.equal(((wire.custom_image_quality >> 8) * 2) / 100, percent / 100);
+    }
+  }
+  for (const quality of ['low', 'balanced', 'best']) {
+    const options = buildLoginOptions(caps, quality, 25, 'vp8', 200);
+    assert.equal(options.custom_image_quality, undefined);
+    assert.notEqual(options.image_quality, 0);
+  }
+});
+
+test('custom quality rejects malformed, unrepresentable and out-of-range percentages', () => {
+  for (const value of [undefined, null, '100', NaN, Infinity, -100, 0, 18, 99, 100.5, 202]) {
+    assert.throws(() => buildLoginOptions(selectCodecs(), 'custom', 30, 'vp8', value as number), /even percentage/);
+    assert.throws(() => toHostMessage({ type: 'quality', quality: 'custom', customQuality: value as number }), /even percentage/);
+  }
+});
+
 
 

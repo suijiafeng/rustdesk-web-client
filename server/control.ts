@@ -43,6 +43,7 @@ export type ClientMessage =
       token?: string;
       codecs?: Partial<CodecCaps>;
       quality?: string;
+      customQuality?: number;
       fps?: number;
       codec?: string;
     }
@@ -83,6 +84,7 @@ export type ClientMessage =
   | {
       type: 'quality';
       quality?: string;
+      customQuality?: number;
       fps?: number;
       codec?: string;
     }
@@ -234,16 +236,27 @@ export function decodingPreferenceChanged(
   return before.prefer !== after.prefer || before.ability_av1 !== after.ability_av1;
 }
 
+function buildQualityOptions(quality: string | undefined, customQuality: number | undefined, fallback: number): Record<string, number> {
+  if (quality === 'custom') {
+    if (typeof customQuality !== 'number' || !Number.isInteger(customQuality) ||
+        customQuality < 20 || customQuality > 200 || customQuality % 2 !== 0) {
+      throw new Error('Custom quality must be an even percentage from 20 to 200.');
+    }
+    // Native RustDesk decodes ((value >> 8) * 2) / 100 as its quality ratio.
+    return { image_quality: ImageQualityValues.NotSet, custom_image_quality: (customQuality / 2) * 256 };
+  }
+  return { image_quality: quality === 'low' ? ImageQualityValues.Low
+    : quality === 'balanced' ? ImageQualityValues.Balanced
+    : quality === 'best' ? ImageQualityValues.Best : fallback };
+}
+
 export function buildLoginOptions(
   codecs: CodecCaps,
   quality?: string,
   fps?: number,
   preferCodec?: string,
+  customQuality?: number,
 ): Record<string, unknown> {
-  let image_quality = ImageQualityValues.Balanced;
-  if (quality === 'low') image_quality = ImageQualityValues.Low;
-  else if (quality === 'best') image_quality = ImageQualityValues.Best;
-
   const customFps =
     typeof fps === 'number' && Number.isFinite(fps) && fps >= 5 && fps <= 120
       ? Math.round(fps)
@@ -252,7 +265,7 @@ export function buildLoginOptions(
   return {
     supported_decoding: buildSupportedDecoding(codecs, preferCodec),
     custom_fps: customFps,
-    image_quality,
+    ...buildQualityOptions(quality, customQuality, ImageQualityValues.Balanced),
     disable_audio: BoolOptionValues.Yes,
     show_remote_cursor: BoolOptionValues.Yes,
   };
@@ -373,12 +386,7 @@ export function toHostMessage(
     }
 
     case 'quality': {
-      let image_quality = ImageQualityValues.NotSet;
-      if (msg.quality === 'low') image_quality = ImageQualityValues.Low;
-      else if (msg.quality === 'balanced') image_quality = ImageQualityValues.Balanced;
-      else if (msg.quality === 'best') image_quality = ImageQualityValues.Best;
-
-      const option: Record<string, unknown> = { image_quality };
+      const option: Record<string, unknown> = buildQualityOptions(msg.quality, msg.customQuality, ImageQualityValues.NotSet);
       const fps = Math.trunc(Number(msg.fps ?? 0));
       if (fps >= 5 && fps <= 120) {
         option.custom_fps = fps;

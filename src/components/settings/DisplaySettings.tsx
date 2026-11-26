@@ -59,35 +59,37 @@ export function DisplaySettings({
               <input
                 type="range"
                 className="rd-range"
-                min={10}
+                min={20}
                 max={200}
-                step={5}
+                step={2}
                 data-testid="settings-custom-bitrate"
-                aria-label={t(locale, 'bitrateLabel')}
+                aria-label={t(locale, 'qualityRatioLabel')}
                 value={displayPrefs.customBitrate}
                 onChange={(e) => onUpdateDisplayPrefs({ customBitrate: Number(e.target.value) })}
               />
               <span className="rd-slider-val font-mono-tabular">{displayPrefs.customBitrate}%</span>
-              <span className="rd-slider-label">{t(locale, 'bitrateLabel')}</span>
+              <span className="rd-slider-label">{t(locale, 'qualityRatioLabel')}</span>
             </label>
-
-            <label className="rd-slider-row">
-              <input
-                type="range"
-                className="rd-range"
-                min={10}
-                max={60}
-                step={5}
-                data-testid="settings-custom-fps"
-                aria-label={t(locale, 'fpsLabel')}
-                value={displayPrefs.customFps}
-                onChange={(e) => onUpdateDisplayPrefs({ customFps: Number(e.target.value) })}
-              />
-              <span className="rd-slider-val font-mono-tabular">{displayPrefs.customFps}</span>
-              <span className="rd-slider-label">{t(locale, 'fpsLabel')}</span>
-            </label>
+            <p className="text-xs text-[var(--ink-soft)]">{t(locale, 'qualityRatioHint')}</p>
           </div>
         )}
+        <div className="rd-slider-group">
+          <label className="rd-slider-row">
+            <input
+              type="range"
+              className="rd-range"
+              min={10}
+              max={60}
+              step={5}
+              data-testid="settings-custom-fps"
+              aria-label={t(locale, 'fpsLabel')}
+              value={displayPrefs.targetFps}
+              onChange={(e) => onUpdateDisplayPrefs({ targetFps: Number(e.target.value) })}
+            />
+            <span className="rd-slider-val font-mono-tabular">{displayPrefs.targetFps}</span>
+            <span className="rd-slider-label">{t(locale, 'fpsLabel')}</span>
+          </label>
+        </div>
       </section>
 
       <section className="rd-settings-card">

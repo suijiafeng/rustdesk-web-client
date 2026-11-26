@@ -23,8 +23,6 @@ import {
 } from './lib/devices';
 import {
   persistDisplayPrefs,
-  resolveQualityLevel,
-  resolveTargetFps,
   type DisplayPrefs,
 } from './lib/displayPrefs';
 import {
@@ -111,12 +109,8 @@ export default function App() {
   const { stats, decoderRef, sizeRef } = video;
   const [rtt, setRtt] = useState(0);
   const [gatewayVideo, setGatewayVideo] = useState<Extract<ServerMessage, { type: 'pong' }>['gatewayVideo']>();
-  const [quality, setQuality] = useState<QualityLevel>(() =>
-    resolveQualityLevel(displayPrefs.qualityPreset, displayPrefs.customBitrate),
-  );
-  const [targetFps, setTargetFps] = useState(() =>
-    resolveTargetFps(displayPrefs.qualityPreset, displayPrefs.customFps),
-  );
+  const [quality, setQuality] = useState<QualityLevel>(displayPrefs.qualityPreset);
+  const [targetFps, setTargetFps] = useState(displayPrefs.targetFps);
   const [sessionTip, setSessionTip] = useState<{ text: string; error: boolean } | null>(null);
   const [webRtcFallbackReason, setWebRtcFallbackReason] = useState<string | null>(null);
   const showSessionTip = useCallback((text: string, error = false) => {
@@ -528,14 +522,16 @@ export default function App() {
         if (
           patch.qualityPreset !== undefined ||
           patch.customBitrate !== undefined ||
-          patch.customFps !== undefined ||
+          patch.targetFps !== undefined ||
           patch.codec !== undefined
         ) {
-          const nextQ = resolveQualityLevel(next.qualityPreset, next.customBitrate);
-          const nextFps = resolveTargetFps(next.qualityPreset, next.customFps);
+          const nextQ = next.qualityPreset;
+          const nextFps = next.targetFps;
           setQuality(nextQ);
           setTargetFps(nextFps);
-          send({ type: 'quality', quality: nextQ, fps: nextFps, codec: next.codec });
+          send({ type: 'quality', quality: nextQ,
+            customQuality: nextQ === 'custom' ? next.customBitrate : undefined,
+            fps: nextFps, codec: next.codec });
         }
 
         return next;

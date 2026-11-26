@@ -36,6 +36,7 @@ export interface DirectTarget {
   port: number;
   password: string;
   quality?: string;
+  customQuality?: number;
   fps?: number;
   preferCodec?: string;
 }
@@ -48,6 +49,7 @@ export interface IdTarget {
   key: string;
   forceRelay: boolean;
   quality?: string;
+  customQuality?: number;
   fps?: number;
   preferCodec?: string;
 }
@@ -75,8 +77,9 @@ async function loginHost(
   quality?: string,
   fps?: number,
   preferCodec?: string,
+  customQuality?: number,
 ): Promise<ConnectedHost> {
-  const loginOption = buildLoginOptions(codecs, quality, fps, preferCodec);
+  const loginOption = buildLoginOptions(codecs, quality, fps, preferCodec, customQuality);
   const loginReq = {
     login_request: {
       username,
@@ -171,6 +174,7 @@ export async function connectDirect(
       target.quality,
       target.fps,
       target.preferCodec,
+      target.customQuality,
     );
   } catch (err) {
     stream.close();
@@ -452,6 +456,7 @@ export async function connectViaId(
           target.quality,
           target.fps,
           target.preferCodec,
+          target.customQuality,
         );
       }
 
@@ -497,6 +502,7 @@ export async function connectViaId(
           target.quality,
           target.fps,
           target.preferCodec,
+          target.customQuality,
         );
       }
     }

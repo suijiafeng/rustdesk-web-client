@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import test, { type TestContext } from 'node:test';
 import nacl from 'tweetnacl';
-import { IdPkProto, encodeMessage } from '../../server/protos.ts';
+import { IdPkProto, decodeMessage, encodeMessage } from '../../server/protos.ts';
+import { selectCodecs } from '../../server/control.ts';
 import { encodeEndpoint } from '../../shared/webrtc.ts';
 import { connectWebRtc } from './webrtc/connect.ts';
+import { createNativeSession } from './webrtc/session.ts';
 
 const peerId = '123456789';
 const rootKey = nacl.sign.keyPair();
@@ -97,7 +99,7 @@ class FakeSignal {
 
 async function flush() { for (let index = 0; index < 16; index++) await Promise.resolve(); }
 
-function fixture(t: TestContext) {
+function fixture(t: TestContext, quality: Partial<typeof request> & { quality?: string; customQuality?: number; fps?: number } = {}) {
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
   const descriptors = new Map(['RTCPeerConnection', 'WebSocket'].map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
   Object.defineProperty(globalThis, 'RTCPeerConnection', { value: FakePeer, configurable: true });
@@ -106,7 +108,7 @@ function fixture(t: TestContext) {
   const removeAbort = t.mock.method(abort.signal, 'removeEventListener');
   let failure: unknown;
   let connected: Awaited<ReturnType<typeof connectWebRtc>> | undefined;
-  const outcome = connectWebRtc('wss://gateway.example.test/ws', request, abort.signal).then(
+  const outcome = connectWebRtc('wss://gateway.example.test/ws', { ...request, ...quality }, abort.signal).then(
     value => { connected = value; }, error => { failure = error; },
   );
   const pc = FakePeer.latest;
@@ -307,4 +309,41 @@ test('a rejected password keeps WebRtcLoginError so gateway fallback cannot subm
   assert.equal(error.name, 'WebRtcLoginError');
   assert.equal(error.message, 'Wrong Password');
   assert.equal(f.pc.closeCalls, 1);
+});
+
+test('WebRTC forwards custom quality in login and live updates without changing an independent FPS', async t => {
+  const f = fixture(t, { quality: 'custom', customQuality: 100, fps: 25 });
+  await f.openSignal();
+  await f.answer();
+  f.pc.channel.open();
+  f.identity();
+  f.pc.channel.receive(encodeMessage({ hash: { salt: 'salt', challenge: 'challenge' } }));
+  f.pc.channel.receive(encodeMessage({ login_response: { peer_info: { hostname: 'test-peer' } } }));
+  await f.outcome;
+  const connected = f.connected();
+  assert.ok(connected);
+  const messages = () => f.pc.channel.sent.map(frame => decodeMessage(frame.subarray(1)));
+  const login = messages().find(message => message.login_request)?.login_request;
+  assert.equal(login.option.image_quality ?? 0, 0);
+  assert.equal(login.option.custom_image_quality, 50 * 256);
+  assert.equal(login.option.custom_fps, 25);
+
+  const replies: string[] = [];
+  const session = createNativeSession(connected, selectCodecs(), value => {
+    if (typeof value === 'string') replies.push(value);
+  }, () => {});
+  session.start();
+  session.send({ type: 'quality', quality: 'custom', customQuality: 200, fps: 25 });
+  await flush();
+  assert.equal(messages().at(-1)!.misc.option.custom_image_quality, 100 * 256);
+  session.send({ type: 'quality', quality: 'low', fps: 25 });
+  await flush();
+  assert.equal(messages().at(-1)!.misc.option.image_quality, 2);
+  assert.equal(messages().at(-1)!.misc.option.custom_image_quality, undefined);
+  const sentCount = f.pc.channel.sent.length;
+  session.send({ type: 'quality', quality: 'custom', customQuality: 99, fps: 25 });
+  await flush();
+  assert.equal(f.pc.channel.sent.length, sentCount);
+  assert.match(replies.at(-1) ?? '', /even percentage/);
+  session.close();
 });
