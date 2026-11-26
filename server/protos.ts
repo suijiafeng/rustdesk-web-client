@@ -638,7 +638,6 @@ export const ImageQualityValues = protoRoot.lookupEnum('rustdesk.ImageQuality').
 export const BoolOptionValues = protoRoot.lookupEnum('rustdesk.OptionMessage.BoolOption').values;
 export const PreferCodecValues = protoRoot.lookupEnum('rustdesk.SupportedDecoding.PreferCodec').values;
 export const ChromaValues = protoRoot.lookupEnum('rustdesk.Chroma').values;
-export const ClipboardFormatValues = protoRoot.lookupEnum('rustdesk.ClipboardFormat').values;
 export const NatTypeValues = protoRoot.lookupEnum('rustdesk.NatType').values;
 export const ConnTypeValues = protoRoot.lookupEnum('rustdesk.ConnType').values;
 export const PunchFailureValues = protoRoot.lookupEnum('rustdesk.PunchHoleResponse.Failure').values;

@@ -2,21 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   detectSystemLocale,
-  nextLocale,
   resolveEffectiveLocale,
-  resolveInitialLocale,
   resolveLocalePreference,
   statusLabel,
   t,
 } from './i18n';
-
-test('resolveInitialLocale defaults to en and restores saved zh/en values', () => {
-  assert.equal(resolveInitialLocale(null), 'en');
-  assert.equal(resolveInitialLocale(''), 'en');
-  assert.equal(resolveInitialLocale('fr'), 'en');
-  assert.equal(resolveInitialLocale('zh'), 'zh');
-  assert.equal(resolveInitialLocale('en'), 'en');
-});
 
 test('resolveLocalePreference defaults to default and resolves system language accurately', () => {
   assert.equal(resolveLocalePreference(null), 'default');
@@ -36,9 +26,7 @@ test('resolveLocalePreference defaults to default and resolves system language a
   assert.equal(resolveEffectiveLocale('zh', 'en-US'), 'zh');
 });
 
-test('nextLocale toggles cleanly between en and zh and translates core labels', () => {
-  assert.equal(nextLocale('en'), 'zh');
-  assert.equal(nextLocale('zh'), 'en');
+test('translates core labels and connection status in en and zh', () => {
   assert.equal(t('en', 'displays'), 'Displays');
   assert.equal(t('zh', 'displays'), '显示器');
   assert.equal(t('en', 'languageDefault'), 'Default');

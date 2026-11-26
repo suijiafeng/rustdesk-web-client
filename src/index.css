@@ -171,14 +171,6 @@ button:focus-visible {
   -webkit-touch-callout: none;
 }
 
-.stage.hand {
-  cursor: grab;
-}
-
-.stage.hand:active {
-  cursor: grabbing;
-}
-
 .stage canvas {
   position: absolute;
   display: block;

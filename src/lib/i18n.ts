@@ -27,21 +27,8 @@ export function resolveEffectiveLocale(
   return pref;
 }
 
-export function resolveInitialLocale(saved: string | null | undefined): Locale {
-  if (saved === 'zh' || saved === 'en') {
-    return saved;
-  }
-  return 'en';
-}
-
-export function nextLocale(current: Locale): Locale {
-  return current === 'en' ? 'zh' : 'en';
-}
-
 const DICT = {
   en: {
-    langToggle: '中文',
-    langToggleAria: 'Switch to Chinese',
     session: 'Session',
     openSessionMenu: 'Open Session menu',
     connection: 'Connection',
@@ -360,8 +347,6 @@ const DICT = {
     menuLabel: 'Menu',
   },
   zh: {
-    langToggle: 'EN',
-    langToggleAria: '切换为英文',
     session: '会话',
     openSessionMenu: '打开会话菜单',
     connection: '连接',

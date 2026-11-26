@@ -488,16 +488,13 @@ export default function App() {
     }, 15000);
     return () => window.clearTimeout(timeout);
   }, [privacyPending, locale, showSessionTip]);
-  const [remoteClipboard, setRemoteClipboard] = useState('');
   const [clipboardSync, setClipboardSync] = useState(false);
 
   // Viewport & chrome state
   const [viewMode, setViewMode] = useState<ViewMode>(() => displayPrefs.viewStyle);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ panX: 0, panY: 0 });
-  const [hand, setHand] = useState(false);
   const [touchMode, setTouchMode] = useState<boolean>(isCoarseDevice);
-  const [rightArmed, setRightArmed] = useState(false);
   const [handleX, setHandleX] = useState(0.5);
   const [toolbarExpanded, setToolbarExpanded] = useState(false);
   const [toolbarPinned, setToolbarPinned] = useState(false);
@@ -608,10 +605,6 @@ export default function App() {
   const longTimerRef = useRef<number | null>(null);
   const touchModeRef = useRef(touchMode);
   touchModeRef.current = touchMode;
-  const handRef = useRef(hand);
-  handRef.current = hand;
-  const rightArmedRef = useRef(rightArmed);
-  rightArmedRef.current = rightArmed;
   const pendingClickRef = useRef<{
     button: 'left' | 'right' | 'middle';
     x: number;
@@ -676,7 +669,6 @@ export default function App() {
   const remoteInput = shouldEnableRemotePointerInput(phase, connectDialog, menuOpen, isTouchLayout);
   const remoteInputRef = useRef(remoteInput);
   remoteInputRef.current = remoteInput;
-  const zoomPercent = Math.round(view.scale * 100);
 
   // Send JSON helper
   const send = useCallback((msg: ClientMessage) => {
@@ -716,7 +708,6 @@ export default function App() {
 
   const audioRef = useRef<RemoteAudio | null>(null);
   const [audioEnabled, setAudioEnabled] = useState(false);
-  const [audioIssue, setAudioIssue] = useState<'audioUnsupported' | 'audioDenied' | 'audioFailed' | null>(null);
 
   const stopAudio = useCallback(() => {
     const player = audioRef.current;
@@ -727,13 +718,11 @@ export default function App() {
   useEffect(() => {
     if (phase !== 'live') {
       stopAudio();
-      setAudioIssue(null);
     }
     return () => { audioRef.current?.close(); audioRef.current = null; };
   }, [phase, stopAudio]);
 
   const toggleAudio = async () => {
-    setAudioIssue(null);
     if (audioRef.current) {
       stopAudio();
       send({ type: 'audio', enabled: false });
@@ -741,7 +730,6 @@ export default function App() {
       return;
     }
     if (typeof AudioDecoder === 'undefined' || typeof AudioContext === 'undefined') {
-      setAudioIssue('audioUnsupported');
       showSessionTip(t(locale, 'audioUnsupported'), true);
       return;
     }
@@ -750,7 +738,6 @@ export default function App() {
     const fail = () => {
       if (socket !== wsRef.current || (player && player !== audioRef.current)) return;
       stopAudio();
-      setAudioIssue('audioFailed');
       showSessionTip(t(locale, 'audioFailed'), true);
       send({ type: 'audio', enabled: false });
     };
@@ -1283,7 +1270,6 @@ export default function App() {
       );
 
       setPeer(null);
-      setRemoteClipboard('');
       setPrivacyEnabled(false);
       setPrivacyPending(false);
       setResolutionOptions(null);
@@ -1475,7 +1461,6 @@ export default function App() {
 
           case 'permissions':
             setPeer(previous => previous ? { ...previous, privacyAllowed: msg.privacyAllowed, clipboardAllowed: msg.clipboardAllowed } : previous);
-            if (!msg.clipboardAllowed) setRemoteClipboard('');
             if (!msg.privacyAllowed) setPrivacyPending(false);
             break;
           case 'privacyResult':
@@ -1496,7 +1481,6 @@ export default function App() {
             break;
           case 'audioDenied':
             stopAudio();
-            setAudioIssue('audioDenied');
             showSessionTip(t(locale, 'audioDenied'), true);
             break;
           case 'audioFormat':
@@ -1560,7 +1544,6 @@ export default function App() {
 
           case 'clipboard':
             if (!displayPrefsRef.current.disableClipboard) {
-              setRemoteClipboard(msg.text);
               clipboard.receive(msg.text);
             }
             break;
@@ -2170,11 +2153,9 @@ export default function App() {
               ? remoteFromLocal(ef.x, ef.y)
               : cursorPoint();
             if (pos) {
-              const btn = rightArmedRef.current ? 'right' : 'left';
-              if (rightArmedRef.current) setRightArmed(false);
               const atCursor = Math.hypot(pos.x - cursorRef.current.x, pos.y - cursorRef.current.y) <= 8;
-              clickButton(btn, pos.x, pos.y);
-              if (btn === 'left' && !displayPrefsRef.current.swapMouseButtons &&
+              clickButton('left', pos.x, pos.y);
+              if (!displayPrefsRef.current.swapMouseButtons &&
                   atCursor && textCursor && !softKeys) openSoftKeyboard();
             }
             break;
@@ -2278,7 +2259,7 @@ export default function App() {
 
   useEffect(() => {
     resetAllGestures();
-  }, [touchMode, hand, resetAllGestures]);
+  }, [touchMode, resetAllGestures]);
 
   // Pointer handlers on stage
   const handlePointerDown = (e: React.PointerEvent<HTMLElement>) => {
@@ -2303,8 +2284,8 @@ export default function App() {
       // Desktop mouse interaction
       setVirtualCursorVisible(false);
 
-      // Middle-button drag, Pan toggle, or Alt+LeftDrag pans the viewport
-      const shouldPan = hand || e.button === 1 || (e.button === 0 && e.altKey);
+      // Middle-button drag or Alt+LeftDrag pans the viewport
+      const shouldPan = e.button === 1 || (e.button === 0 && e.altKey);
       if (shouldPan) {
         try {
           e.currentTarget.setPointerCapture(e.pointerId);
@@ -2325,15 +2306,8 @@ export default function App() {
 
       const pos = remoteFromLocal(local.x, local.y);
       if (!pos) return;
-      const rawBtn: 'left' | 'right' | 'middle' = rightArmed
-        ? 'right'
-        : e.button === 2
-          ? 'right'
-          : e.button === 1
-            ? 'middle'
-            : 'left';
+      const rawBtn = e.button === 2 ? 'right' : 'left';
       const btn = applyMouseButtonSwap(rawBtn, displayPrefsRef.current.swapMouseButtons);
-      if (rightArmed) setRightArmed(false);
       try {
         e.currentTarget.setPointerCapture(e.pointerId);
       } catch {
@@ -2380,7 +2354,7 @@ export default function App() {
 
     const next = gesturePointerDown(touchGestureRef.current, e.pointerId, local.x, local.y, {
       mode: touchMode ? 'touch' : 'mouse',
-      hand,
+      hand: false,
       now,
       isPrimary: e.isPrimary,
       liveTouchCount,
@@ -2787,7 +2761,6 @@ export default function App() {
   }, []);
 
   const handleToggleTouchMode = () => {
-    setRightArmed(false);
     setTouchMode((prev) => {
       const next = !prev;
       if (!next) {
@@ -2799,15 +2772,6 @@ export default function App() {
       }
       return next;
     });
-  };
-
-  const handleMobileRightClick = () => {
-    if (!touchMode) {
-      const pt = cursorPoint();
-      clickButton('right', pt.x, pt.y);
-      return;
-    }
-    setRightArmed((r) => !r);
   };
 
   const showConnectSheet = phase !== 'live' || connectDialog;
@@ -2827,7 +2791,7 @@ export default function App() {
   return (
     <section
       ref={stageRef}
-      className={`stage${hand ? ' hand' : ''}`}
+      className="stage"
       style={phase === 'live' && stageViewport ? {
         position: 'fixed', inset: 'auto', left: stageViewport.left, top: stageViewport.top,
         width: stageViewport.width, height: stageViewport.height,

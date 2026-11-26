@@ -85,10 +85,6 @@ export function remoteKeyboardProfile(platform?: string) {
   } as const;
 }
 
-export function controlFromCode(code: string): string | null {
-  return CODE_TO_CONTROL[code] ?? null;
-}
-
 /**
  * Resolves a RustDesk control key name from physical `code` first, falling back to `key`
  * (important for mobile soft keyboards where `event.code` is often empty or 'Unidentified').

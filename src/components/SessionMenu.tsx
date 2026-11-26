@@ -88,7 +88,6 @@ function DesktopSessionMenu({
   locale,
   audioEnabled,
   onToggleAudio,
-  mobileLayout,
   followWindow,
   onToggleFollowWindow,
   phase,
