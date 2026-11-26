@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test, { type TestContext } from 'node:test';
-import { RemoteAudio } from './remoteAudio';
+import { RemoteAudio, type AudioFailureStage } from './remoteAudio';
 
 class FakeContext {
   static latest: FakeContext;
@@ -74,9 +74,10 @@ function fixture(t: TestContext) {
     return this.context.audioWorklet.addModule('audio-worklet.js');
   });
   let errors = 0;
-  const player = new RemoteAudio(() => { errors++; });
+  const failures: { stage: AudioFailureStage; error: unknown }[] = [];
+  const player = new RemoteAudio((stage, error) => { errors++; failures.push({ stage, error }); });
   t.after(() => player.close());
-  return { player, context: FakeContext.latest, errors: () => errors, node: () => FakeNode.all.at(-1)! };
+  return { player, failures, context: FakeContext.latest, errors: () => errors, node: () => FakeNode.all.at(-1)! };
 }
 
 function deferred() {
@@ -178,6 +179,8 @@ test('loading failures and processor failures notify once and release all resour
   assert.equal(f.errors(), 1);
   assert.equal(f.context.closeCalls, 1);
   assert.equal(f.context.resumeCalls, 1);
+  assert.equal(f.failures[0].stage, 'module');
+  assert.equal((f.failures[0].error as Error).message, 'module failed');
 });
 
 test('resume rejection and an unavailable worklet fail through the same bounded lifecycle', async t => {
@@ -186,6 +189,8 @@ test('resume rejection and an unavailable worklet fail through the same bounded 
   await f.player.resume();
   assert.equal(f.errors(), 1);
   assert.equal(f.context.closeCalls, 1);
+  assert.equal(f.failures[0].stage, 'start');
+  assert.equal((f.failures[0].error as Error).message, 'resume denied');
   if (FakeNode.all.length) assert.equal(f.node().disconnected, true);
 });
 
@@ -206,6 +211,7 @@ test('processor failure closes node and stale error callbacks do not notify twic
   onError();
   FakeDecoder.latest.callbacks.error(new DOMException('late'));
   assert.equal(f.errors(), 1);
+  assert.equal(f.failures[0].stage, 'playback');
   assert.equal(f.node().disconnected, true);
   assert.equal(f.node().port.closed, true);
 });
@@ -234,6 +240,7 @@ test('invalid formats fail once; a decoder output after closing still releases A
   f.player.configure(48000, 2);
   const decoder = FakeDecoder.latest;
   f.player.configure(48000, 0);
+  assert.equal(f.failures[0].stage, 'decode');
   assert.equal(decoder.output().closeCalls, 1);
   f.player.configure(0, 2);
   assert.equal(f.errors(), 1);

@@ -456,3 +456,23 @@ for (const negotiated of [false, true]) {
     session.close();
   });
 }
+
+test('WebRTC login preserves HostPermission.Audio denial before the session begins', async t => {
+  const f = fixture(t);
+  await f.openSignal(); await f.answer();
+  f.pc.channel.open(); f.identity();
+  f.pc.channel.receive(encodeMessage({ misc: { permission_info: { permission: 3, enabled: false } } }));
+  f.pc.channel.receive(encodeMessage({ hash: { salt: 'salt', challenge: 'challenge' } }));
+  f.pc.channel.receive(encodeMessage({ login_response: { peer_info: { hostname: 'muted-peer' } } }));
+  await f.outcome;
+  const connected = f.connected(); assert.ok(connected);
+  assert.equal(connected.audioAllowed, false);
+  const replies: Array<string | ArrayBuffer> = [];
+  const session = createNativeSession(connected, selectCodecs(), data => replies.push(data), () => {});
+  session.start();
+  session.send({ type: 'audio', enabled: true });
+  await flush();
+  const json = replies.filter((value): value is string => typeof value === 'string').map(value => JSON.parse(value));
+  assert.ok(json.some(message => message.type === 'audioDenied'));
+  session.close();
+});

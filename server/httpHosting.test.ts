@@ -289,3 +289,33 @@ test('precompressed assets negotiate encodings, preserve content types and suppo
   assert.equal(cached.bytes.length, 0);
   assert.equal((await request(server, '/assets/missing-ABcd1234.js', 'GET', { 'Accept-Encoding': 'br' })).status, 404);
 });
+
+test('precompressAssets writes Brotli and gzip copies of finalized dynamic-import bundles', async t => {
+  const { build } = await import('vite');
+  const { precompressAssets } = await import('../build/precompress.ts');
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'rd-precompress-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const outDir = path.join(root, 'dist');
+  await fs.writeFile(path.join(root, 'lazy.js'), `export const payload = ${JSON.stringify('audio-worklet-'.repeat(120))};\n`);
+  await fs.writeFile(path.join(root, 'entry.js'),
+    `const pad = ${JSON.stringify('rustdesk-web-'.repeat(120))};\nglobalThis.__load = async () => pad + (await import('./lazy.js')).payload;\n`);
+  await fs.writeFile(path.join(root, 'index.html'), '<!doctype html><script type="module" src="/entry.js"></script>\n');
+  await build({
+    root,
+    logLevel: 'silent',
+    plugins: [precompressAssets()],
+    build: { outDir, emptyOutDir: true },
+  });
+  const assetsDir = path.join(outDir, 'assets');
+  const entries = await fs.readdir(assetsDir);
+  const brFiles = entries.filter(name => name.endsWith('.br'));
+  assert.ok(brFiles.length >= 2, `Expected precompressed assets, found: ${entries.join(', ')}`);
+  for (const name of entries) {
+    if (!name.endsWith('.br') && !name.endsWith('.gz')) continue;
+    const raw = await fs.readFile(path.join(assetsDir, name.slice(0, -3)));
+    const compressed = await fs.readFile(path.join(assetsDir, name));
+    const decoded = name.endsWith('.br') ? brotliDecompressSync(compressed) : gunzipSync(compressed);
+    assert.deepEqual(decoded, raw, `${name} must match its finalized uncompressed asset byte-for-byte`);
+    assert.ok(!decoded.toString('utf8').includes('__VITE_PRELOAD__'), `${name} must not contain unreplaced __VITE_PRELOAD__`);
+  }
+});

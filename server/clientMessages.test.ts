@@ -23,7 +23,7 @@ function fixture(t: TestContext, phase: SessionState['phase'] = 'live') {
     effects.push('host');
   });
   const conn: ConnectedHost = {
-    stream, route: 'direct', privacyAllowed: true, clipboardAllowed: true, restartAllowed: true,
+    stream, route: 'direct', privacyAllowed: true, clipboardAllowed: true, restartAllowed: true, audioAllowed: true,
     peerInfo: { platform: 'Linux', version: '1.5.3', features: { privacy_mode: true } },
     username: 'test', encrypted: true,
   };

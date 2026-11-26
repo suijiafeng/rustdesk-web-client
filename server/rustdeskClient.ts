@@ -19,6 +19,7 @@ import {
   punchHoleFailureMessage,
 } from '../shared/control.ts';
 import {
+  type HandshakePermissions,
   type HostHash,
   peerSignKey,
   readUntilHash,
@@ -64,6 +65,7 @@ export interface ConnectedHost {
   privacyAllowed: boolean;
   clipboardAllowed: boolean;
   restartAllowed: boolean;
+  audioAllowed: boolean;
   stream: EncryptedFramedStream;
   peerInfo: PeerInfo;
   username: string;
@@ -78,7 +80,7 @@ async function loginHost(
   codecs: CodecCaps,
   encrypted: boolean,
   route: ConnectedHost['route'],
-  permissions: { restart: boolean; privacy: boolean; clipboard: boolean },
+  permissions: HandshakePermissions,
   quality?: string,
   fps?: number,
   preferCodec?: string,
@@ -109,6 +111,7 @@ async function loginHost(
     if (msg.misc?.permission_info?.permission === HostPermission.PrivacyMode) permissions.privacy = msg.misc.permission_info.enabled === true;
     if (msg.misc?.permission_info?.permission === HostPermission.Clipboard) permissions.clipboard = msg.misc.permission_info.enabled === true;
     if (msg.misc?.permission_info?.permission === HostPermission.Restart) permissions.restart = msg.misc.permission_info.enabled === true;
+    if (msg.misc?.permission_info?.permission === HostPermission.Audio) permissions.audio = msg.misc.permission_info.enabled === true;
     if (msg.login_response) {
       if (msg.login_response.error !== undefined && msg.login_response.union === 'error') {
         const reason = String(msg.login_response.error || '').trim();
@@ -119,7 +122,7 @@ async function loginHost(
         await stream.sendRaw(encodeMessage(buildRefreshVideoMessage()));
         return {
           stream,
-          route, restartAllowed: permissions.restart,
+          route, restartAllowed: permissions.restart, audioAllowed: permissions.audio,
           privacyAllowed: permissions.privacy, clipboardAllowed: permissions.clipboard,
           peerInfo: msg.login_response.peer_info,
           username,
@@ -132,7 +135,7 @@ async function loginHost(
       await stream.sendRaw(encodeMessage(buildRefreshVideoMessage()));
       return {
         stream,
-        route, restartAllowed: permissions.restart,
+        route, restartAllowed: permissions.restart, audioAllowed: permissions.audio,
           privacyAllowed: permissions.privacy, clipboardAllowed: permissions.clipboard,
           peerInfo: msg.peer_info,
         username,
@@ -166,7 +169,7 @@ export async function connectDirect(
   const stream = await EncryptedFramedStream.connect(dial.host, dial.port, 8_000, { signal, peerConnection: true });
   try {
     const username = directUsername(host, dial.port, stream.remoteAddress);
-    const permissions = { restart: true, privacy: true, clipboard: true };
+    const permissions: HandshakePermissions = { restart: true, privacy: true, clipboard: true, audio: true };
     const { hash, encrypted } = await readUntilHash(stream, null, '', permissions);
     return await loginHost(
       stream,
@@ -316,7 +319,7 @@ interface ReadyRoute {
   route: ConnectedHost['route'];
   hash: HostHash;
   encrypted: boolean;
-  permissions: { restart: boolean; privacy: boolean; clipboard: boolean };
+  permissions: HandshakePermissions;
 }
 
 /** Race handshakes, then authenticate exactly once on the winning connection. */
@@ -426,7 +429,7 @@ export async function connectViaId(
           );
           try {
             const finalSignPk = signPk ?? peerSignKey(target.key, relay.pkBytes, peerId);
-            const permissions = { restart: true, privacy: true, clipboard: true };
+            const permissions: HandshakePermissions = { restart: true, privacy: true, clipboard: true, audio: true };
             const handshake = await readUntilHash(relay.peerStream, finalSignPk, peerId, permissions);
             attemptSignal?.throwIfAborted();
             return { stream: relay.peerStream, route: 'relay', permissions, ...handshake };
@@ -441,7 +444,7 @@ export async function connectViaId(
             decodedAddr.host, decodedAddr.port, 3_500, { signal: attemptSignal, peerConnection: true },
           );
           try {
-            const permissions = { restart: true, privacy: true, clipboard: true };
+            const permissions: HandshakePermissions = { restart: true, privacy: true, clipboard: true, audio: true };
             const handshake = await readUntilHash(stream, signPk, peerId, permissions);
             attemptSignal.throwIfAborted();
             return { stream, route: 'direct', permissions, ...handshake };
@@ -495,7 +498,7 @@ export async function connectViaId(
         );
         const pkBytes = rr.pk ? new Uint8Array(rr.pk) : undefined;
         const signPk = peerSignKey(target.key, pkBytes, peerId);
-        const permissions = { restart: true, privacy: true, clipboard: true };
+        const permissions: HandshakePermissions = { restart: true, privacy: true, clipboard: true, audio: true };
         const { hash, encrypted } = await readUntilHash(peerStream, signPk, peerId, permissions);
         idSocket.close();
         return await loginHost(

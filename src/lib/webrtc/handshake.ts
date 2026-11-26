@@ -63,7 +63,7 @@ export async function loginWebRtc(
   onVerified();
   const connection: NativeConnection = {
     stream, route: 'webrtc', encrypted: true, peerInfo: {}, username: peerId,
-    privacyAllowed: true, clipboardAllowed: true, restartAllowed: true,
+    privacyAllowed: true, clipboardAllowed: true, restartAllowed: true, audioAllowed: true,
   };
   const option = buildLoginOptions(codecs, request.quality, request.fps, request.codec, request.customQuality, request.lockAfterSessionEnd);
   const deadline = Date.now() + 20_000;
@@ -77,6 +77,7 @@ export async function loginWebRtc(
       if (permission?.permission === HostPermission.PrivacyMode) connection.privacyAllowed = permission.enabled === true;
       if (permission?.permission === HostPermission.Clipboard) connection.clipboardAllowed = permission.enabled === true;
       if (permission?.permission === HostPermission.Restart) connection.restartAllowed = permission.enabled === true;
+      if (permission?.permission === HostPermission.Audio) connection.audioAllowed = permission.enabled === true;
       if (message.hash && !submitted) {
         submitted = true;
         const { salt = '', challenge = '' } = message.hash;

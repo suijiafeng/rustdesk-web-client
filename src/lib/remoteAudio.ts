@@ -1,5 +1,7 @@
 import { AUDIO_MAX_LATENCY_MS } from './audioBuffer';
 
+export type AudioFailureStage = 'start' | 'module' | 'decode' | 'playback';
+
 interface PcmBlock {
   planes: Float32Array[];
   sampleRate: number;
@@ -24,7 +26,7 @@ export class RemoteAudio {
   private pendingDuration = 0;
   private format: { sampleRate: number; channels: number } | null = null;
 
-  constructor(private onError: () => void) {}
+  constructor(private onError: (stage: AudioFailureStage, error: unknown) => void) {}
 
   private async loadWorklet(): Promise<void> {
     // Vite bundles processor imports and returns a same-origin asset URL.
@@ -41,11 +43,11 @@ export class RemoteAudio {
         numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2],
       });
       this.node = node;
-      node.onprocessorerror = () => this.fail();
+      node.onprocessorerror = () => this.fail('playback', new Error('Audio processor failed'));
       node.port.onmessage = event => {
         if (this.closed || this.node !== node) return;
         const message = event.data;
-        if (message.type === 'error') { this.fail(); return; }
+        if (message.type === 'error') { this.fail('playback', new Error('Audio processor rejected PCM')); return; }
         if (message.type === 'consumed' && message.generation === this.generation && message.id === this.inFlight) {
           this.inFlight = 0;
           this.pump();
@@ -54,7 +56,7 @@ export class RemoteAudio {
       node.port.postMessage({ type: 'reset', generation: this.generation });
       node.connect(this.context.destination);
       this.pump();
-    })();
+    })().catch(error => { this.fail('module', error); });
   }
 
   resume(): Promise<void> {
@@ -68,8 +70,8 @@ export class RemoteAudio {
         // Preserve the user gesture: resume before waiting for module loading.
         await Promise.all([this.context.resume(), this.ensureWorklet()]);
         if (!this.closed) this.pump();
-      } catch {
-        this.fail();
+      } catch (error) {
+        this.fail('start', error);
       } finally {
         this.resuming = null;
       }
@@ -110,17 +112,17 @@ export class RemoteAudio {
               this.pendingDuration -= this.pending.shift()!.duration;
             }
             this.pump();
-          } catch {
-            if (generation === this.generation) this.fail();
+          } catch (error) {
+            if (generation === this.generation) this.fail('decode', error);
           } finally {
             frame.close();
           }
         },
-        error: () => { if (generation === this.generation) this.fail(); },
+        error: error => { if (generation === this.generation) this.fail('decode', error); },
       });
       this.decoder.configure({ codec: 'opus', sampleRate, numberOfChannels: channels });
-    } catch {
-      this.fail();
+    } catch (error) {
+      this.fail('decode', error);
     }
   }
 
@@ -135,8 +137,8 @@ export class RemoteAudio {
     try {
       const buffers = blocks.flatMap(block => block.planes.map(plane => plane.buffer as ArrayBuffer));
       this.node.port.postMessage({ type: 'pcm', generation: this.generation, id, blocks }, buffers);
-    } catch {
-      this.fail();
+    } catch (error) {
+      this.fail('playback', error);
     }
   }
 
@@ -155,16 +157,16 @@ export class RemoteAudio {
       const timestamp = Math.max(this.lastTimestamp + 1, Math.round(this.context.currentTime * 1_000_000));
       this.lastTimestamp = timestamp;
       this.decoder.decode(new EncodedAudioChunk({ type: 'key', timestamp, data }));
-    } catch {
-      this.fail();
+    } catch (error) {
+      this.fail('decode', error);
     }
   }
 
-  private fail(): void {
+  private fail(stage: AudioFailureStage, error: unknown): void {
     if (this.closed || this.failed) return;
     this.failed = true;
     this.close();
-    this.onError();
+    this.onError(stage, error);
   }
 
   close(): void {

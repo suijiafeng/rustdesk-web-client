@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { RemoteStage } from './components/RemoteStage';
 import { SessionPanels } from './components/SessionPanels';
-import { RemoteAudio } from './lib/remoteAudio';
+import { RemoteAudio, type AudioFailureStage } from './lib/remoteAudio';
 import type { MobilePanel } from './components/MobileSessionPanel';
 import {
   type ConnectRequest,
@@ -298,10 +298,13 @@ export default function App() {
     }
     const socket = wsRef.current;
     let player: RemoteAudio;
-    const fail = () => {
+    const fail = (stage: AudioFailureStage, error: unknown) => {
       if (socket !== wsRef.current || (player && player !== audioRef.current)) return;
       stopAudio();
-      showSessionTip(t(locale, 'audioFailed'), true);
+      console.error('Remote audio failure', { stage, error });
+      const messages = { start: 'audioStartFailed', module: 'audioModuleFailed',
+        decode: 'audioDecodeFailed', playback: 'audioFailed' } as const;
+      showSessionTip(t(locale, messages[stage]), true);
       send({ type: 'audio', enabled: false });
     };
     try {
@@ -313,8 +316,8 @@ export default function App() {
         send({ type: 'audio', enabled: true });
         showSessionTip(t(locale, 'audioRequested'));
       }
-    } catch {
-      fail();
+    } catch (error) {
+      fail('start', error);
     }
   };
 

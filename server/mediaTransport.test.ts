@@ -22,7 +22,7 @@ for (const negotiated of [false, true]) {
         audioFormat: null, currentSize: { width: 0, height: 0 }, cursorIds: negotiated, audioBinary: negotiated,
       };
       const conn: ConnectedHost = { stream, route: 'direct', privacyAllowed: true, clipboardAllowed: true,
-        restartAllowed: true, peerInfo: { hostname: 'media-peer' }, username: 'test', encrypted: true };
+        restartAllowed: true, audioAllowed: true, peerInfo: { hostname: 'media-peer' }, username: 'test', encrypted: true };
       state.hostConn = conn;
       const packet = Uint8Array.from([0, 1, 255]);
       const packets = [

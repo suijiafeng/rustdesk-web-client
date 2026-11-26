@@ -1,3 +1,5 @@
+import { readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { brotliCompressSync, constants, gzipSync } from 'node:zlib';
 import type { Plugin } from 'vite';
 
@@ -6,10 +8,15 @@ export function precompressAssets(): Plugin {
   return {
     name: 'precompress-static-assets',
     apply: 'build',
-    generateBundle(_options, bundle) {
+    enforce: 'post',
+    async writeBundle(options, bundle) {
+      const outDir = options.dir ? path.resolve(options.dir) : '';
+      if (!outDir) return;
       for (const asset of Object.values(bundle)) {
         if (!/\.(?:js|css|html|svg|json|webmanifest)$/.test(asset.fileName)) continue;
-        const source = Buffer.from(asset.type === 'chunk' ? asset.code : asset.source);
+        const target = path.resolve(outDir, asset.fileName);
+        if (!target.startsWith(outDir + path.sep)) continue;
+        const source = await readFile(target);
         if (source.length < 1024) continue;
         const variants = [
           ['br', brotliCompressSync(source, { params: { [constants.BROTLI_PARAM_QUALITY]: 9 } })],
@@ -17,7 +24,7 @@ export function precompressAssets(): Plugin {
         ] as const;
         for (const [extension, compressed] of variants) {
           if (compressed.length >= source.length) continue;
-          this.emitFile({ type: 'asset', fileName: `${asset.fileName}.${extension}`, source: compressed });
+          await writeFile(`${target}.${extension}`, compressed);
         }
       }
     },

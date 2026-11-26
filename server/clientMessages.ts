@@ -149,6 +149,7 @@ export function createClientMessageHandler(context: ClientMessageContext) {
         }
         state.preferredCodec = parsed.codec;
         state.hostConn = conn;
+        state.audioAllowed = conn.audioAllowed;
         state.phase = 'live';
         void startHostPump(conn);
       } catch (err) {

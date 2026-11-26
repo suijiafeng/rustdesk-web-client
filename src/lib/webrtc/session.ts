@@ -18,6 +18,7 @@ export interface NativeConnection {
   privacyAllowed: boolean;
   clipboardAllowed: boolean;
   restartAllowed: boolean;
+  audioAllowed?: boolean;
 }
 
 // Keep the gateway's session path unchanged. This adapter emits the same UI messages locally.
@@ -34,7 +35,7 @@ export function createNativeSession(
   let sizes: { width: number; height: number }[] = [];
   let privacyImpl = '';
   let audioRequested = false;
-  let audioAllowed = true;
+  let audioAllowed = conn.audioAllowed !== false;
   let audioFormat: { sampleRate: number; channels: number } | null = null;
   let warnedRawVideo = false;
   let currentSize = { width: 0, height: 0 };
