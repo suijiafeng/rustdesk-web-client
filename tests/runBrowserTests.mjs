@@ -56,5 +56,5 @@ try {
   }
 } finally {
   await stopSharedBrowser();
-  await rm(profile, { recursive: true, force: true });
+  await rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }
