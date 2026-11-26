@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Keyboard, ListPlus } from 'lucide-react';
 import type { SoftKeyboardMode } from '../hooks/useKeyboardViewport';
-import { keyboardInset } from '../lib/gestures';
 import { SOFT_KEYBOARD_BAR_HEIGHT } from '../lib/keyboardViewport';
 import { SoftShortcutSettings, type SoftShortcut } from './SoftShortcutSettings';
 import { t, type Locale } from '../lib/i18n';
@@ -181,36 +180,6 @@ export function SoftKeyboardBar({
     document.addEventListener('pointerdown', dismiss, true);
     return () => document.removeEventListener('pointerdown', dismiss, true);
   }, [settingsOpen]);
-
-  useEffect(() => {
-    if (mode !== 'system') return;
-    const viewport = window.visualViewport;
-    if (!viewport) return;
-
-    const initialHeight = viewport.height;
-    const initialWidth = viewport.width;
-    let keyboardWasVisible = false;
-    const syncKeyboard = () => {
-      const inset = Math.max(
-        keyboardInset(window.innerHeight, viewport.height, viewport.offsetTop),
-        Math.abs(viewport.width - initialWidth) < 80 ? initialHeight - viewport.height : 0,
-      );
-      if (inset > 80) {
-        keyboardWasVisible = true;
-      } else if (keyboardWasVisible && inset < 24) {
-        keyboardWasVisible = false;
-        onHide();
-      }
-    };
-
-    syncKeyboard();
-    viewport.addEventListener('resize', syncKeyboard);
-    viewport.addEventListener('scroll', syncKeyboard);
-    return () => {
-      viewport.removeEventListener('resize', syncKeyboard);
-      viewport.removeEventListener('scroll', syncKeyboard);
-    };
-  }, [mode, onHide]);
 
   const resetLocalDraft = () => {
     lastSentRef.current = '';

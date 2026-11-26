@@ -9,12 +9,24 @@ interface ViewState {
 }
 export type SoftKeyboardMode = 'system' | 'virtual';
 
+const NATIVE_KEYBOARD_VISIBLE_PX = 80;
+const NATIVE_KEYBOARD_HIDDEN_PX = 24;
+const VIEWPORT_SETTLE_MS = 160;
+const SYSTEM_SWITCH_TIMEOUT_MS = 900;
+
+interface SystemTransition {
+  startedAt: number;
+  changedAt: number;
+  inset: number;
+}
+
 interface Options {
   enabled: boolean;
   softKeys: boolean;
   mode: SoftKeyboardMode;
   stage: RefObject<HTMLElement | null>;
   read: () => ViewState & { remoteW: number; remoteH: number; anchor: Point };
+  onSystemDismiss: () => void;
   apply: (box: { w: number; h: number }, state: ViewState) => void;
 }
 interface KeyboardSession {
@@ -25,7 +37,9 @@ interface KeyboardSession {
   offset: Point;
   shown: boolean;
   systemHeight?: number;
-  systemSwitchUntil: number;
+  nativeShown: boolean;
+  systemTransition?: SystemTransition;
+  dismissSince?: number;
   manual: ViewState | null;
 }
 interface ViewportRect { left: number; top: number; width: number; height: number }
@@ -45,7 +59,7 @@ export function useKeyboardViewport(options: Options) {
     if (!vv || !rect || vv.scale > 1.02) return;
     session.current = {
       before: latest.current.read(), height: vv.height, width: vv.width,
-      origin: { x: rect.left, y: rect.top }, offset: { x: vv.offsetLeft, y: vv.offsetTop }, shown: false, manual: null, systemSwitchUntil: 0,
+      origin: { x: rect.left, y: rect.top }, offset: { x: vv.offsetLeft, y: vv.offsetTop }, shown: false, nativeShown: false, manual: null,
     };
   }, []);
 
@@ -55,9 +69,14 @@ export function useKeyboardViewport(options: Options) {
     const vv = window.visualViewport;
     if (mode === 'virtual' && vv && Math.abs(vv.width - current.width) < 80) {
       const inset = current.height - vv.height;
-      if (inset > 80) current.systemHeight = inset;
+      if (inset > NATIVE_KEYBOARD_VISIBLE_PX) current.systemHeight = inset;
     }
-    current.systemSwitchUntil = mode === 'system' ? performance.now() + 500 : 0;
+    const now = performance.now();
+    current.nativeShown = false;
+    current.dismissSince = undefined;
+    current.systemTransition = mode === 'system' ? {
+      startedAt: now, changedAt: now, inset: vv ? Math.max(0, current.height - vv.height) : 0,
+    } : undefined;
   }, []);
 
   const markManual = useCallback((view: ViewTransform, mode: ViewMode, zoom: number) => {
@@ -74,7 +93,7 @@ export function useKeyboardViewport(options: Options) {
       clearTimeout(transitionTimer);
       const current = session.current;
       if (!current) return;
-      const { enabled, softKeys, mode: keyboardMode, read, apply, stage } = latest.current;
+      const { enabled, softKeys, mode: keyboardMode, read, apply, stage, onSystemDismiss } = latest.current;
       if (!enabled || vv.scale > 1.02) {
         active.current = false;
         session.current = null;
@@ -83,11 +102,13 @@ export function useKeyboardViewport(options: Options) {
         return;
       }
       let rotated = Math.abs(vv.width - current.width) > 80;
-      const switchingToSystem = softKeys && keyboardMode === 'system' && performance.now() < current.systemSwitchUntil;
+      const switchingToSystem = softKeys && keyboardMode === 'system' ? current.systemTransition : undefined;
       if (rotated && softKeys && (keyboardMode === 'virtual' || switchingToSystem)) {
         current.width = vv.width;
         current.height = Math.max(vv.height, window.innerHeight);
         current.systemHeight = undefined;
+        current.nativeShown = false;
+        current.dismissSince = undefined;
         const now = read();
         current.before = {
           ...now, mode: 'fit', zoom: 1,
@@ -96,23 +117,58 @@ export function useKeyboardViewport(options: Options) {
         current.manual = null;
         rotated = false;
       }
+      const nowMs = performance.now();
       const nativeInset = Math.max(0, current.height - vv.height);
-      const obscured = nativeInset > (current.shown ? 24 : 80);
-      const preferredHeight = virtualKeyboardHeight(current.height, current.width > current.height, current.systemHeight);
-      const canWaitForSystem = switchingToSystem && nativeInset < preferredHeight - 8;
-      if (canWaitForSystem) {
-        transitionTimer = setTimeout(sync, Math.max(1, current.systemSwitchUntil - performance.now()));
-      } else if (keyboardMode === 'system') {
-        current.systemSwitchUntil = 0;
-        if (nativeInset > 80 && !rotated) current.systemHeight = nativeInset;
+      const obscured = nativeInset > (current.shown ? NATIVE_KEYBOARD_HIDDEN_PX : NATIVE_KEYBOARD_VISIBLE_PX);
+      let settling = false;
+      if (switchingToSystem) {
+        if (Math.abs(nativeInset - switchingToSystem.inset) >= 1) {
+          switchingToSystem.inset = nativeInset;
+          switchingToSystem.changedAt = nowMs;
+        }
+        const remaining = switchingToSystem.startedAt + SYSTEM_SWITCH_TIMEOUT_MS - nowMs;
+        const quiet = switchingToSystem.changedAt + VIEWPORT_SETTLE_MS - nowMs;
+        if (remaining > 0 && (nativeInset <= NATIVE_KEYBOARD_VISIBLE_PX || quiet > 0)) {
+          settling = true;
+          transitionTimer = setTimeout(schedule, nativeInset <= NATIVE_KEYBOARD_VISIBLE_PX ? remaining : Math.min(remaining, quiet));
+        } else {
+          current.systemTransition = undefined;
+        }
       }
-      const holdSpace = softKeys && (keyboardMode === 'virtual' || canWaitForSystem);
-      const reserve = holdSpace ? keyboardSpaceToReserve(current.height, vv.height, preferredHeight) : 0;
+
+      let dismissing = false;
+      if (softKeys && keyboardMode === 'system' && !settling && !rotated) {
+        if (nativeInset > NATIVE_KEYBOARD_VISIBLE_PX) {
+          current.nativeShown = true;
+          current.systemHeight = nativeInset;
+        }
+        if (nativeInset >= NATIVE_KEYBOARD_HIDDEN_PX) {
+          current.dismissSince = undefined;
+        } else if (current.nativeShown) {
+          current.dismissSince ??= nowMs;
+          const remaining = current.dismissSince + VIEWPORT_SETTLE_MS - nowMs;
+          if (remaining <= 0) {
+            current.nativeShown = false;
+            current.dismissSince = undefined;
+            onSystemDismiss();
+            return;
+          }
+          dismissing = true;
+          transitionTimer = setTimeout(schedule, remaining);
+        }
+      }
+
+      const preferredHeight = virtualKeyboardHeight(current.height, current.width > current.height, current.systemHeight);
+      const holdSpace = softKeys && (keyboardMode === 'virtual' || settling || dismissing);
+      // Ignore intermediate viewport heights while changing keyboards. The
+      // browser can briefly report a fullscreen or undersized visual viewport.
+      const visibleHeight = holdSpace ? Math.max(vv.height, current.height - preferredHeight) : vv.height;
+      const reserve = holdSpace ? keyboardSpaceToReserve(current.height, visibleHeight, preferredHeight) : 0;
       setReservedSpace(reserve);
       // On rotation the old height is no longer a keyboard baseline. Keep using the
       // visible area while the keyboard is open, but do not restore a portrait snapshot.
       if ((!softKeys && (rotated || !current.shown || !obscured)) ||
-          (!holdSpace && !rotated && current.shown && !obscured && !canWaitForSystem)) {
+          (!holdSpace && !rotated && current.shown && !obscured)) {
         const size = { w: vv.width, h: vv.height };
         const now = read();
         let state: ViewState = current.before;
@@ -127,7 +183,7 @@ export function useKeyboardViewport(options: Options) {
         session.current = softKeys ? {
           ...current, before: { ...read(), ...state }, height: vv.height, width: vv.width,
           origin: { x: vv.offsetLeft, y: vv.offsetTop }, offset: { x: vv.offsetLeft, y: vv.offsetTop },
-          shown: false, manual: null,
+          shown: false, nativeShown: false, manual: null,
         } : null;
         setViewport(null);
         apply(size, state);
@@ -136,7 +192,7 @@ export function useKeyboardViewport(options: Options) {
       if (!holdSpace && !obscured && !current.shown) return;
       current.shown = true;
       active.current = true;
-      const rect = { left: vv.offsetLeft, top: vv.offsetTop, width: vv.width, height: vv.height };
+      const rect = { left: vv.offsetLeft, top: vv.offsetTop, width: vv.width, height: visibleHeight };
       current.offset = { x: rect.left, y: rect.top };
       const barHeight = softKeys ? stage.current?.querySelector('[data-testid="softbar"]')?.getBoundingClientRect().height ?? SOFT_KEYBOARD_BAR_HEIGHT : 0;
       const size = { w: rect.width, h: Math.max(1, rect.height - barHeight - reserve) };

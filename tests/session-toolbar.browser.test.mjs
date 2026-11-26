@@ -251,12 +251,13 @@ try {
   assert.ok(await evaluate(`${operationRow}.firstElementChild.contains(${computerKeyboardTab}) &&
     ${operationRow}.lastElementChild === ${select('soft-hide')}`));
 
+
   await tapElement(computerKeyboardTab);
   assert.equal(await evaluate(softbar + '.dataset.keyboardMode'), 'virtual');
   assert.equal(await evaluate(computerKeyboardTab + '.getAttribute("aria-pressed")'), 'true');
   assert.equal(await evaluate(select('soft-input') + ' === null'), true);
   assert.equal(await evaluate(toolbarTop), systemKeyboardTop);
-  for (const remaining of [180, 90, 0]) {
+  for (const remaining of [310, 180, 90, 0]) {
     await evaluate(`window.setTestViewportHeight(${fullHeight - remaining})`);
     await delay(35);
     assert.equal(await evaluate(toolbarTop), systemKeyboardTop);
@@ -330,6 +331,22 @@ try {
   assert.equal(await evaluate(shortcutButton + '.textContent'), 'Ctrl+A');
   await tapElement(settingsButton);
   await until(shortcutSettings);
+  const panelFits = width => `(() => {
+    const panel = ${shortcutSettings}.getBoundingClientRect();
+    return Math.abs(panel.left - 8) < 1 && Math.abs(panel.right - (${width} - 8)) < 1 &&
+      panel.top >= window.visualViewport.offsetTop && panel.bottom <= ${toolbarTop};
+  })()`;
+  const buttonHeights = `Array.from(
+    [${settingsButton}, ...${functionStrip}.querySelectorAll('button'), ...${shortcutSettings}.querySelectorAll('.soft-shortcut-chip')],
+    button => button.getBoundingClientRect().height
+  )`;
+  assert.ok(await evaluate(panelFits(390)));
+  assert.deepEqual([...new Set(await evaluate(buttonHeights))], [32]);
+  await cdp('Emulation.setDeviceMetricsOverride', { width: 320, height: 740, deviceScaleFactor: 1, mobile: true });
+  await until(panelFits(320));
+  assert.deepEqual([...new Set(await evaluate(buttonHeights))], [32]);
+  await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 740, deviceScaleFactor: 1, mobile: true });
+  await until(panelFits(390));
   assert.equal(await evaluate(shortcutOption(':a') + ' === null'), true);
   assert.equal(await evaluate(shortcutOption(':1') + ' === null'), true);
   assert.equal(await evaluate(savedCombo + '.getAttribute("aria-pressed")'), 'true');
@@ -353,15 +370,24 @@ try {
   assert.equal(await evaluate(softbar + '.dataset.keyboardMode'), 'system');
   assert.equal(await evaluate('document.activeElement === ' + select('soft-input')), true);
   assert.equal(await evaluate(toolbarTop), systemKeyboardTop);
-  for (const remaining of [90, 180, 260]) {
+  for (const remaining of [90, 260, 0, 310, 140, 260]) {
     await evaluate(`window.setTestViewportHeight(${fullHeight - remaining})`);
     await delay(35);
     assert.equal(await evaluate(toolbarTop), systemKeyboardTop);
   }
-  await tapElement(select('soft-hide'));
+  await delay(200);
   await evaluate(`window.setTestViewportHeight(${fullHeight})`);
+  await delay(70);
+  assert.equal(await evaluate(toolbarTop), systemKeyboardTop);
+  await evaluate(`window.setTestViewportHeight(${fullHeight - 260})`);
+  await delay(200);
+  assert.equal(await evaluate(toolbarTop), systemKeyboardTop);
+
+  await evaluate(`window.setTestViewportHeight(${fullHeight})`);
+  await delay(65);
+  assert.equal(await evaluate(toolbarTop), systemKeyboardTop);
   await until(select('mobile-dock-expand'));
-  console.log('Keyboard: 26 letters, number and symbol mode, native focus and stable height verified.');
+  console.log('Keyboard: 26 letters, stable height through viewport jitter and native dismissal verified.');
 
   await cdp('Emulation.setTouchEmulationEnabled', { enabled: false });
   await cdp('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });

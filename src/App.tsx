@@ -569,6 +569,7 @@ export default function App() {
   const viewRef = useRef<ViewTransform>({ scale: 1, panX: 0, panY: 0 });
   const keyboardLayout = useKeyboardViewport({
     enabled: phase === 'live', softKeys, mode: softKeyboardMode, stage: stageRef,
+    onSystemDismiss: () => hideSoftKeyboard(),
     read: () => ({ mode: viewMode, zoom, view: { ...viewRef.current }, remoteW, remoteH,
       anchor: { ...(lastInputPointRef.current ?? cursorRef.current) } }),
     apply: (size, next) => {
