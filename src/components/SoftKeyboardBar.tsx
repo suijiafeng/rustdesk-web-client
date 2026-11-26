@@ -404,7 +404,7 @@ export function SoftKeyboardBar({
     >
       <div className="soft-function-row" data-testid="soft-function-row">
         <div ref={settingsRegion}>
-          <button type="button" className="softbar-icon" data-testid="soft-shortcut-toggle"
+          <button type="button" className="softbar-icon soft-function-settings" data-testid="soft-shortcut-toggle"
             aria-label={t(locale, 'softShortcutSettings')} aria-expanded={settingsOpen}
             onClick={() => setSettingsOpen(open => !open)}>
             <ListPlus size={18} aria-hidden="true" />
@@ -430,7 +430,7 @@ export function SoftKeyboardBar({
             const feedbackId = `shortcut-${shortcutId(shortcut)}`;
             const choice = shortcutChoices.find(item => item.value === shortcut.key);
             return <button key={feedbackId} type="button"
-              className={`soft-key-btn${isCombo ? ' soft-shortcut-button' : ''}${isActive ? ' active' : ''}`}
+              className="soft-key-btn"
               data-testid={modifier ? `soft-mod-${modifier.label.toLowerCase()}` : isCombo ? 'soft-shortcut' : undefined}
               data-function-key={!isCombo ? shortcut.key : undefined}
               aria-label={!isCombo && choice && 'aria' in choice ? choice.aria : undefined}

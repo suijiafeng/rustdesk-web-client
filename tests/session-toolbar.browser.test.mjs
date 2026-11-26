@@ -245,7 +245,10 @@ try {
   const systemKeyboardTop = await evaluate(toolbarTop);
   const functionRow = select('soft-function-row');
   const operationRow = select('soft-operation-row');
-  assert.ok(await evaluate(`${functionRow}.getBoundingClientRect().bottom <= ${operationRow}.getBoundingClientRect().top`));
+  assert.equal(await evaluate(`${operationRow}.getBoundingClientRect().top - ${functionRow}.getBoundingClientRect().bottom`), 4);
+  assert.equal(await evaluate(`getComputedStyle(${functionRow}).backgroundColor`), 'rgba(0, 0, 0, 0)');
+  assert.equal(await evaluate(`getComputedStyle(${select('soft-mod-ctrl')}).backgroundColor`), 'rgba(0, 0, 0, 0)');
+  assert.equal(await evaluate(`getComputedStyle(${select('soft-mod-ctrl')}).borderColor`), 'rgb(100, 117, 138)');
   assert.ok(await evaluate(`Math.abs(${operationRow}.getBoundingClientRect().bottom - window.visualViewport.height) < 1`));
   assert.match(await switchLabel(), /切到电脑键盘|Switch to computer keyboard/);
   assert.ok(await evaluate(`${operationRow}.firstElementChild === ${keyboardSwitch} &&
@@ -287,6 +290,7 @@ try {
   assert.equal(await evaluate(letterA + '.dataset.keyPressed'), 'true');
   await until(letterA + '.dataset.keyPressed === undefined');
   await tapElement(select('soft-mod-ctrl'));
+  await until(`getComputedStyle(${select('soft-mod-ctrl')}).borderColor === 'rgb(157, 189, 224)'`);
   await tapElement(select('soft-mod-shift'));
   await tapElement(`${virtualKeyboard}.querySelector('[data-key="Enter"]')`);
   await tapElement(`${virtualKeyboard}.querySelector('[data-key="Shift"]')`);
