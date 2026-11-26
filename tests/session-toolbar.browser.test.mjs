@@ -279,6 +279,8 @@ try {
   const operationRow = select('soft-operation-row');
   assert.equal(await evaluate(`${operationRow}.getBoundingClientRect().top - ${functionRow}.getBoundingClientRect().bottom`), 2);
   assert.equal(await css(functionRow, 'backgroundColor'), 'rgba(0, 0, 0, 0)');
+  assert.equal(await css(functionRow, 'columnGap'), '4px');
+  assert.equal(await css(select('soft-key-strip'), 'columnGap'), '3px');
   await until(`getComputedStyle(${select('soft-mod-ctrl')}).borderColor === 'rgb(64, 69, 76)'`);
   await until(`getComputedStyle(${select('soft-mod-ctrl')}).backgroundColor === 'rgb(48, 53, 60)'`);
   assert.equal(await css(select('soft-shortcut-toggle'), 'backgroundColor'), 'rgb(48, 53, 60)');
