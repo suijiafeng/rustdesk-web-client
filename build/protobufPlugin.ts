@@ -6,7 +6,7 @@ import { pbjs } from 'protobufjs-cli';
 import type { Plugin } from 'vite';
 import { PROTO_SOURCE } from '../shared/protoSource.ts';
 
-const schemaModule = fileURLToPath(new URL('../server/protoSchema.ts', import.meta.url));
+const schemaModule = fileURLToPath(new URL('../shared/protoSchema.ts', import.meta.url));
 const virtualModule = '\0rustdesk:static-protobuf';
 
 // The Node gateway keeps reflection. Browsers need static constructors because

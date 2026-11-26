@@ -1,4 +1,4 @@
-import { selectCodecs } from '../../../server/control';
+import { selectCodecs } from '../../../shared/control.ts';
 import { decodeEndpoint, encodeEndpoint, MAX_CANDIDATES, sdpFingerprint, validateCandidate } from '../../../shared/webrtc';
 import { loginWebRtc, verifiedPeerKey, type ConnectRequest } from './handshake';
 import { DataChannelStream } from './stream';

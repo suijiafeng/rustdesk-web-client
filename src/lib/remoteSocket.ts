@@ -1,4 +1,4 @@
-import type { ClientMessage } from '../../server/control';
+import type { ClientMessage } from '../../shared/control.ts';
 import type { createNativeSession } from './webrtc/session';
 
 export class RemoteSocket {
@@ -58,7 +58,7 @@ export class RemoteSocket {
       const abort = this.abort;
       void (async () => {
         const [{ connectWebRtc }, { createNativeSession }, { selectCodecs }] = await Promise.all([
-          import('./webrtc/connect'), import('./webrtc/session'), import('../../server/control'),
+          import('./webrtc/connect'), import('./webrtc/session'), import('../../shared/control.ts'),
         ]);
         if (abort.signal.aborted) return;
         const conn = await connectWebRtc(this.url, message, abort.signal);

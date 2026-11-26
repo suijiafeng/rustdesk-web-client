@@ -1,60 +1,11 @@
-import { decodeClipboard } from './clipboard.ts';
-import { humanizeError } from './control.ts';
+import { decodeClipboard } from '../shared/clipboard.ts';
+import { humanizeError } from '../shared/control.ts';
 import { CursorShapes } from './cursor.ts';
-import { decodeMessage, encodeMessage } from './protos.ts';
+import { decodeMessage, encodeMessage } from '../shared/protos.ts';
 import type { ConnectedHost } from './rustdeskClient.ts';
-import { canRestart, permissions, type SessionContext } from './sessionState.ts';
+import type { SessionContext } from './sessionState.ts';
+import { canRestart, permissions, peerToJson, initialDisplaySize, HostPermission, PrivacyState, privacyResult, supportedResolutions, type PeerInfo } from '../shared/peer.ts';
 import type { VideoFrameHandler } from './videoFrames.ts';
-
-function peerToJson(peer: Record<string, any>, conn: ConnectedHost): Record<string, unknown> {
-  const displays = Array.isArray(peer.displays)
-    ? peer.displays.map((d: any, index: number) => ({
-        index,
-        name: String(d.name ?? ''),
-        x: Number(d.x ?? 0),
-        y: Number(d.y ?? 0),
-        width: Number(d.width ?? 0),
-        height: Number(d.height ?? 0),
-        online: Boolean(d.online ?? true),
-        cursorEmbedded: Boolean(d.cursor_embedded),
-      }))
-    : [];
-
-  const encoding = peer.encoding
-    ? {
-        vp8: Boolean(peer.encoding.vp8),
-        h264: Boolean(peer.encoding.h264),
-        h265: Boolean(peer.encoding.h265),
-        av1: Boolean(peer.encoding.av1),
-      }
-    : null;
-
-  return {
-    type: 'peer',
-    hostname: String(peer.hostname ?? ''),
-    platform: String(peer.platform ?? ''),
-    username: String(peer.username ?? ''),
-    version: String(peer.version ?? ''),
-    currentDisplay: Number(peer.current_display ?? 0),
-    displays,
-    encoding,
-    encrypted: conn.encrypted,
-    route: conn.route,
-    ...permissions(conn),
-    restartAllowed: canRestart(conn),
-  };
-}
-
-function initialDisplaySize(peer: Record<string, any>): { width: number; height: number } {
-  const displays = Array.isArray(peer.displays) ? peer.displays : [];
-  const idx = Number(peer.current_display ?? 0);
-  const chosen = displays[idx] ?? displays[0];
-  if (!chosen) return { width: 0, height: 0 };
-  return {
-    width: Math.max(0, Number(chosen.width ?? 0)),
-    height: Math.max(0, Number(chosen.height ?? 0)),
-  };
-}
 
 export async function startHostPump(
   conn: ConnectedHost,
@@ -62,10 +13,9 @@ export async function startHostPump(
   handleVideoFrame: VideoFrameHandler['handleFrame'],
 ): Promise<void> {
   const { state, ws, sendJson, cleanup } = context;
-  const publishResolutions = (display: number, supported?: { resolutions?: typeof state.sizes }) => {
+  const publishResolutions = (display: number, supported?: PeerInfo['resolutions']) => {
     state.resolutionDisplay = display;
-    state.sizes = (supported?.resolutions ?? []).filter(({ width, height }) =>
-      Number.isInteger(width) && Number.isInteger(height) && width > 0 && height > 0);
+    state.sizes = supportedResolutions(supported);
     sendJson({ type: 'resolutions', display, sizes: state.sizes });
   };
   const cursorShapes = new CursorShapes();
@@ -133,27 +83,26 @@ export async function startHostPump(
       }
 
       const permission = msg.misc?.permission_info;
-      if (permission?.permission === 8 || permission?.permission === 2) {
-        if (permission.permission === 8) conn.privacyAllowed = permission.enabled === true;
+      if (permission?.permission === HostPermission.PrivacyMode || permission?.permission === HostPermission.Clipboard) {
+        if (permission.permission === HostPermission.PrivacyMode) conn.privacyAllowed = permission.enabled === true;
         else conn.clipboardAllowed = permission.enabled === true;
         sendJson({ type: 'permissions', ...permissions(conn) });
       }
       const notice = msg.misc?.back_notification;
       if (typeof notice?.privacy_mode_state === 'number') {
         const code = notice.privacy_mode_state;
-        if (code === 4) state.privacyImpl = notice.impl_key || '';
-        if (code === 3) {
+        if (code === PrivacyState.Enabled) state.privacyImpl = notice.impl_key || '';
+        if (code === PrivacyState.Unsupported) {
           conn.privacyAllowed = false;
           sendJson({ type: 'permissions', ...permissions(conn) });
         }
-        const enabled = code === 4 ? true : [3,5,6,7,8,9,11].includes(code) ? false : undefined;
-        sendJson({ type: 'privacyResult', enabled, failed: ![4,8,9].includes(code) });
+        sendJson({ type: 'privacyResult', ...privacyResult(code) });
       }
-      if (permission?.permission === 5) {
+      if (permission?.permission === HostPermission.Restart) {
         conn.restartAllowed = permission.enabled === true;
         sendJson({ type: 'restartPermission', allowed: canRestart(conn) });
       }
-      if (permission?.permission === 3) {
+      if (permission?.permission === HostPermission.Audio) {
         state.audioAllowed = permission.enabled === true;
         if (!state.audioAllowed && state.audioRequested) {
           state.audioRequested = false;
@@ -162,11 +111,11 @@ export async function startHostPump(
       }
       if (msg.misc?.audio_format) {
         const { sample_rate: sampleRate, channels } = msg.misc.audio_format;
-        state.audioFormat = { sampleRate, channels };
-        if (state.audioRequested && state.audioAllowed) sendJson({ type: 'audioFormat', ...state.audioFormat });
+        state.audioFormat = typeof sampleRate === 'number' && typeof channels === 'number' ? { sampleRate, channels } : null;
+        if (state.audioRequested && state.audioAllowed && state.audioFormat) sendJson({ type: 'audioFormat', ...state.audioFormat });
       }
       const packet = msg.audio_frame?.data;
-      if (state.audioAllowed && state.audioRequested && packet?.length > 0 && packet.length <= 8192 && ws.bufferedAmount < 262144) {
+      if (state.audioAllowed && state.audioRequested && packet && packet.length > 0 && packet.length <= 8192 && ws.bufferedAmount < 262144) {
         sendJson({ type: 'audioFrame', packet: Buffer.from(packet).toString('base64') });
       }
 

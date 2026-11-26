@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { decodingPreferenceChanged } from './control.ts';
+import { decodingPreferenceChanged } from '../shared/control.ts';
 import { GatewayVideoBuffer } from './videoBuffer.ts';
 
 const KiB = 1024;

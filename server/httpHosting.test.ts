@@ -11,7 +11,7 @@ import express from 'express';
 import { WebSocket, WebSocketServer } from 'ws';
 import { EncryptedFramedStream } from './bytesCodec.ts';
 import { createGatewayShutdown, installApiNotFound, serveProductionFiles } from './httpHosting.ts';
-import { encodeMessage } from './protos.ts';
+import { encodeMessage } from '../shared/protos.ts';
 import { encodeEndpoint } from '../shared/webrtc.ts';
 import { serveSocket } from './session.ts';
 import { serveWebRtcSignal } from './webrtcSignal.ts';

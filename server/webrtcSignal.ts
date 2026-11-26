@@ -2,9 +2,9 @@ import type { WebSocket } from 'ws';
 import type { GatewayAdmission } from './admission.ts';
 import { checkPort, RENDEZVOUS_PORT, tokenMatches } from './auth.ts';
 import { EncryptedFramedStream } from './bytesCodec.ts';
-import { punchHoleFailureMessage } from './control.ts';
+import { punchHoleFailureMessage } from '../shared/control.ts';
 import { secureRendezvous } from './handshake.ts';
-import { decodeRendezvous, encodeRendezvous } from './protos.ts';
+import { decodeRendezvous, encodeRendezvous } from '../shared/protos.ts';
 import { decodeEndpoint, MAX_CANDIDATES, sdpFingerprint, validateCandidate } from '../shared/webrtc.ts';
 
 // This endpoint only forwards signaling. Passwords, media and control stay in the browser.
@@ -83,12 +83,13 @@ export function serveWebRtcSignal(ws: WebSocket, token: string, admission?: Gate
           }
           const answer = incoming.punch_hole_response ?? incoming.relay_response;
           if (answer) {
-            const refusal = String(answer.other_failure ?? '').trim() || String(answer.refuse_reason ?? '').trim();
+            const refusal = String(incoming.punch_hole_response?.other_failure ?? '').trim()
+              || String(incoming.relay_response?.refuse_reason ?? '').trim();
             if (refusal) throw new Error(refusal);
             if (!answer.webrtc_sdp_answer) {
-              if (incoming.punch_hole_response && (answer.failure !== undefined ||
+              if (incoming.punch_hole_response && (incoming.punch_hole_response.failure !== undefined ||
                   (!answer.socket_addr?.length && !answer.socket_addr_v6?.length))) {
-                throw new Error(punchHoleFailureMessage(answer));
+                throw new Error(punchHoleFailureMessage(incoming.punch_hole_response));
               }
               throw new Error('This peer or ID server did not offer WebRTC');
             }

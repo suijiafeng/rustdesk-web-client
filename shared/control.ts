@@ -1,4 +1,5 @@
 import { Buffer } from 'buffer';
+import type { HostMessage, OptionMessage, ProtoInput, rustdesk } from './protoTypes.ts';
 import {
   BoolOptionValues,
   ChromaValues,
@@ -211,7 +212,7 @@ export function resolvePreferCodecEnum(
 export function buildSupportedDecoding(
   codecs: CodecCaps,
   preferCodec?: string,
-): Record<string, unknown> {
+): ProtoInput<rustdesk.ISupportedDecoding> {
   const pref = (typeof preferCodec === 'string' ? preferCodec.toLowerCase() : 'auto');
   const explicitAv1 = pref === 'av1' && codecs.av1;
 
@@ -238,7 +239,7 @@ export function decodingPreferenceChanged(
   return before.prefer !== after.prefer || before.ability_av1 !== after.ability_av1;
 }
 
-function buildQualityOptions(quality: string | undefined, customQuality: number | undefined, fallback: number): Record<string, number> {
+function buildQualityOptions(quality: string | undefined, customQuality: number | undefined, fallback: number): OptionMessage {
   if (quality === 'custom') {
     if (typeof customQuality !== 'number' || !Number.isInteger(customQuality) ||
         customQuality < 20 || customQuality > 200 || customQuality % 2 !== 0) {
@@ -259,7 +260,7 @@ export function buildLoginOptions(
   preferCodec?: string,
   customQuality?: number,
   lockAfterSessionEnd = false,
-): Record<string, unknown> {
+): OptionMessage {
   const customFps =
     typeof fps === 'number' && Number.isFinite(fps) && fps >= 5 && fps <= 120
       ? Math.round(fps)
@@ -275,7 +276,7 @@ export function buildLoginOptions(
   };
 }
 
-export function buildVideoReceivedMessage(): Record<string, unknown> {
+export function buildVideoReceivedMessage(): HostMessage {
   return {
     misc: {
       video_received: true,
@@ -283,7 +284,7 @@ export function buildVideoReceivedMessage(): Record<string, unknown> {
   };
 }
 
-export function buildRefreshVideoMessage(): Record<string, unknown> {
+export function buildRefreshVideoMessage(): HostMessage {
   return {
     misc: {
       refresh_video: true,
@@ -298,7 +299,7 @@ export function buildRefreshVideoMessage(): Record<string, unknown> {
 export function toHostMessage(
   msg: ClientMessage,
   sessionCodecs?: CodecCaps,
-): Record<string, unknown> | null {
+): HostMessage | null {
   switch (msg.type) {
     case 'mouse': {
       return {
@@ -321,7 +322,7 @@ export function toHostMessage(
           if (val !== undefined) modifiers.push(val);
         }
       }
-      const ev: Record<string, unknown> = {
+      const ev: ProtoInput<rustdesk.IKeyEvent> = {
         mode: KeyboardModeValues.Legacy,
         down,
         press,
@@ -395,7 +396,7 @@ export function toHostMessage(
     }
 
     case 'quality': {
-      const option: Record<string, unknown> = buildQualityOptions(msg.quality, msg.customQuality, ImageQualityValues.NotSet);
+      const option = buildQualityOptions(msg.quality, msg.customQuality, ImageQualityValues.NotSet);
       const fps = Math.trunc(Number(msg.fps ?? 0));
       if (fps >= 5 && fps <= 120) {
         option.custom_fps = fps;

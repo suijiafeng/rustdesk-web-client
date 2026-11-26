@@ -4,8 +4,8 @@ import net from 'node:net';
 import test from 'node:test';
 import { passwordResponse } from './auth.ts';
 import { EncryptedFramedStream } from './bytesCodec.ts';
-import { selectCodecs } from './control.ts';
-import { decodeMessage, decodeRendezvous, encodeAddrMangle, encodeMessage, encodeRendezvous } from './protos.ts';
+import { selectCodecs } from '../shared/control.ts';
+import { decodeMessage, decodeRendezvous, encodeAddrMangle, encodeMessage, encodeRendezvous } from '../shared/protos.ts';
 import { connectViaId } from './rustdeskClient.ts';
 import { parseRuntimeConfig, setRuntimeConfig } from './config.ts';
 
@@ -38,6 +38,7 @@ test('production connects directly to a dynamic peer port advertised by hbbs', {
       const raw = await stream.next(2_000);
       assert.ok(raw);
       const login = decodeMessage(raw).login_request;
+      assert.ok(login?.password);
       assert.equal(login.username, peerId);
       assert.deepEqual(Buffer.from(login.password), passwordResponse(password, salt, challenge));
       await stream.sendRaw(encodeMessage({ login_response: { peer_info: { hostname: 'dynamic-port-peer' } } }));

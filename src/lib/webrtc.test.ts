@@ -1,10 +1,10 @@
 import { zstdCompressSync } from 'node:zlib';
-import { CursorShapes } from './webrtc/cursor.ts';
+import { CursorShapes } from '../../shared/cursor.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import nacl from 'tweetnacl';
 import { FragmentReader, FRAGMENT_PAYLOAD, decodeEndpoint, encodeEndpoint, sdpFingerprint } from '../../shared/webrtc.ts';
-import { IdPkProto, decodeRendezvous, encodeRendezvous } from '../../server/protos.ts';
+import { IdPkProto, decodeRendezvous, encodeRendezvous } from '../../shared/protos.ts';
 import { readWebRtcRoute } from './webrtc/connect.ts';
 import { verifiedPeerKey, verifyFingerprint } from './webrtc/handshake.ts';
 
@@ -20,7 +20,7 @@ test('native WebRTC endpoints and field numbers survive signaling without leakin
   const wire = encodeRendezvous({ punch_hole_request: { webrtc_sdp_offer: 'x' } });
   // RendezvousMessage.punch_hole_request = 8; PunchHoleRequest.webrtc_sdp_offer = 12.
   assert.deepEqual([...wire], [0x42, 3, 0x62, 1, 0x78]);
-  assert.equal(decodeRendezvous(Uint8Array.from([0xea, 1, 3, 0x22, 1, 0x78])).ice_candidate.candidate, 'x');
+  assert.equal(decodeRendezvous(Uint8Array.from([0xea, 1, 3, 0x22, 1, 0x78])).ice_candidate?.candidate, 'x');
 });
 
 test('large native video messages reassemble, while malformed or oversized fragments are rejected', () => {

@@ -5,7 +5,7 @@ import { once } from 'node:events';
 import { WebSocket, WebSocketServer } from 'ws';
 import { serveWebRtcSignal } from './webrtcSignal.ts';
 import { BytesFrameDecoder, encodeBytesFrame } from './bytesCodec.ts';
-import { decodeRendezvous, encodeRendezvous, PunchFailureValues } from './protos.ts';
+import { decodeRendezvous, encodeRendezvous, PunchFailureValues } from '../shared/protos.ts';
 import { encodeEndpoint } from '../shared/webrtc.ts';
 import { parseRuntimeConfig, setRuntimeConfig } from './config.ts';
 

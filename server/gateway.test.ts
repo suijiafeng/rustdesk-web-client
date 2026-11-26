@@ -33,7 +33,7 @@ import {
   packMouseMask,
   selectCodecs,
   toHostMessage,
-} from './control.ts';
+} from '../shared/control.ts';
 import { CursorShapes } from './cursor.ts';
 import { readUntilHash } from './handshake.ts';
 import {
@@ -47,7 +47,7 @@ import {
   encodeIdPk,
   encodeMessage,
   encodeRendezvous,
-} from './protos.ts';
+} from '../shared/protos.ts';
 import { connectViaId } from './rustdeskClient.ts';
 import {
   CODEC_VP8,
@@ -55,7 +55,7 @@ import {
   decodeRdv1Frame,
   encodeRdv1Frame,
   vp8KeyframeSize,
-} from './video.ts';
+} from '../shared/video.ts';
 
 test('passwordResponse matches the RustDesk host formula test vector', () => {
   const actual = passwordResponse('pw', 'salt', 'b').toString('hex');
@@ -246,7 +246,8 @@ test('NaCl SignedId handshake with kx_version=1 encrypts the Hash challenge over
     const pkRaw = await srvStream.next(5000);
     assert.ok(pkRaw);
     const pkMsg = decodeMessage(pkRaw);
-    assert.ok(pkMsg.public_key);
+    assert.ok(pkMsg.public_key?.asymmetric_value);
+    assert.ok(pkMsg.public_key.symmetric_value);
     const asym = new Uint8Array(pkMsg.public_key.asymmetric_value);
     const sym = new Uint8Array(pkMsg.public_key.symmetric_value);
     const picked = Number(pkMsg.public_key.kx_version);
@@ -312,7 +313,9 @@ test('gateway requests remote cursor updates and decodes and caches native curso
   assert.equal(cursorId[0], 0x70);
 
   const shapes = new CursorShapes();
-  const shape = shapes.decode(decodeMessage(frame).cursor_data);
+  const cursor = decodeMessage(frame).cursor_data;
+  assert.ok(cursor);
+  const shape = shapes.decode(cursor);
   assert.deepEqual(shape, { width: 2, height: 1, hotX: 1, hotY: 0, rgba: pixels.toString('base64') });
   const decodedId = decodeMessage(cursorId).cursor_id;
   assert.equal(decodedId, '18446744073709551615');
@@ -361,7 +364,7 @@ test('canonical RustDesk protobuf field wire tags match upstream message.proto a
 });
 
 test('AddrMangle roundtrips IPv4 (including trimmed zero bytes) and IPv6 with little-endian port', async () => {
-  const { encodeAddrMangle, decodeAddrMangle } = await import('./protos.ts');
+  const { encodeAddrMangle, decodeAddrMangle } = await import('../shared/protos.ts');
 
   const v4 = encodeAddrMangle('203.0.113.42', 21118, 0x12345678);
   assert.ok(v4.length <= 16 && v4.length > 0);
@@ -417,7 +420,7 @@ test('adversarial NAT traversal: connectViaId automatically falls back from unre
     decodeRendezvous,
     encodeAddrMangle,
     encodeRendezvous,
-  } = await import('./protos.ts');
+  } = await import('../shared/protos.ts');
 
   const rsSign = nacl.sign.keyPair();
   const peerSign = nacl.sign.keyPair();
@@ -437,7 +440,8 @@ test('adversarial NAT traversal: connectViaId automatically falls back from unre
     assert.ok(reqRaw);
     const req = decodeRendezvous(reqRaw);
     assert.ok(req.request_relay);
-    assert.equal(req.request_relay.id, peerId);
+    assert.equal(req.request_relay?.id, peerId);
+    assert.ok(req.request_relay.uuid);
     relaySeenUuid = req.request_relay.uuid;
 
     // Now the relayed peer speaks standard RustDesk Message protocol (SignedId -> PublicKey -> encrypted Hash -> LoginRequest -> LoginResponse)
@@ -448,6 +452,8 @@ test('adversarial NAT traversal: connectViaId automatically falls back from unre
     const pkRaw = await s.next(5000);
     assert.ok(pkRaw);
     const pkMsg = decodeMessage(pkRaw);
+    assert.ok(pkMsg.public_key?.asymmetric_value);
+    assert.ok(pkMsg.public_key.symmetric_value);
     const asym = new Uint8Array(pkMsg.public_key.asymmetric_value);
     const sym = new Uint8Array(pkMsg.public_key.symmetric_value);
     const picked = Number(pkMsg.public_key.kx_version);
@@ -466,6 +472,7 @@ test('adversarial NAT traversal: connectViaId automatically falls back from unre
     const lrRaw = await s.next(5000);
     assert.ok(lrRaw);
     const lrMsg = decodeMessage(lrRaw);
+    assert.ok(lrMsg.login_request?.password);
     assert.equal(lrMsg.login_request.username, peerId);
     assert.equal(
       Buffer.from(lrMsg.login_request.password).toString('hex'),
@@ -524,6 +531,8 @@ test('adversarial NAT traversal: connectViaId automatically falls back from unre
       const kxRespRaw = await s.next(5000);
       assert.ok(kxRespRaw);
       const kxResp = decodeRendezvous(kxRespRaw);
+      assert.ok(kxResp.key_exchange?.keys);
+      assert.equal(kxResp.key_exchange.keys.length, 2);
       const asym = new Uint8Array(kxResp.key_exchange.keys[0]);
       const sym = new Uint8Array(kxResp.key_exchange.keys[1]);
       const k = nacl.box.open(sym, new Uint8Array(24), asym, srvBox.secretKey);
@@ -611,12 +620,14 @@ test('open-source hbbs compatibility: connects when hbbs sends no KeyExchange an
     const reqRaw = await s.next(5000);
     assert.ok(reqRaw);
     const req = decodeRendezvous(reqRaw);
-    assert.equal(req.request_relay.id, peerId);
+    assert.equal(req.request_relay?.id, peerId);
 
     await s.sendRaw(encodeMessage({ signed_id: { id: Buffer.from(peerSignedId) } }));
     const pkRaw = await s.next(5000);
     assert.ok(pkRaw);
     const pkMsg = decodeMessage(pkRaw);
+    assert.ok(pkMsg.public_key?.asymmetric_value);
+    assert.ok(pkMsg.public_key.symmetric_value);
     const asym = new Uint8Array(pkMsg.public_key.asymmetric_value);
     const sym = new Uint8Array(pkMsg.public_key.symmetric_value);
     const symKey = nacl.box.open(sym, new Uint8Array(24), asym, peerBox.secretKey);
@@ -632,6 +643,7 @@ test('open-source hbbs compatibility: connects when hbbs sends no KeyExchange an
     const loginRaw = await s.next(5000);
     assert.ok(loginRaw);
     const login = decodeMessage(loginRaw);
+    assert.ok(login.login_request?.password);
     assert.equal(login.login_request.username, peerId);
     assert.deepEqual(
       Buffer.from(login.login_request.password),
@@ -661,7 +673,7 @@ test('open-source hbbs compatibility: connects when hbbs sends no KeyExchange an
     const reqRaw = await s.next(5000);
     assert.ok(reqRaw);
     const msg = decodeRendezvous(reqRaw);
-    assert.ok(msg.punch_hole_request);
+    assert.ok(msg.punch_hole_request?.id);
     seenPunchId = msg.punch_hole_request.id;
     await s.sendRaw(
       encodeRendezvous({
@@ -819,7 +831,8 @@ test('custom quality percentages round-trip through the native packed ratio for 
     const login = buildLoginOptions(caps, 'custom', 25, 'vp8', percent);
     const live = toHostMessage({ type: 'quality', quality: 'custom', customQuality: percent, fps: 25 }, caps) as { misc: { option: Record<string, number> } };
     for (const options of [login, live.misc.option]) {
-      const wire = decodeMessage(encodeMessage({ misc: { option: options } })).misc.option;
+      const wire = decodeMessage(encodeMessage({ misc: { option: options } })).misc?.option;
+      assert.ok(wire?.custom_image_quality);
       assert.equal(options.image_quality, 0);
       assert.equal(wire.image_quality ?? 0, 0);
       assert.equal(wire.custom_fps, 25);

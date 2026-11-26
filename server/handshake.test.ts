@@ -5,7 +5,7 @@ import test, { type TestContext } from 'node:test';
 import nacl from 'tweetnacl';
 import { BytesFrameDecoder, EncryptedFramedStream, encodeBytesFrame } from './bytesCodec.ts';
 import { peerSignKey, readUntilHash } from './handshake.ts';
-import { decodeMessage, encodeIdPk, encodeMessage } from './protos.ts';
+import { decodeMessage, encodeIdPk, encodeMessage } from '../shared/protos.ts';
 
 const peerId = '123456789';
 const hash = { salt: 'test-salt', challenge: 'test-challenge' };

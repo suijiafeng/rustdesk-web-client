@@ -1,5 +1,5 @@
 import protobuf from 'protobufjs';
-import { PROTO_SOURCE } from '../shared/protoSource.ts';
+import { PROTO_SOURCE } from './protoSource.ts';
 
 const parsed = protobuf.parse(PROTO_SOURCE, { keepCase: true });
 export const protoRoot = parsed.root;

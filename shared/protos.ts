@@ -1,9 +1,10 @@
 import { Buffer } from 'buffer';
 import { IdPkProto, KxParamsProto, MessageProto, RendezvousMessageProto } from './protoSchema.ts';
+import type { DecodedHostMessage, DecodedRendezvousMessage, HostMessage, RendezvousMessage } from './protoTypes.ts';
 
 export * from './protoSchema.ts';
 
-export function encodeMessage(obj: Record<string, unknown>): Buffer {
+export function encodeMessage(obj: HostMessage): Buffer {
   const msg = MessageProto.create(obj);
   return Buffer.from(MessageProto.encode(msg).finish());
 }
@@ -28,7 +29,7 @@ function wrapProtoDecodeError(err: unknown, buf: Uint8Array, kind: 'host' | 'id-
   return err instanceof Error ? err : new Error(msg);
 }
 
-export function decodeMessage(buf: Uint8Array): Record<string, any> {
+export function decodeMessage(buf: Uint8Array): DecodedHostMessage {
   try {
     const decoded = MessageProto.decode(buf);
     return MessageProto.toObject(decoded, {
@@ -43,12 +44,12 @@ export function decodeMessage(buf: Uint8Array): Record<string, any> {
   }
 }
 
-export function encodeRendezvous(obj: Record<string, unknown>): Buffer {
+export function encodeRendezvous(obj: RendezvousMessage): Buffer {
   const msg = RendezvousMessageProto.create(obj);
   return Buffer.from(RendezvousMessageProto.encode(msg).finish());
 }
 
-export function decodeRendezvous(buf: Uint8Array): Record<string, any> {
+export function decodeRendezvous(buf: Uint8Array): DecodedRendezvousMessage {
   try {
     const decoded = RendezvousMessageProto.decode(buf);
     return RendezvousMessageProto.toObject(decoded, {

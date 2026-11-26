@@ -1,127 +1,21 @@
-import { decodeClipboard } from '../../../server/clipboard';
+import { type PeerInfo, canRestart, permissions, peerToJson, initialDisplaySize, HostPermission, PrivacyState, privacyResult, supportsModernDisplayControls, supportedResolutions } from '../../../shared/peer.ts';
+import { decodeClipboard } from '../../../shared/clipboard.ts';
 import { Buffer } from 'buffer';
-import { type ClientMessage, type CodecCaps, buildRefreshVideoMessage, buildVideoReceivedMessage, decodingPreferenceChanged, humanizeError, toHostMessage } from '../../../server/control';
-import { decodeMessage, encodeMessage } from '../../../server/protos';
-import { CODEC_AV1, CODEC_H264, CODEC_H265, CODEC_VP8, CODEC_VP9, encodeRdv1Frame, vp8KeyframeSize } from '../../../server/video';
-import { CursorShapes } from './cursor';
+import { type ClientMessage, type CodecCaps, buildRefreshVideoMessage, buildVideoReceivedMessage, decodingPreferenceChanged, humanizeError, toHostMessage } from '../../../shared/control.ts';
+import { decodeMessage, encodeMessage } from '../../../shared/protos.ts';
+import { CODEC_VP8, encodeRdv1Frame, vp8KeyframeSize, encodedFrameIsKey, extractEncodedFrames } from '../../../shared/video.ts';
+import { CursorShapes } from '../../../shared/cursor.ts';
 import type { DataChannelStream } from './stream';
 
 export interface NativeConnection {
   stream: DataChannelStream;
   route: 'webrtc-direct' | 'webrtc-relay' | 'webrtc';
   encrypted: boolean;
-  peerInfo: Record<string, any>;
+  peerInfo: PeerInfo;
   username: string;
   privacyAllowed: boolean;
   clipboardAllowed: boolean;
   restartAllowed: boolean;
-}
-
-function permissions(conn: NativeConnection) {
-  return {
-    privacyAllowed: conn.privacyAllowed && conn.peerInfo.features?.privacy_mode === true,
-    clipboardAllowed: conn.clipboardAllowed,
-  };
-}
-
-function canRestart(conn: NativeConnection): boolean {
-  return conn.restartAllowed && ['windows', 'mac os', 'macos', 'linux'].includes(String(conn.peerInfo.platform).toLowerCase());
-}
-
-function peerToJson(peer: Record<string, any>, conn: NativeConnection): Record<string, unknown> {
-  const displays = Array.isArray(peer.displays)
-    ? peer.displays.map((d: any, index: number) => ({
-        index,
-        name: String(d.name ?? ''),
-        x: Number(d.x ?? 0),
-        y: Number(d.y ?? 0),
-        width: Number(d.width ?? 0),
-        height: Number(d.height ?? 0),
-        online: Boolean(d.online ?? true),
-        cursorEmbedded: Boolean(d.cursor_embedded),
-      }))
-    : [];
-
-  const encoding = peer.encoding
-    ? {
-        vp8: Boolean(peer.encoding.vp8),
-        h264: Boolean(peer.encoding.h264),
-        h265: Boolean(peer.encoding.h265),
-        av1: Boolean(peer.encoding.av1),
-      }
-    : null;
-
-  return {
-    type: 'peer',
-    hostname: String(peer.hostname ?? ''),
-    platform: String(peer.platform ?? ''),
-    username: String(peer.username ?? ''),
-    version: String(peer.version ?? ''),
-    currentDisplay: Number(peer.current_display ?? 0),
-    displays,
-    encoding,
-    encrypted: conn.encrypted,
-    route: conn.route,
-    ...permissions(conn),
-    restartAllowed: canRestart(conn),
-  };
-}
-
-function initialDisplaySize(peer: Record<string, any>): { width: number; height: number } {
-  const displays = Array.isArray(peer.displays) ? peer.displays : [];
-  const idx = Number(peer.current_display ?? 0);
-  const chosen = displays[idx] ?? displays[0];
-  if (!chosen) return { width: 0, height: 0 };
-  return {
-    width: Math.max(0, Number(chosen.width ?? 0)),
-    height: Math.max(0, Number(chosen.height ?? 0)),
-  };
-}
-
-function isH264AnnexBKeyframe(data: Uint8Array): boolean {
-  const limit = Math.min(data.length, 4096);
-  for (let i = 0; i + 4 < limit; i++) {
-    if (data[i] === 0 && data[i + 1] === 0) {
-      let nalOffset = -1;
-      if (data[i + 2] === 1) {
-        nalOffset = i + 3;
-      } else if (data[i + 2] === 0 && data[i + 3] === 1) {
-        nalOffset = i + 4;
-      }
-      if (nalOffset !== -1 && nalOffset < data.length) {
-        const nalType = data[nalOffset] & 0x1f;
-        if (nalType === 5 || nalType === 7) return true; // IDR slice (5) or SPS (7)
-      }
-    }
-  }
-  return false;
-}
-
-function isVp9Keyframe(data: Uint8Array): boolean {
-  if (data.length < 4) return false;
-  const b0 = data[0];
-  // VP9 uncompressed header: frame_marker (2 bits) == 0b10
-  if ((b0 >> 6) !== 2) return false;
-  const profileLow = (b0 >> 5) & 1;
-  const profileHigh = (b0 >> 4) & 1;
-  const profile = (profileHigh << 1) | profileLow;
-  // For profile 0..2: bit 3 is show_existing_frame (must be 0), bit 2 is frame_type (0 = key)
-  if (profile < 3) {
-    if ((b0 & 0x08) !== 0 || (b0 & 0x04) !== 0) return false;
-    return data[1] === 0x49 && data[2] === 0x83 && data[3] === 0x42;
-  }
-  return false;
-}
-
-function extractEncodedFrames(
-  vf: Record<string, any>,
-): { codec: number; frames: any[] } | null {
-  if (vf.vp8s?.frames?.length) return { codec: CODEC_VP8, frames: vf.vp8s.frames };
-  if (vf.vp9s?.frames?.length) return { codec: CODEC_VP9, frames: vf.vp9s.frames };
-  if (vf.h264s?.frames?.length) return { codec: CODEC_H264, frames: vf.h264s.frames };
-  if (vf.h265s?.frames?.length) return { codec: CODEC_H265, frames: vf.h265s.frames };
-  if (vf.av1s?.frames?.length) return { codec: CODEC_AV1, frames: vf.av1s.frames };
-  return null;
 }
 
 // Keep the gateway's session path unchanged. This adapter emits the same UI messages locally.
@@ -153,10 +47,9 @@ export function createNativeSession(
     cleanup();
   };
   const startHostPump = async (conn: NativeConnection) => {
-    const publishResolutions = (display: number, supported?: { resolutions?: typeof sizes }) => {
+    const publishResolutions = (display: number, supported?: PeerInfo['resolutions']) => {
       resolutionDisplay = display;
-      sizes = (supported?.resolutions ?? []).filter(({ width, height }) =>
-        Number.isInteger(width) && Number.isInteger(height) && width > 0 && height > 0);
+      sizes = supportedResolutions(supported);
       sendJson({ type: 'resolutions', display, sizes });
     };
     const cursorShapes = new CursorShapes();
@@ -227,27 +120,26 @@ export function createNativeSession(
         }
 
         const permission = msg.misc?.permission_info;
-        if (permission?.permission === 8 || permission?.permission === 2) {
-          if (permission.permission === 8) conn.privacyAllowed = permission.enabled === true;
+        if (permission?.permission === HostPermission.PrivacyMode || permission?.permission === HostPermission.Clipboard) {
+          if (permission.permission === HostPermission.PrivacyMode) conn.privacyAllowed = permission.enabled === true;
           else conn.clipboardAllowed = permission.enabled === true;
           sendJson({ type: 'permissions', ...permissions(conn) });
         }
         const notice = msg.misc?.back_notification;
         if (typeof notice?.privacy_mode_state === 'number') {
           const code = notice.privacy_mode_state;
-          if (code === 4) privacyImpl = notice.impl_key || '';
-          if (code === 3) {
+          if (code === PrivacyState.Enabled) privacyImpl = notice.impl_key || '';
+          if (code === PrivacyState.Unsupported) {
             conn.privacyAllowed = false;
             sendJson({ type: 'permissions', ...permissions(conn) });
           }
-          const enabled = code === 4 ? true : [3,5,6,7,8,9,11].includes(code) ? false : undefined;
-          sendJson({ type: 'privacyResult', enabled, failed: ![4,8,9].includes(code) });
+          sendJson({ type: 'privacyResult', ...privacyResult(code) });
         }
-        if (permission?.permission === 5) {
+        if (permission?.permission === HostPermission.Restart) {
           conn.restartAllowed = permission.enabled === true;
           sendJson({ type: 'restartPermission', allowed: canRestart(conn) });
         }
-        if (permission?.permission === 3) {
+        if (permission?.permission === HostPermission.Audio) {
           audioAllowed = permission.enabled === true;
           if (!audioAllowed && audioRequested) {
             audioRequested = false;
@@ -256,11 +148,11 @@ export function createNativeSession(
         }
         if (msg.misc?.audio_format) {
           const { sample_rate: sampleRate, channels } = msg.misc.audio_format;
-          audioFormat = { sampleRate, channels };
-          if (audioRequested && audioAllowed) sendJson({ type: 'audioFormat', ...audioFormat });
+          audioFormat = typeof sampleRate === 'number' && typeof channels === 'number' ? { sampleRate, channels } : null;
+          if (audioRequested && audioAllowed && audioFormat) sendJson({ type: 'audioFormat', ...audioFormat });
         }
         const packet = msg.audio_frame?.data;
-        if (audioAllowed && audioRequested && packet?.length > 0 && packet.length <= 8192 && true) {
+        if (audioAllowed && audioRequested && packet && packet.length > 0 && packet.length <= 8192) {
           sendJson({ type: 'audioFrame', packet: Buffer.from(packet).toString('base64') });
         }
 
@@ -317,10 +209,7 @@ export function createNativeSession(
             const nowMs = BigInt(Date.now());
             for (const f of extracted.frames) {
               const payload = f.data ? new Uint8Array(f.data) : new Uint8Array(0);
-              const isKey =
-                Boolean(f.key) ||
-                (extracted.codec === CODEC_H264 && isH264AnnexBKeyframe(payload)) ||
-                (extracted.codec === CODEC_VP9 && isVp9Keyframe(payload));
+              const isKey = encodedFrameIsKey(extracted.codec, payload, f.key);
               if (extracted.codec === CODEC_VP8 && isKey) {
                 const parsedSize = vp8KeyframeSize(payload);
                 if (parsedSize) {
@@ -368,8 +257,7 @@ export function createNativeSession(
           sendJson({ type: 'privacyResult', failed: true });
           return;
         }
-        const [major, minor, patch] = String(hostConn.peerInfo.version).split('.').map(Number);
-        const modern = major > 1 || (major === 1 && (minor > 2 || (minor === 2 && patch >= 4)));
+        const modern = supportsModernDisplayControls(hostConn.peerInfo.version);
         const misc = modern ? { toggle_privacy_mode: { on: parsed.enabled, impl_key: privacyImpl } }
           : { option: { privacy_mode: parsed.enabled ? 2 : 1 } };
         try {
@@ -410,8 +298,7 @@ export function createNativeSession(
           sendJson({ type: 'error', message: 'The active display does not offer that resolution.' });
           return;
         }
-        const [major, minor, patch] = String(hostConn.peerInfo.version ?? '').split('.').map(Number);
-        const modern = major > 1 || (major === 1 && (minor > 2 || (minor === 2 && patch >= 4)));
+        const modern = supportsModernDisplayControls(hostConn.peerInfo.version ?? '');
         const resolution = { width, height };
         hostMsg = { misc: modern
           ? { change_display_resolution: { display, resolution } }

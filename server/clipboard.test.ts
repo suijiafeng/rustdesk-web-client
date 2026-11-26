@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { zstdCompressSync } from 'node:zlib';
-import { decodeClipboard, MAX_CLIPBOARD_BYTES } from './clipboard.ts';
+import { decodeClipboard, MAX_CLIPBOARD_BYTES } from '../shared/clipboard.ts';
 
 test('clipboard preserves Unicode, line breaks, whitespace and empty text', () => {
   for (const text of ['', '  中文\nsecond line\t🙂  ']) {

@@ -1,8 +1,8 @@
 import { Buffer } from 'buffer';
 import nacl from 'tweetnacl';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { decodeMessage, encodeMessage, IdPkProto } from '../../server/protos';
-import { selectCodecs } from '../../server/control';
+import { decodeMessage, encodeMessage, IdPkProto } from '../../shared/protos.ts';
+import { selectCodecs } from '../../shared/control.ts';
 import { loginWebRtc, verifiedPeerKey } from '../../src/lib/webrtc/handshake';
 import { DataChannelStream } from '../../src/lib/webrtc/stream';
 import { sdpFingerprint } from '../../shared/webrtc';
@@ -87,13 +87,13 @@ async function run() {
         id: signed(encryption.publicKey, peerIdentity.secretKey, fingerprint),
       } }));
       const publicKey = decodeMessage((await hostStream!.next(3000))!).public_key;
-      check(publicKey?.asymmetric_value?.length === 32, 'Missing client key exchange');
+      check(publicKey?.asymmetric_value?.length === 32 && publicKey.symmetric_value, 'Missing client key exchange');
       const opened = nacl.box.open(publicKey.symmetric_value, new Uint8Array(24), publicKey.asymmetric_value, encryption.secretKey);
       check(opened?.length === 32, 'Invalid encrypted session key');
       await hostStream!.sendRaw(encodeMessage({ hash: { salt, challenge } }));
       const login = decodeMessage((await hostStream!.next(3000))!).login_request;
       const expected = sha256(Buffer.concat([sha256(Buffer.from(password + salt)), Buffer.from(challenge)]));
-      check(login?.username === peerId && Buffer.from(login.password).equals(Buffer.from(expected)), 'Invalid login payload');
+      check(login?.username === peerId && login.password && Buffer.from(login.password).equals(Buffer.from(expected)), 'Invalid login payload');
       await hostStream!.sendRaw(encodeMessage({ login_response: {
         peer_info: { hostname: 'CSP fixture', platform: 'Linux', displays: [] },
       } }));

@@ -1,8 +1,10 @@
+import { HostPermission } from '../../../shared/peer.ts';
 import { Buffer } from 'buffer';
 import nacl from 'tweetnacl';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { IdPkProto, decodeMessage, encodeMessage } from '../../../server/protos';
-import { buildLoginOptions, type CodecCaps, type ClientMessage } from '../../../server/control';
+import { IdPkProto, decodeMessage, encodeMessage } from '../../../shared/protos.ts';
+import type { DecodedProto, rustdesk } from '../../../shared/protoTypes.ts';
+import { buildLoginOptions, type CodecCaps, type ClientMessage } from '../../../shared/control.ts';
 import { MAX_MESSAGE_BYTES } from '../../../shared/webrtc';
 import type { DataChannelStream } from './stream';
 import type { NativeConnection } from './session';
@@ -15,14 +17,14 @@ function openIdentity(signed: Uint8Array, key: Uint8Array, expectedId: string) {
   if (key.length !== 32) throw new Error('Invalid identity server key');
   const opened = nacl.sign.open(signed, key);
   if (!opened) throw new Error('WebRTC peer signature verification failed');
-  let identity: ReturnType<typeof IdPkProto.toObject>;
+  let identity: DecodedProto<rustdesk.IIdPk>;
   try {
     identity = IdPkProto.toObject(IdPkProto.decode(opened), { bytes: Uint8Array, defaults: true });
   } catch {
     throw new Error('WebRTC peer identity is malformed');
   }
-  if (identity.id !== expectedId || identity.pk.length !== 32) throw new Error('WebRTC peer identity mismatch');
-  return identity;
+  if (identity.id !== expectedId || identity.pk?.length !== 32) throw new Error('WebRTC peer identity mismatch');
+  return { id: identity.id, pk: identity.pk, dtls_fingerprint: identity.dtls_fingerprint };
 }
 
 export function verifiedPeerKey(signedPk: string, serverKey: string, peerId: string): Uint8Array {
@@ -69,9 +71,9 @@ export async function loginWebRtc(
       if (!raw) throw new Error('WebRTC peer closed before login');
       const message = decodeMessage(raw);
       const permission = message.misc?.permission_info;
-      if (permission?.permission === 8) connection.privacyAllowed = permission.enabled === true;
-      if (permission?.permission === 2) connection.clipboardAllowed = permission.enabled === true;
-      if (permission?.permission === 5) connection.restartAllowed = permission.enabled === true;
+      if (permission?.permission === HostPermission.PrivacyMode) connection.privacyAllowed = permission.enabled === true;
+      if (permission?.permission === HostPermission.Clipboard) connection.clipboardAllowed = permission.enabled === true;
+      if (permission?.permission === HostPermission.Restart) connection.restartAllowed = permission.enabled === true;
       if (message.hash && !submitted) {
         submitted = true;
         const { salt = '', challenge = '' } = message.hash;
@@ -84,9 +86,8 @@ export async function loginWebRtc(
       }
       if (message.login_response?.union === 'error') throw new LoginError(message.login_response.error || 'The host rejected the login');
       if (message.auth_2fa) throw new LoginError('The host requires two-factor authentication, which this web client does not support yet.');
-      if (message.misc?.close_reason || message.message_box?.text) {
-        throw new LoginError(message.misc?.close_reason || message.message_box.text);
-      }
+      const closeReason = message.misc?.close_reason || message.message_box?.text;
+      if (closeReason) throw new LoginError(closeReason);
       const peer = message.login_response?.peer_info ?? message.peer_info;
       if (peer && submitted) {
         connection.peerInfo = peer;

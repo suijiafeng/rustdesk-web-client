@@ -1,3 +1,4 @@
+import { HostPermission } from '../shared/peer.ts';
 import crypto from 'node:crypto';
 import nacl from 'tweetnacl';
 import {
@@ -12,7 +13,7 @@ import {
   decodeRendezvous,
   encodeMessage,
   encodeRendezvous,
-} from './protos.ts';
+} from '../shared/protos.ts';
 
 export interface HostHash {
   salt: string;
@@ -58,9 +59,9 @@ async function recvHash(stream: EncryptedFramedStream, permissions: { restart: b
     const raw = await stream.next(remaining);
     if (!raw) throw new Error('host closed the connection before sending Hash');
     const msg = decodeMessage(raw);
-    if (msg.misc?.permission_info?.permission === 8) permissions.privacy = msg.misc.permission_info.enabled === true;
-    if (msg.misc?.permission_info?.permission === 2) permissions.clipboard = msg.misc.permission_info.enabled === true;
-    if (msg.misc?.permission_info?.permission === 5) permissions.restart = msg.misc.permission_info.enabled === true;
+    if (msg.misc?.permission_info?.permission === HostPermission.PrivacyMode) permissions.privacy = msg.misc.permission_info.enabled === true;
+    if (msg.misc?.permission_info?.permission === HostPermission.Clipboard) permissions.clipboard = msg.misc.permission_info.enabled === true;
+    if (msg.misc?.permission_info?.permission === HostPermission.Restart) permissions.restart = msg.misc.permission_info.enabled === true;
     if (msg.hash) {
       return {
         salt: String(msg.hash.salt ?? ''),
@@ -197,7 +198,7 @@ export async function secureRendezvous(
   if (!ex) {
     return false;
   }
-  const keys: Buffer[] = ex.keys ?? [];
+  const keys = ex.keys ?? [];
   if (keys.length !== 1) {
     throw new Error(`expected 1 key in KeyExchange, got ${keys.length}`);
   }
@@ -207,7 +208,7 @@ export async function secureRendezvous(
   }
 
   const version = Number(ex.version ?? 0);
-  const signedParams: Buffer | undefined = ex.signed_params;
+  const signedParams = ex.signed_params;
   if ((their[31] & 0x80) !== 0 || (signedParams && signedParams.length > 0)) {
     if (!signedParams || signedParams.length === 0) {
       throw new Error('missing signed_params in rendezvous KeyExchange');

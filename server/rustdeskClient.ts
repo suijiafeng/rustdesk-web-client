@@ -1,3 +1,5 @@
+import type { PeerInfo } from '../shared/peer.ts';
+import { HostPermission } from '../shared/peer.ts';
 import crypto from 'node:crypto';
 import { getRuntimeConfig } from './config.ts';
 import {
@@ -15,7 +17,7 @@ import {
   buildLoginOptions,
   buildRefreshVideoMessage,
   punchHoleFailureMessage,
-} from './control.ts';
+} from '../shared/control.ts';
 import {
   type HostHash,
   peerSignKey,
@@ -30,7 +32,7 @@ import {
   decodeRendezvous,
   encodeMessage,
   encodeRendezvous,
-} from './protos.ts';
+} from '../shared/protos.ts';
 
 export interface DirectTarget {
   host: string;
@@ -63,7 +65,7 @@ export interface ConnectedHost {
   clipboardAllowed: boolean;
   restartAllowed: boolean;
   stream: EncryptedFramedStream;
-  peerInfo: Record<string, any>;
+  peerInfo: PeerInfo;
   username: string;
   encrypted: boolean;
 }
@@ -104,9 +106,9 @@ async function loginHost(
     const raw = await stream.next(remaining);
     if (!raw) throw new Error('host closed the connection before LoginResponse');
     const msg = decodeMessage(raw);
-    if (msg.misc?.permission_info?.permission === 8) permissions.privacy = msg.misc.permission_info.enabled === true;
-    if (msg.misc?.permission_info?.permission === 2) permissions.clipboard = msg.misc.permission_info.enabled === true;
-    if (msg.misc?.permission_info?.permission === 5) permissions.restart = msg.misc.permission_info.enabled === true;
+    if (msg.misc?.permission_info?.permission === HostPermission.PrivacyMode) permissions.privacy = msg.misc.permission_info.enabled === true;
+    if (msg.misc?.permission_info?.permission === HostPermission.Clipboard) permissions.clipboard = msg.misc.permission_info.enabled === true;
+    if (msg.misc?.permission_info?.permission === HostPermission.Restart) permissions.restart = msg.misc.permission_info.enabled === true;
     if (msg.login_response) {
       if (msg.login_response.error !== undefined && msg.login_response.union === 'error') {
         const reason = String(msg.login_response.error || '').trim();
@@ -193,7 +195,7 @@ export async function connectDirect(
 async function nextNonKeyExchange(
   stream: EncryptedFramedStream,
   timeoutMs: number,
-): Promise<Record<string, any> | null> {
+): Promise<ReturnType<typeof decodeRendezvous> | null> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const remaining = Math.max(50, deadline - Date.now());
@@ -407,7 +409,7 @@ export async function connectViaId(
 
       if (msg.punch_hole_response) {
         const ph = msg.punch_hole_response;
-        const addrBytes: Buffer | undefined = ph.socket_addr;
+        const addrBytes = ph.socket_addr;
         const relayHint = String(ph.relay_server ?? '').trim();
 
         if (!addrBytes || addrBytes.length === 0) {

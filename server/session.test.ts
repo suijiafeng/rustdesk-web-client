@@ -5,7 +5,7 @@ import test from 'node:test';
 import { WebSocket, WebSocketServer } from 'ws';
 import { GatewayAdmissionLimiter } from './admission.ts';
 import { EncryptedFramedStream } from './bytesCodec.ts';
-import { encodeMessage } from './protos.ts';
+import { encodeMessage } from '../shared/protos.ts';
 import { serveSocket } from './session.ts';
 
 test('a host disconnect sends an error, closes the WebSocket and releases its admission', async () => {

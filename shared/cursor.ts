@@ -1,11 +1,12 @@
 import { Buffer } from 'buffer';
 import { decompress } from 'fzstd';
+import { zstdFrameSize } from './compression.ts';
 
 const MAX_CURSOR_SIDE = 512;
 const MAX_CURSOR_CACHE_ENTRIES = 16;
 const MAX_CURSOR_CACHE_BYTES = 4 * 1024 * 1024;
 
-interface CursorShape {
+export interface CursorShape {
   width: number;
   height: number;
   hotX: number;
@@ -13,7 +14,7 @@ interface CursorShape {
   rgba: string;
 }
 
-interface CursorData {
+export interface CursorData {
   id?: string;
   width?: number;
   height?: number;
@@ -26,6 +27,9 @@ export class CursorShapes {
   private readonly cache = new Map<string, CursorShape>();
   private cacheBytes = 0;
 
+  constructor(private readonly decodePixels = (data: Uint8Array, expectedBytes: number): Uint8Array =>
+    decompress(data, new Uint8Array(expectedBytes))) {}
+
   get(id: string): CursorShape | null {
     return this.cache.get(id) ?? null;
   }
@@ -34,6 +38,7 @@ export class CursorShapes {
     const { id = '0', width = 0, height = 0, hotx = 0, hoty = 0, colors } = data;
     this.remove(id);
     if (
+      !Number.isInteger(width) || !Number.isInteger(height) ||
       width < 1 || width > MAX_CURSOR_SIDE || height < 1 || height > MAX_CURSOR_SIDE ||
       !colors?.byteLength || colors.byteLength > 1024 * 1024
     ) {
@@ -41,9 +46,10 @@ export class CursorShapes {
     }
 
     const expectedBytes = width * height * 4;
+    if (zstdFrameSize(colors, expectedBytes) !== expectedBytes) return null;
     let rgba: Buffer;
     try {
-      rgba = Buffer.from(decompress(colors, new Uint8Array(expectedBytes)));
+      rgba = Buffer.from(this.decodePixels(colors, expectedBytes));
     } catch {
       return null;
     }

@@ -4,10 +4,12 @@ import net from 'node:net';
 import test, { type TestContext } from 'node:test';
 import { passwordResponse } from './auth.ts';
 import { EncryptedFramedStream } from './bytesCodec.ts';
-import { selectCodecs } from './control.ts';
-import { decodeMessage, decodeRendezvous, encodeAddrMangle, encodeMessage, encodeRendezvous } from './protos.ts';
+import { selectCodecs } from '../shared/control.ts';
+import { decodeMessage, decodeRendezvous, encodeAddrMangle, encodeMessage, encodeRendezvous } from '../shared/protos.ts';
 import { connectDirect, connectViaId } from './rustdeskClient.ts';
 import { parseRuntimeConfig, setRuntimeConfig } from './config.ts';
+
+type LoginOptions = NonNullable<NonNullable<ReturnType<typeof decodeMessage>['login_request']>['option']>;
 
 type Route = 'direct' | 'relay';
 type Behavior = 'ready' | 'stall' | 'close';
@@ -31,7 +33,7 @@ async function routingFixture(t: TestContext, options: {
   const streams: Partial<Record<Route, EncryptedFramedStream>> = {};
   const routeSockets: Partial<Record<Route, net.Socket>> = {};
   const loginCounts = { direct: 0, relay: 0 };
-  const loginOptions: Partial<Record<Route, Record<string, number>>> = {};
+  const loginOptions: Partial<Record<Route, LoginOptions>> = {};
   const connected = { direct: completion(), relay: completion() };
   const closed = { direct: completion(), relay: completion() };
   const controller = new AbortController();
@@ -70,6 +72,7 @@ async function routingFixture(t: TestContext, options: {
     loginCounts[route]++;
     loginOptions[route] = login.option;
     assert.equal(login.username, options.directIp ? `127.0.0.1:${(direct.address() as net.AddressInfo).port}` : peerId);
+    assert.ok(login.password);
     assert.deepEqual(Buffer.from(login.password), passwordResponse(password, hash.salt, hash.challenge));
     await stream.sendRaw(encodeMessage({ login_response: options.loginError
       ? { error: options.loginError }

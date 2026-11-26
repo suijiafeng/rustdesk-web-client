@@ -8,10 +8,12 @@ import {
   humanizeError,
   selectCodecs,
   toHostMessage,
-} from './control.ts';
-import { encodeMessage } from './protos.ts';
+} from '../shared/control.ts';
+import { encodeMessage } from '../shared/protos.ts';
+import type { HostMessage } from '../shared/protoTypes.ts';
 import { type ConnectedHost, connectDirect, connectViaId } from './rustdeskClient.ts';
-import { canRestart, permissions, type GatewayConfig, type SessionContext } from './sessionState.ts';
+import type { GatewayConfig, SessionContext } from './sessionState.ts';
+import { canRestart, permissions, supportsModernDisplayControls } from '../shared/peer.ts';
 
 interface ClientMessageContext extends SessionContext {
   config: GatewayConfig;
@@ -31,7 +33,7 @@ type MessageHandlers = {
 export function createClientMessageHandler(context: ClientMessageContext) {
   const { state, ws, videoBuffer, sendJson, cleanup, config, connectionSignal, clearConnectDeadline, startHostPump } = context;
 
-  const forwardToHost = (hostMsg: Record<string, unknown> | null, refreshVideo = false) => {
+  const forwardToHost = (hostMsg: HostMessage | null, refreshVideo = false) => {
     const activeHost = state.hostConn;
     if (hostMsg && activeHost) {
       void activeHost.stream.sendRaw(encodeMessage(hostMsg)).catch((err) => {
@@ -172,8 +174,7 @@ export function createClientMessageHandler(context: ClientMessageContext) {
         sendJson({ type: 'privacyResult', failed: true });
         return;
       }
-      const [major, minor, patch] = String(conn.peerInfo.version).split('.').map(Number);
-      const modern = major > 1 || (major === 1 && (minor > 2 || (minor === 2 && patch >= 4)));
+      const modern = supportsModernDisplayControls(conn.peerInfo.version);
       const misc = modern ? { toggle_privacy_mode: { on: parsed.enabled, impl_key: state.privacyImpl } }
         : { option: { privacy_mode: parsed.enabled ? 2 : 1 } };
       try {
@@ -214,8 +215,7 @@ export function createClientMessageHandler(context: ClientMessageContext) {
         sendJson({ type: 'error', message: 'The active display does not offer that resolution.' });
         return;
       }
-      const [major, minor, patch] = String(conn.peerInfo.version ?? '').split('.').map(Number);
-      const modern = major > 1 || (major === 1 && (minor > 2 || (minor === 2 && patch >= 4)));
+      const modern = supportsModernDisplayControls(conn.peerInfo.version ?? '');
       const resolution = { width, height };
       const hostMsg = { misc: modern
         ? { change_display_resolution: { display, resolution } }

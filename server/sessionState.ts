@@ -1,6 +1,6 @@
 import type { WebSocket } from 'ws';
 import type { GatewayAdmission } from './admission.ts';
-import type { CodecCaps } from './control.ts';
+import type { CodecCaps } from '../shared/control.ts';
 import type { ConnectedHost } from './rustdeskClient.ts';
 import type { GatewayVideoBuffer } from './videoBuffer.ts';
 
@@ -30,16 +30,5 @@ export interface SessionContext {
   sendJson: (payload: Record<string, unknown>) => void;
   sendBinary: (buf: Buffer) => void;
   cleanup: (sendClosedStatus: boolean) => void;
-}
-
-export function permissions(conn: ConnectedHost) {
-  return {
-    privacyAllowed: conn.privacyAllowed && conn.peerInfo.features?.privacy_mode === true,
-    clipboardAllowed: conn.clipboardAllowed,
-  };
-}
-
-export function canRestart(conn: ConnectedHost): boolean {
-  return conn.restartAllowed && ['windows', 'mac os', 'macos', 'linux'].includes(String(conn.peerInfo.platform).toLowerCase());
 }
 

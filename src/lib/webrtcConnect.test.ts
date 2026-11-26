@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test, { type TestContext } from 'node:test';
 import nacl from 'tweetnacl';
-import { IdPkProto, decodeMessage, encodeMessage } from '../../server/protos.ts';
-import { selectCodecs } from '../../server/control.ts';
+import { IdPkProto, decodeMessage, encodeMessage } from '../../shared/protos.ts';
+import { selectCodecs } from '../../shared/control.ts';
 import { encodeEndpoint } from '../../shared/webrtc.ts';
 import { connectWebRtc } from './webrtc/connect.ts';
 import { createNativeSession } from './webrtc/session.ts';
@@ -369,6 +369,7 @@ test('WebRTC forwards custom quality in login and live updates without changing 
   assert.ok(connected);
   const messages = () => f.pc.channel.sent.map(frame => decodeMessage(frame.subarray(1)));
   const login = messages().find(message => message.login_request)?.login_request;
+  assert.ok(login?.option);
   assert.equal(login.option.image_quality ?? 0, 0);
   assert.equal(login.option.custom_image_quality, 50 * 256);
   assert.equal(login.option.custom_fps, 25);
@@ -381,14 +382,14 @@ test('WebRTC forwards custom quality in login and live updates without changing 
   session.start();
   session.send({ type: 'lockAfterSessionEnd', enabled: false });
   await flush();
-  assert.equal(messages().at(-1)!.misc.option.lock_after_session_end, 1);
+  assert.equal(messages().at(-1)?.misc?.option?.lock_after_session_end, 1);
   session.send({ type: 'quality', quality: 'custom', customQuality: 200, fps: 25 });
   await flush();
-  assert.equal(messages().at(-1)!.misc.option.custom_image_quality, 100 * 256);
+  assert.equal(messages().at(-1)?.misc?.option?.custom_image_quality, 100 * 256);
   session.send({ type: 'quality', quality: 'low', fps: 25 });
   await flush();
-  assert.equal(messages().at(-1)!.misc.option.image_quality, 2);
-  assert.equal(messages().at(-1)!.misc.option.custom_image_quality, undefined);
+  assert.equal(messages().at(-1)?.misc?.option?.image_quality, 2);
+  assert.equal(messages().at(-1)?.misc?.option?.custom_image_quality, undefined);
   const sentCount = f.pc.channel.sent.length;
   session.send({ type: 'quality', quality: 'custom', customQuality: 99, fps: 25 });
   await flush();

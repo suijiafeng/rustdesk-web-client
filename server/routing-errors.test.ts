@@ -3,8 +3,8 @@ import { once } from 'node:events';
 import net from 'node:net';
 import test from 'node:test';
 import { EncryptedFramedStream } from './bytesCodec.ts';
-import { humanizeError, selectCodecs } from './control.ts';
-import { decodeRendezvous, encodeRendezvous, PunchFailureValues } from './protos.ts';
+import { humanizeError, selectCodecs } from '../shared/control.ts';
+import { decodeRendezvous, encodeRendezvous, PunchFailureValues } from '../shared/protos.ts';
 import { connectViaId } from './rustdeskClient.ts';
 import { formatConnectionError } from '../src/lib/errors.ts';
 import { parseRuntimeConfig, setRuntimeConfig } from './config.ts';
@@ -33,7 +33,7 @@ for (const scenario of cases) {
         assert.equal(decodeRendezvous(request).punch_hole_request?.id, '123456789');
         const response = encodeRendezvous({ punch_hole_response: scenario.response });
         if (scenario.name.startsWith('omitted')) {
-          assert.equal(decodeRendezvous(response).punch_hole_response.failure, undefined);
+          assert.equal(decodeRendezvous(response).punch_hole_response?.failure, undefined);
         }
         await stream.sendRaw(response);
       })().catch(error => { errors.push(error); socket.destroy(); }));
