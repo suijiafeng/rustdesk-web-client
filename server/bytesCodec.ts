@@ -4,7 +4,14 @@ import nacl from 'tweetnacl';
 import { blake2b } from '@noble/hashes/blake2.js';
 import { privateTargetsAllowed, targetAddressAllowed, targetHostAllowed, targetPortAllowed } from './security.ts';
 
-export const MAX_FRAME_LENGTH = 0x3fff_ffff;
+export const MAX_FRAME_LENGTH = 16 * 1024 * 1024;
+export const MAX_RECEIVE_BYTES = MAX_FRAME_LENGTH * 2 + 8;
+export const MAX_QUEUED_FRAMES = 256;
+const RECEIVE_HIGH_BYTES = MAX_FRAME_LENGTH;
+const RECEIVE_LOW_BYTES = RECEIVE_HIGH_BYTES / 2;
+const RECEIVE_HIGH_FRAMES = MAX_QUEUED_FRAMES / 2;
+const RECEIVE_LOW_FRAMES = RECEIVE_HIGH_FRAMES / 2;
+const MAX_BUFFERED_CHUNKS = 32_768;
 export const KX_VERSION_LATEST = 1;
 export const KX_PARAMS_DOMAIN = Buffer.from('rdkx-params', 'utf8');
 const KX_SPLIT_DOMAIN = Buffer.from('rdkx-spl', 'utf8');
@@ -57,8 +64,30 @@ export class BytesFrameDecoder {
   private headOffset = 0;
   private bufferedBytes = 0;
 
-  push(chunk: Buffer): Buffer[] {
+  get pendingBytes(): number { return this.bufferedBytes; }
+
+  clear(): void {
+    this.chunks = [];
+    this.headIndex = this.headOffset = this.bufferedBytes = 0;
+  }
+
+  // Returning false from onFrame stops parsing this batch without discarding its
+  // tail, so a slow consumer can backpressure even a batch of tiny frames.
+  push(chunk: Buffer, onFrame?: (frame: Buffer) => boolean): Buffer[] {
+    try {
+      return this.decode(chunk, onFrame);
+    } catch (error) {
+      this.clear();
+      throw error;
+    }
+  }
+
+  private decode(chunk: Buffer, onFrame?: (frame: Buffer) => boolean): Buffer[] {
     if (chunk.length > 0) {
+      if (this.bufferedBytes + chunk.length > MAX_RECEIVE_BYTES ||
+          this.chunks.length - this.headIndex >= MAX_BUFFERED_CHUNKS) {
+        throw new Error('RustDesk receive buffer limit exceeded');
+      }
       this.chunks.push(chunk);
       this.bufferedBytes += chunk.length;
     }
@@ -84,11 +113,11 @@ export class BytesFrameDecoder {
         throw new Error(`frame overflow: ${payloadLen}`);
       }
       if (this.bufferedBytes < headLen + payloadLen) break;
+      if (!onFrame && frames.length >= MAX_QUEUED_FRAMES) throw new Error('RustDesk frame batch limit exceeded');
 
       this.consume(headLen);
       const frame = Buffer.allocUnsafe(payloadLen);
       this.consume(payloadLen, frame);
-      frames.push(frame);
 
       if (this.headIndex === this.chunks.length) {
         this.chunks = [];
@@ -98,6 +127,9 @@ export class BytesFrameDecoder {
         this.chunks = this.chunks.slice(this.headIndex);
         this.headIndex = 0;
       }
+      if (onFrame) {
+        if (!onFrame(frame)) break;
+      } else frames.push(frame);
     }
     return frames;
   }
@@ -240,6 +272,8 @@ export class EncryptedFramedStream {
   private readonly socket: net.Socket;
   private readonly decoder = new BytesFrameDecoder();
   private readonly queue: Buffer[] = [];
+  private queuedBytes = 0;
+  private receivePaused = false;
   private waiters: Array<{
     resolve: (frame: Buffer | null) => void;
     reject: (err: Error) => void;
@@ -254,7 +288,11 @@ export class EncryptedFramedStream {
     socket.setNoDelay(true);
 
     socket.on('data', (chunk: Buffer) => {
+      if (this.closed) return;
       try {
+        if (this.queuedBytes + this.decoder.pendingBytes + chunk.length > MAX_RECEIVE_BYTES) {
+          throw new Error('RustDesk receive buffer limit exceeded');
+        }
         if (!this.checkedInitialProtocol && !this.cipher && chunk.length > 0) {
           this.checkedInitialProtocol = true;
           const foreign = detectNonRustDeskProtocol(chunk);
@@ -264,7 +302,6 @@ export class EncryptedFramedStream {
                 'Not a RustDesk server: received an HTTP response instead of RustDesk protocol data.',
               ),
             );
-            this.socket.destroy();
             return;
           }
           if (foreign === 'tls') {
@@ -273,7 +310,6 @@ export class EncryptedFramedStream {
                 'Not a RustDesk server: received a TLS/HTTPS response instead of RustDesk protocol data.',
               ),
             );
-            this.socket.destroy();
             return;
           }
           if (foreign === 'ssh') {
@@ -282,20 +318,10 @@ export class EncryptedFramedStream {
                 'Not a RustDesk server: target is an SSH service instead of RustDesk.',
               ),
             );
-            this.socket.destroy();
             return;
           }
         }
-        const frames = this.decoder.push(chunk);
-        for (const frame of frames) {
-          const waiter = this.waiters.shift();
-          if (waiter) {
-            const decrypted = this.cipher ? Buffer.from(this.cipher.open(frame)) : frame;
-            waiter.resolve(decrypted);
-          } else {
-            this.queue.push(frame);
-          }
-        }
+        this.decodeIncoming(chunk);
       } catch (err) {
         this.fail(err instanceof Error ? err : new Error(String(err)));
       }
@@ -307,6 +333,9 @@ export class EncryptedFramedStream {
 
     socket.on('close', () => {
       this.closed = true;
+      // Complete frames already queued remain readable after a remote FIN.
+      // A partial frame can never be completed once the socket is closed.
+      if (!this.receivePaused) this.decoder.clear();
       while (this.waiters.length > 0) {
         const waiter = this.waiters.shift()!;
         if (this.fatalErr) waiter.reject(this.fatalErr);
@@ -367,9 +396,49 @@ export class EncryptedFramedStream {
   private fail(err: Error) {
     if (!this.fatalErr) this.fatalErr = err;
     this.closed = true;
+    this.clearReceived();
+    this.socket.destroy();
     while (this.waiters.length > 0) {
       this.waiters.shift()!.reject(err);
     }
+  }
+
+  private clearReceived(): void {
+    this.queue.length = 0;
+    this.queuedBytes = 0;
+    this.decoder.clear();
+    this.receivePaused = false;
+  }
+
+  private decodeIncoming(chunk: Buffer): void {
+    this.decoder.push(chunk, frame => {
+      if (this.waiters.length) {
+        // Keep the waiter registered until decryption succeeds, so fail() also
+        // rejects it when a corrupted encrypted frame arrives.
+        const decrypted = this.cipher ? Buffer.from(this.cipher.open(frame)) : frame;
+        this.waiters.shift()!.resolve(decrypted);
+      } else {
+        if (this.queue.length >= MAX_QUEUED_FRAMES || this.queuedBytes + frame.length > MAX_RECEIVE_BYTES) {
+          throw new Error('RustDesk receive queue limit exceeded');
+        }
+        this.queue.push(frame);
+        this.queuedBytes += frame.length;
+      }
+      if (this.queue.length >= RECEIVE_HIGH_FRAMES || this.queuedBytes >= RECEIVE_HIGH_BYTES) {
+        this.receivePaused = true;
+        this.socket.pause();
+        return false;
+      }
+      return true;
+    });
+  }
+
+  private resumeReceiving(): void {
+    if (!this.receivePaused || this.queue.length > RECEIVE_LOW_FRAMES || this.queuedBytes > RECEIVE_LOW_BYTES) return;
+    this.receivePaused = false;
+    this.decodeIncoming(Buffer.alloc(0));
+    if (this.closed && !this.receivePaused) this.decoder.clear();
+    if (!this.receivePaused && !this.closed) this.socket.resume();
   }
 
   isSecured(): boolean {
@@ -395,19 +464,19 @@ export class EncryptedFramedStream {
   }
 
   next(timeoutMs?: number): Promise<Buffer | null> {
+    if (this.fatalErr) return Promise.reject(this.fatalErr);
     if (this.queue.length > 0) {
       const raw = this.queue.shift()!;
+      this.queuedBytes -= raw.length;
       try {
         const decrypted = this.cipher ? Buffer.from(this.cipher.open(raw)) : raw;
+        this.resumeReceiving();
         return Promise.resolve(decrypted);
       } catch (err) {
         const e = err instanceof Error ? err : new Error(String(err));
         this.fail(e);
         return Promise.reject(e);
       }
-    }
-    if (this.fatalErr) {
-      return Promise.reject(this.fatalErr);
     }
     if (this.closed) {
       return Promise.resolve(null);
@@ -437,6 +506,12 @@ export class EncryptedFramedStream {
 
   close(): void {
     this.closed = true;
+    this.clearReceived();
+    while (this.waiters.length) {
+      const waiter = this.waiters.shift()!;
+      if (this.fatalErr) waiter.reject(this.fatalErr);
+      else waiter.resolve(null);
+    }
     this.socket.destroy();
   }
 }
