@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from 'react';
-import { keyboardSpaceToReserve, keyboardView, virtualKeyboardHeight } from '../lib/keyboardViewport';
+import { SOFT_KEYBOARD_BAR_HEIGHT, keyboardSpaceToReserve, keyboardView, virtualKeyboardHeight } from '../lib/keyboardViewport';
 import { fitScale, type Point, type ViewMode, type ViewTransform } from '../lib/mapping';
 
 interface ViewState {
@@ -138,7 +138,7 @@ export function useKeyboardViewport(options: Options) {
       active.current = true;
       const rect = { left: vv.offsetLeft, top: vv.offsetTop, width: vv.width, height: vv.height };
       current.offset = { x: rect.left, y: rect.top };
-      const barHeight = softKeys ? stage.current?.querySelector('[data-testid="softbar"]')?.getBoundingClientRect().height ?? 46 : 0;
+      const barHeight = softKeys ? stage.current?.querySelector('[data-testid="softbar"]')?.getBoundingClientRect().height ?? SOFT_KEYBOARD_BAR_HEIGHT : 0;
       const size = { w: rect.width, h: Math.max(1, rect.height - barHeight - reserve) };
       const now = read();
       let view: ViewTransform;

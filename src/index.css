@@ -507,10 +507,9 @@ button:focus-visible {
   z-index: 4;
   inset-inline: 0;
   bottom: calc(max(env(safe-area-inset-bottom, 0px), var(--kb, 0px)) + var(--soft-key-space, 0px));
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  height: 46px;
+  display: grid;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  height: var(--softbar-height);
   padding-inline: max(4px, env(safe-area-inset-left, 0px)) max(4px, env(safe-area-inset-right, 0px));
   background: var(--remote-toolbar-surface);
   border-top: 1px solid #40454c;
@@ -518,6 +517,150 @@ button:focus-visible {
 
 .stage[data-keyboard-avoiding="true"] .softbar {
   bottom: var(--soft-key-space, 0px);
+}
+
+.soft-function-row,
+.soft-operation-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 5px;
+}
+
+.soft-operation-row {
+  justify-content: space-between;
+  border-top: 1px solid #40454c;
+}
+
+.softbar-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  min-height: 32px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #d6dde7;
+  cursor: pointer;
+}
+
+.softbar-icon:is(:hover, :active, [aria-expanded="true"]) {
+  background: #383f49;
+  color: #fff;
+}
+
+.soft-keyboard-hide {
+  gap: 2px;
+  min-width: 46px;
+}
+
+.soft-keyboard-tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: #191d23;
+}
+
+.soft-keyboard-tabs button {
+  padding: 3px 10px;
+  min-height: 29px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #c2cad3;
+  font: 600 12px/1.1 system-ui, sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.soft-keyboard-tabs [aria-pressed="true"] {
+  background: #383f49;
+  color: #fff;
+}
+
+.soft-shortcut-settings {
+  position: absolute;
+  z-index: 1;
+  bottom: calc(100% + 6px);
+  inset-inline-start: max(4px, env(safe-area-inset-left, 0px));
+  width: min(350px, calc(100% - 8px));
+  max-height: min(332px, var(--soft-shortcut-space));
+  overflow: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  padding: 8px;
+  border: 1px solid #606773;
+  border-radius: 10px;
+  background: var(--remote-toolbar-surface);
+  color: #f3f5f8;
+  box-shadow: 0 10px 20px #0005;
+}
+
+.soft-shortcut-settings header,
+.soft-shortcut-footer,
+.soft-shortcut-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.soft-shortcut-modifiers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-bottom: 6px;
+}
+
+.soft-shortcut-keys {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(42px, 1fr));
+  gap: 3px;
+  max-height: min(145px, max(44px, calc(var(--soft-shortcut-space) - 120px)));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+.soft-shortcut-settings .soft-key-btn {
+  min-width: 0;
+  min-height: 29px;
+  padding-inline: 4px;
+  white-space: normal;
+}
+
+.soft-shortcut-settings [aria-pressed="true"] {
+  border-color: #8bcaff;
+  background: #356597;
+}
+
+.soft-shortcut-footer {
+  margin-top: 6px;
+}
+
+.soft-shortcut-footer output,
+.soft-shortcut-list span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.soft-shortcut-settings button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.soft-shortcut-list {
+  margin: 6px 0 0;
+  padding: 0;
+  border-top: 1px solid #40454c;
+  list-style: none;
+}
+
+.soft-shortcut-button {
+  border-color: #557698;
 }
 
 .soft-key-capture {
@@ -587,7 +730,7 @@ button:focus-visible {
   height: var(--soft-key-space, 0px);
   overflow: hidden;
   display: grid;
-  grid-template-rows: repeat(5, minmax(0, 1fr));
+  grid-template-rows: repeat(4, minmax(0, 1fr));
   gap: 4px;
   padding: 5px max(5px, env(safe-area-inset-right, 0px))
     max(5px, env(safe-area-inset-bottom, 0px)) max(5px, env(safe-area-inset-left, 0px));
@@ -598,8 +741,12 @@ button:focus-visible {
 .virtual-keyboard-row {
   display: flex;
   gap: clamp(2px, 0.55vw, 5px);
-  width: min(100%, 900px);
+  width: min(100%, 680px);
   margin-inline: auto;
+}
+
+.virtual-keyboard[data-keyboard-page="letters"] .virtual-keyboard-row:nth-child(2) {
+  width: min(90%, 612px);
 }
 
 .virtual-keyboard-row .soft-key-btn {
@@ -609,8 +756,16 @@ button:focus-visible {
   min-height: 0;
   padding: 0 1px;
   overflow: hidden;
-  font-size: clamp(9px, 2.7vw, 14px);
+  font-size: clamp(13px, 4vw, 19px);
   line-height: 1.1;
+}
+
+.virtual-keyboard-row :is(.virtual-keyboard-page, [data-key]) {
+  font-size: clamp(11px, 3.5vw, 15px);
+}
+
+.virtual-keyboard-page {
+  --virtual-key-width: 1.8;
 }
 
 .virtual-key-alternate {
@@ -1940,10 +2095,6 @@ button:focus-visible {
 
   .remote-capsule {
     right: var(--landscape-dock-right);
-  }
-
-  .softbar {
-    height: 40px;
   }
 
   .rd-mobile-shell {

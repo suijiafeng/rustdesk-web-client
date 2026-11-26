@@ -35,6 +35,6 @@ test('virtual keyboard reuses the native height and fills only the space that ha
 test('keyboard height falls back to the current orientation and leaves room for the remote view', () => {
   assert.equal(virtualKeyboardHeight(740, false), 252);
   assert.equal(virtualKeyboardHeight(390, true), 172);
-  assert.equal(virtualKeyboardHeight(140, true, 126), 52);
+  assert.equal(virtualKeyboardHeight(140, true, 126), 12);
   assert.equal(keyboardSpaceToReserve(740, 410, 274), 0);
 });

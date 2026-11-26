@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Keyboard, Settings2 } from 'lucide-react';
 import type { SoftKeyboardMode } from '../hooks/useKeyboardViewport';
 import { keyboardInset } from '../lib/gestures';
+import { SOFT_KEYBOARD_BAR_HEIGHT } from '../lib/keyboardViewport';
+import { SoftShortcutSettings, type SoftShortcut } from './SoftShortcutSettings';
 import { t, type Locale } from '../lib/i18n';
 import {
   buildSoftKeyChord,
@@ -19,6 +21,7 @@ interface SoftKeyboardBarProps {
   inputRef: React.RefObject<HTMLInputElement | null>;
   mode: SoftKeyboardMode;
   reservedSpace: number;
+  viewportHeight: number;
   onSwitchMode: (mode: SoftKeyboardMode) => void;
   onSendText: (text: string) => void;
   onPasteText?: (text: string) => void;
@@ -40,6 +43,7 @@ const EXTRA_KEYS: ReadonlyArray<{ label: string; control: string; aria?: string 
   { label: 'Space', control: 'Space' },
   { label: 'Enter', control: 'Enter' },
   { label: 'Backspace', control: 'Backspace' },
+  { label: 'Caps Lock', control: 'CapsLock' },
   { label: '←', control: 'ArrowLeft', aria: 'Left arrow' },
   { label: '↑', control: 'ArrowUp', aria: 'Up arrow' },
   { label: '↓', control: 'ArrowDown', aria: 'Down arrow' },
@@ -51,49 +55,50 @@ const EXTRA_KEYS: ReadonlyArray<{ label: string; control: string; aria?: string 
   { label: 'Del', control: 'Delete' },
 ] as const;
 
+const SHORTCUT_STORAGE_KEY = 'rd_web_soft_shortcuts';
+const SHORTCUT_KEYS = [
+  ...[...'abcdefghijklmnopqrstuvwxyz0123456789'].map(value => ({ value, label: value.toUpperCase(), aria: undefined })),
+  ...EXTRA_KEYS.map(({ control, label, aria }) => ({ value: control, label, aria })),
+];
+
+function readShortcuts(): SoftShortcut[] {
+  try {
+    const saved: unknown = JSON.parse(window.localStorage.getItem(SHORTCUT_STORAGE_KEY) ?? '[]');
+    if (!Array.isArray(saved)) return [];
+    return saved.filter((entry): entry is SoftShortcut =>
+      typeof entry?.key === 'string' && SHORTCUT_KEYS.some(choice => choice.value === entry.key) &&
+      Array.isArray(entry.modifiers) && entry.modifiers.every((value: unknown) => typeof value === 'string' && isModifier(value)),
+    );
+  } catch {
+    return [];
+  }
+}
+
 const KEY_FEEDBACK_MS = 140;
 type VirtualKey =
   | { chr: string; shifted: string; width?: number }
   | { control: string; label: string; aria?: string; width?: number };
 
-function characterKeys(keys: string, shifted: string): VirtualKey[] {
+function characterKeys(keys: string, shifted = keys.toUpperCase()): VirtualKey[] {
   return [...keys].map((chr, index) => ({ chr, shifted: shifted[index] }));
 }
 
-const VIRTUAL_ROWS: readonly (readonly VirtualKey[])[] = [
-  [
-    ...characterKeys('`1234567890-=', '~!@#$%^&*()_+'),
-    { control: 'Backspace', label: '⌫', aria: 'Backspace', width: 2 },
-  ],
-  [
-    { control: 'Tab', label: 'Tab', width: 1.5 },
-    ...characterKeys('qwertyuiop[]', 'QWERTYUIOP{}'),
-    { chr: '\\', shifted: '|', width: 1.5 },
-  ],
-  [
-    { control: 'CapsLock', label: 'Caps', aria: 'Caps Lock', width: 1.75 },
-    ...characterKeys("asdfghjkl;'", 'ASDFGHJKL:"'),
-    { control: 'Enter', label: 'Enter', width: 2.25 },
-  ],
-  [
-    { control: 'Shift', label: 'Shift', width: 2.25 },
-    ...characterKeys('zxcvbnm,./', 'ZXCVBNM<>?'),
-    { control: 'Shift', label: 'Shift', width: 2.75 },
-  ],
+const shiftKey = { control: 'Shift', label: '⇧', aria: 'Shift', width: 1.5 };
+const backspaceKey = { control: 'Backspace', label: '⌫', aria: 'Backspace', width: 1.5 };
+const LETTER_ROWS: readonly (readonly VirtualKey[])[] = [
+  characterKeys('qwertyuiop'),
+  characterKeys('asdfghjkl'),
+  [shiftKey, ...characterKeys('zxcvbnm'), backspaceKey],
 ];
-
-const VIRTUAL_BOTTOM_ROW: readonly VirtualKey[] = [
-  { control: 'Control', label: 'Ctrl', width: 1.5 },
-  { control: 'Meta', label: 'Win', width: 2 },
-  { control: 'Alt', label: 'Alt', width: 1.75 },
-  { control: 'Space', label: 'Space', width: 5.75 },
-  { control: 'ArrowLeft', label: '←', aria: 'Left arrow' },
-  { control: 'ArrowDown', label: '↓', aria: 'Down arrow' },
-  { control: 'ArrowUp', label: '↑', aria: 'Up arrow' },
-  { control: 'ArrowRight', label: '→', aria: 'Right arrow' },
+const NUMBER_ROWS: readonly (readonly VirtualKey[])[] = [
+  characterKeys('1234567890', '!@#$%^&*()'),
+  characterKeys('@#$%&-+()/', '@#$%&_=[]|'),
+  [shiftKey, ...characterKeys(".,?!:';", '<>?!\"~;'), backspaceKey],
 ];
-const [controlKey, metaKey, altKey, ...bottomKeys] = VIRTUAL_BOTTOM_ROW;
-const MAC_VIRTUAL_BOTTOM_ROW = [controlKey, altKey, metaKey, ...bottomKeys];
+const KEYBOARD_BOTTOM_ROW: readonly VirtualKey[] = [
+  { control: 'Space', label: 'Space', width: 6 },
+  { control: 'Enter', label: 'Enter', width: 2.2 },
+];
 
 export function SoftKeyboardBar({
   locale,
@@ -101,6 +106,7 @@ export function SoftKeyboardBar({
   inputRef,
   mode,
   reservedSpace,
+  viewportHeight,
   onSwitchMode,
   onSendText,
   onPasteText,
@@ -112,6 +118,10 @@ export function SoftKeyboardBar({
   const composingRef = useRef(false);
   const lastSentRef = useRef('');
   const [latched, setLatched] = useState<string[]>([]);
+  const [numberPage, setNumberPage] = useState(false);
+  const [shortcuts, setShortcuts] = useState(readShortcuts);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsRegion = useRef<HTMLDivElement>(null);
   const [pressedKey, setPressedKey] = useState<string | null>(null);
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -128,6 +138,30 @@ export function SoftKeyboardBar({
   const shiftActive = latched.includes('Shift');
   const modifierLabel = (control: string, label: string) =>
     control === 'Meta' ? metaLabel : control === 'Alt' ? altLabel : label;
+
+  const shortcutModifiers = STICKY_MODIFIERS.map(mod => ({ value: mod.control, label: modifierLabel(mod.control, mod.label) }));
+  const describeShortcut = (shortcut: SoftShortcut) => [
+    ...shortcut.modifiers.map(control => shortcutModifiers.find(choice => choice.value === control)?.label ?? control),
+    SHORTCUT_KEYS.find(choice => choice.value === shortcut.key)?.label ?? shortcut.key,
+  ].join('+');
+
+  const saveShortcuts = (next: SoftShortcut[]) => {
+    setShortcuts(next);
+    try {
+      window.localStorage.setItem(SHORTCUT_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // The current session can continue to use its shortcuts if storage is unavailable.
+    }
+  };
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const dismiss = (event: PointerEvent) => {
+      if (event.target instanceof Node && !settingsRegion.current?.contains(event.target)) setSettingsOpen(false);
+    };
+    document.addEventListener('pointerdown', dismiss, true);
+    return () => document.removeEventListener('pointerdown', dismiss, true);
+  }, [settingsOpen]);
 
   useEffect(() => {
     if (mode !== 'system') return;
@@ -186,6 +220,21 @@ export function SoftKeyboardBar({
       onSendText(key.chr);
     }
     focusSystemInput();
+  };
+
+  const sendShortcut = (shortcut: SoftShortcut) => {
+    const key = shortcut.key.length === 1 ? { chr: shortcut.key } : { control: shortcut.key };
+    onSendChord(buildSoftKeyChord(shortcut.modifiers, key));
+    setLatched([]);
+    focusSystemInput();
+  };
+
+  const changeKeyboardMode = (next: SoftKeyboardMode) => {
+    if (mode === next) return;
+    if (next === 'system') setNumberPage(false);
+    onSwitchMode(next);
+    resetLocalDraft();
+    composingRef.current = false;
   };
 
   const tapVirtualKey = (key: VirtualKey) => {
@@ -314,7 +363,11 @@ export function SoftKeyboardBar({
       className="softbar"
       data-testid="softbar"
       data-keyboard-mode={mode}
-      style={{ '--soft-key-space': `${reservedSpace}px` } as React.CSSProperties}
+      style={{
+        '--soft-key-space': `${reservedSpace}px`,
+        '--softbar-height': `${SOFT_KEYBOARD_BAR_HEIGHT}px`,
+        '--soft-shortcut-space': `${Math.max(0, viewportHeight - reservedSpace - SOFT_KEYBOARD_BAR_HEIGHT - 8)}px`,
+      } as React.CSSProperties}
       onPointerDown={e => {
         showKeyFeedback(e.target);
         e.stopPropagation();
@@ -326,75 +379,110 @@ export function SoftKeyboardBar({
         }
       }}
     >
-      <div
-        className="soft-key-strip"
-        data-testid="soft-key-strip"
-        role="toolbar"
-        aria-label={t(locale, 'specialKeysAria')}
-      >
-        {STICKY_MODIFIERS.map((mod) => {
-          const isActive = latched.includes(mod.control);
-          return (
-            <button
-              key={mod.control}
-              type="button"
-              aria-pressed={isActive}
-              data-testid={`soft-mod-${mod.label.toLowerCase()}`}
-              data-key-feedback={`modifier-${mod.control}`}
-              data-key-pressed={pressedKey === `modifier-${mod.control}` || undefined}
-              className={`soft-key-btn${isActive ? ' active' : ''}`}
-              onClick={() => toggleModifier(mod.control)}
-            >
-              {modifierLabel(mod.control, mod.label)}
-            </button>
-          );
-        })}
-        <span className="soft-key-divider" aria-hidden="true" />
-        {EXTRA_KEYS.map((item) => (
-          <button
-            key={item.control}
-            type="button"
-            aria-label={item.aria ?? item.label}
-            className="soft-key-btn"
-            data-key-feedback={`toolbar-${item.control}`}
-            data-key-pressed={pressedKey === `toolbar-${item.control}` || undefined}
-            onClick={() => tapKey({ control: item.control })}
-          >
-            {item.label}
+      <div className="soft-function-row" data-testid="soft-function-row">
+        <div ref={settingsRegion}>
+          <button type="button" className="softbar-icon" data-testid="soft-shortcut-toggle"
+            aria-label={t(locale, 'softShortcutSettings')} aria-expanded={settingsOpen}
+            onClick={() => setSettingsOpen(open => !open)}>
+            <Settings2 size={18} aria-hidden="true" />
           </button>
-        ))}
+          {settingsOpen && <SoftShortcutSettings
+            locale={locale}
+            modifiers={shortcutModifiers}
+            keys={SHORTCUT_KEYS}
+            shortcuts={shortcuts}
+            describe={describeShortcut}
+            onAdd={shortcut => saveShortcuts([...shortcuts, shortcut])}
+            onRemove={index => saveShortcuts(shortcuts.filter((_, position) => position !== index))}
+            onClose={() => setSettingsOpen(false)}
+          />}
+        </div>
+        <div
+          className="soft-key-strip"
+          data-testid="soft-key-strip"
+          role="toolbar"
+          aria-label={t(locale, 'specialKeysAria')}
+        >
+          {shortcuts.map((shortcut, index) => {
+            const label = describeShortcut(shortcut);
+            const feedbackId = `shortcut-${index}`;
+            return <button key={feedbackId} type="button" className="soft-key-btn soft-shortcut-button"
+              data-testid="soft-shortcut" data-key-feedback={feedbackId} title={label}
+              data-key-pressed={pressedKey === feedbackId || undefined} onClick={() => sendShortcut(shortcut)}>
+              {label}
+            </button>;
+          })}
+          {STICKY_MODIFIERS.map((mod) => {
+            const isActive = latched.includes(mod.control);
+            return (
+              <button
+                key={mod.control}
+                type="button"
+                aria-pressed={isActive}
+                data-testid={`soft-mod-${mod.label.toLowerCase()}`}
+                data-key-feedback={`modifier-${mod.control}`}
+                data-key-pressed={pressedKey === `modifier-${mod.control}` || undefined}
+                className={`soft-key-btn${isActive ? ' active' : ''}`}
+                onClick={() => toggleModifier(mod.control)}
+              >
+                {modifierLabel(mod.control, mod.label)}
+              </button>
+            );
+          })}
+          <span className="soft-key-divider" aria-hidden="true" />
+          {EXTRA_KEYS.map((item) => (
+            <button
+              key={item.control}
+              type="button"
+              aria-label={item.aria ?? item.label}
+              className="soft-key-btn"
+              data-key-feedback={`toolbar-${item.control}`}
+              data-key-pressed={pressedKey === `toolbar-${item.control}` || undefined}
+              onClick={() => tapKey({ control: item.control })}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <button type="button" className="soft-key-btn" data-testid="soft-keyboard-switch"
-        onClick={() => {
-          onSwitchMode(mode === 'system' ? 'virtual' : 'system');
-          resetLocalDraft();
-          composingRef.current = false;
-        }}>
-        {t(locale, mode === 'system' ? 'softVirtualKeyboard' : 'softSystemKeyboard')}
-      </button>
-      <button
-        type="button"
-        className="soft-key-btn"
-        data-testid="soft-hide"
-        aria-label={t(locale, 'softHide')}
-        onClick={onHide}
-      >
-        <ChevronDown size={18} aria-hidden="true" />
-      </button>
+      <div className="soft-operation-row" data-testid="soft-operation-row">
+        <div className="soft-keyboard-tabs" role="group" aria-label={t(locale, 'softKeyboardType')}>
+          <button type="button" data-testid="soft-keyboard-virtual" aria-pressed={mode === 'virtual'}
+            onClick={() => changeKeyboardMode('virtual')}>{t(locale, 'softComputerKeyboard')}</button>
+          <button type="button" data-testid="soft-keyboard-system" aria-pressed={mode === 'system'}
+            onClick={() => changeKeyboardMode('system')}>{t(locale, 'softPhoneKeyboard')}</button>
+        </div>
+        <button type="button" className="softbar-icon soft-keyboard-hide" data-testid="soft-hide"
+          aria-label={t(locale, 'softHide')} onClick={onHide}>
+          <Keyboard size={19} aria-hidden="true" />
+          <ChevronDown size={13} aria-hidden="true" />
+        </button>
+      </div>
       {mode === 'virtual' && (
         <div className="virtual-keyboard" data-testid="virtual-keyboard"
-          role="group" aria-label={t(locale, 'softVirtualKeyboard')} inert={reservedSpace < 80}>
-          {[...VIRTUAL_ROWS, metaLabel === 'Command' ? MAC_VIRTUAL_BOTTOM_ROW : VIRTUAL_BOTTOM_ROW].map((row, rowIndex) => (
+          role="group" aria-label={t(locale, 'softVirtualKeyboard')} inert={reservedSpace < 80}
+          data-keyboard-page={numberPage ? 'numbers' : 'letters'}>
+          {[...(numberPage ? NUMBER_ROWS : LETTER_ROWS), KEYBOARD_BOTTOM_ROW].map((row, rowIndex) => (
             <div className="virtual-keyboard-row" key={rowIndex}>
+              {row === KEYBOARD_BOTTOM_ROW && (
+                <button type="button" className="soft-key-btn virtual-keyboard-page"
+                  data-testid="virtual-keyboard-page" data-key-feedback="keyboard-page"
+                  data-key-pressed={pressedKey === 'keyboard-page' || undefined}
+                  aria-label={t(locale, numberPage ? 'softLetterKeys' : 'softNumberKeys')}
+                  onClick={() => setNumberPage(previous => !previous)}>
+                  {numberPage ? 'ABC' : '123'}
+                </button>
+              )}
               {row.map((key, keyIndex) => {
                 const control = 'control' in key ? key.control : undefined;
-                const label = 'control' in key ? modifierLabel(key.control, key.label)
-                  : /^[a-z]$/.test(key.chr) ? key.shifted : shiftActive ? key.shifted : key.chr;
-                const alternate = 'chr' in key && !/^[a-z]$/.test(key.chr)
+                const label = 'control' in key ? key.label : shiftActive ? key.shifted : key.chr;
+                const alternate = 'chr' in key && numberPage && key.shifted !== key.chr
                   ? (shiftActive ? key.chr : key.shifted) : undefined;
                 const modifierActive = control && isModifier(control) ? latched.includes(control) : undefined;
-                const feedbackId = 'chr' in key ? `letter-${key.chr}` : `virtual-${control}-${rowIndex}-${keyIndex}`;
+                const feedbackId = 'chr' in key
+                  ? (/[a-z]/.test(key.chr) ? `letter-${key.chr}` : `symbol-${key.chr}`)
+                  : `virtual-${control}-${rowIndex}-${keyIndex}`;
                 return <button type="button" className={`soft-key-btn${modifierActive ? ' active' : ''}`}
                   key={feedbackId}
                   style={{ '--virtual-key-width': key.width ?? 1 } as React.CSSProperties}

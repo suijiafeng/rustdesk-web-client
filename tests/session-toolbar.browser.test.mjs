@@ -216,7 +216,8 @@ try {
   assert.equal(reversedScroll?.y, -originalScroll.y);
 
   const softbar = select('softbar');
-  const keyboardSwitch = select('soft-keyboard-switch');
+  const computerKeyboardTab = select('soft-keyboard-virtual');
+  const phoneKeyboardTab = select('soft-keyboard-system');
   const virtualKeyboard = select('virtual-keyboard');
   const toolbarTop = `${softbar}.getBoundingClientRect().top`;
   await evaluate(`(() => {
@@ -235,9 +236,17 @@ try {
   await evaluate(`window.setTestViewportHeight(${fullHeight - 260})`);
   await until(`${select('stage')}.dataset.keyboardAvoiding === 'true'`);
   const systemKeyboardTop = await evaluate(toolbarTop);
+  const functionRow = select('soft-function-row');
+  const operationRow = select('soft-operation-row');
+  assert.ok(await evaluate(`${functionRow}.getBoundingClientRect().bottom <= ${operationRow}.getBoundingClientRect().top`));
+  assert.ok(await evaluate(`Math.abs(${operationRow}.getBoundingClientRect().bottom - window.visualViewport.height) < 1`));
+  assert.equal(await evaluate(phoneKeyboardTab + '.getAttribute("aria-pressed")'), 'true');
+  assert.ok(await evaluate(`${operationRow}.firstElementChild.contains(${computerKeyboardTab}) &&
+    ${operationRow}.lastElementChild === ${select('soft-hide')}`));
 
-  await tapElement(keyboardSwitch);
+  await tapElement(computerKeyboardTab);
   assert.equal(await evaluate(softbar + '.dataset.keyboardMode'), 'virtual');
+  assert.equal(await evaluate(computerKeyboardTab + '.getAttribute("aria-pressed")'), 'true');
   assert.equal(await evaluate(select('soft-input') + ' === null'), true);
   assert.equal(await evaluate(toolbarTop), systemKeyboardTop);
   for (const remaining of [180, 90, 0]) {
@@ -247,7 +256,10 @@ try {
   }
   assert.equal(await evaluate(virtualKeyboard + '.getBoundingClientRect().height'), 260);
 
-  assert.deepEqual(await evaluate(`Array.from(${virtualKeyboard}.children, row => row.children.length)`), [14, 14, 13, 12, 8]);
+  assert.deepEqual(await evaluate(`Array.from(${virtualKeyboard}.children, row => row.children.length)`), [10, 9, 9, 3]);
+  assert.deepEqual(await evaluate(`Array.from(${virtualKeyboard}.children, row =>
+    Array.from(row.querySelectorAll('[data-key-feedback^="letter-"]'), key => key.textContent).join(''))`),
+    ['qwertyuiop', 'asdfghjkl', 'zxcvbnm', '']);
   assert.ok(await evaluate(`[...(${virtualKeyboard}).querySelectorAll('button')].every(key => {
     const { left, right } = key.getBoundingClientRect();
     return left >= 0 && right <= window.innerWidth;
@@ -270,24 +282,49 @@ try {
   await tapElement(select('soft-mod-ctrl'));
   await tapElement(select('soft-mod-shift'));
   await tapElement(`${virtualKeyboard}.querySelector('[data-key="Enter"]')`);
-  await tapElement(`${virtualKeyboard}.querySelector('[data-key-feedback="letter-["]')`);
   await tapElement(`${virtualKeyboard}.querySelector('[data-key="Shift"]')`);
-  const numberOne = `${virtualKeyboard}.querySelector('[data-key-feedback="letter-1"]')`;
+  assert.equal(await evaluate(letterA + '.getAttribute("aria-label")'), 'A');
+  await tapElement(letterA);
+  await tapElement(select('virtual-keyboard-page'));
+  assert.equal(await evaluate(virtualKeyboard + '.dataset.keyboardPage'), 'numbers');
+  const numberOne = `${virtualKeyboard}.querySelector('[data-key-feedback="symbol-1"]')`;
+  await tapElement(numberOne);
+  await tapElement(`${virtualKeyboard}.querySelector('[data-key="Shift"]')`);
   assert.equal(await evaluate(numberOne + '.getAttribute("aria-label")'), '!');
   await tapElement(numberOne);
-  await tapElement(`${virtualKeyboard}.querySelector('[data-key="CapsLock"]')`);
+  await tapElement(select('virtual-keyboard-page'));
+  assert.equal(await evaluate(virtualKeyboard + '.dataset.keyboardPage'), 'letters');
+  await tapElement(`${virtualKeyboard}.querySelector('[data-key="Backspace"]')`);
   const virtualEvents = (await evaluate(keyEvents)).slice(firstVirtualEvent);
   assert.deepEqual(virtualEvents.map(event => [event.action, event.control ?? event.chr]), [
     ['down', 'a'], ['up', 'a'],
     ['down', 'Control'], ['down', 'Shift'], ['down', 'Enter'],
     ['up', 'Enter'], ['up', 'Shift'], ['up', 'Control'],
-    ['down', '['], ['up', '['],
+    ['down', 'A'], ['up', 'A'],
+    ['down', '1'], ['up', '1'],
     ['down', '!'], ['up', '!'],
-    ['down', 'CapsLock'], ['up', 'CapsLock'],
+    ['down', 'Backspace'], ['up', 'Backspace'],
   ]);
   assert.equal(await evaluate(select('soft-input') + ' === null'), true);
 
-  await tapElement(keyboardSwitch);
+  const settingsButton = select('soft-shortcut-toggle');
+  const shortcutSettings = select('soft-shortcut-settings');
+  const shortcutButton = select('soft-shortcut');
+  assert.ok(await evaluate(`${functionRow}.firstElementChild.contains(${settingsButton})`));
+  await tapElement(settingsButton);
+  await until(shortcutSettings);
+  await tapElement(`${shortcutSettings}.querySelector('[data-shortcut-modifier="Control"]')`);
+  await tapElement(`${shortcutSettings}.querySelector('[data-shortcut-key="a"]')`);
+  await tapElement(select('soft-shortcut-add'));
+  assert.equal(await evaluate(shortcutButton + '.textContent'), 'Ctrl+A');
+  await tapElement(settingsButton);
+  const beforeShortcut = await evaluate(keyEvents + '.length');
+  await tapElement(shortcutButton);
+  assert.deepEqual((await evaluate(keyEvents)).slice(beforeShortcut).map(event => [event.action, event.control ?? event.chr]), [
+    ['down', 'Control'], ['down', 'a'], ['up', 'a'], ['up', 'Control'],
+  ]);
+
+  await tapElement(phoneKeyboardTab);
   assert.equal(await evaluate(softbar + '.dataset.keyboardMode'), 'system');
   assert.equal(await evaluate('document.activeElement === ' + select('soft-input')), true);
   assert.equal(await evaluate(toolbarTop), systemKeyboardTop);
@@ -299,7 +336,7 @@ try {
   await tapElement(select('soft-hide'));
   await evaluate(`window.setTestViewportHeight(${fullHeight})`);
   await until(select('mobile-dock-expand'));
-  console.log('Keyboard: QWERTY rows, shifted punctuation, native focus and stable height verified.');
+  console.log('Keyboard: 26 letters, number and symbol mode, native focus and stable height verified.');
 
   await cdp('Emulation.setTouchEmulationEnabled', { enabled: false });
   await cdp('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
@@ -308,6 +345,13 @@ try {
   assert.equal(await evaluate('Boolean(' + select('toolbar-cad') + ')'), true);
   await evaluate(select('toolbar-keyboard') + '.click()');
   await until(select('soft-mod-win'));
+  assert.equal(await evaluate(shortcutButton + '.textContent'), 'Ctrl+A');
+  await evaluate(settingsButton + '.click()');
+  await until(select('soft-shortcut-remove'));
+  await evaluate(select('soft-shortcut-remove') + '.click()');
+  assert.equal(await evaluate(shortcutButton + ' === null'), true);
+  await evaluate(settingsButton + '.click()');
+  console.log('Keyboard toolbars: alignment, adding, sending, persisting and removing a shortcut verified.');
   assert.equal(await evaluate(select('soft-mod-win') + '.textContent'), 'Win');
   assert.equal(await evaluate(select('soft-mod-alt') + '.textContent'), 'Alt');
   await evaluate(select('soft-hide') + '.click()');

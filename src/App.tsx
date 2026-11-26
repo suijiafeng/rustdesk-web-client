@@ -1,3 +1,4 @@
+import { SOFT_KEYBOARD_BAR_HEIGHT } from './lib/keyboardViewport';
 import { useKeyboardViewport, type SoftKeyboardMode } from './hooks/useKeyboardViewport';
 import { useClipboardSync } from './hooks/useClipboardSync';
 import { RemoteSocket } from './lib/remoteSocket';
@@ -581,7 +582,7 @@ export default function App() {
   });
   const panClampOptions = useMemo(
     () => ({ allowEdgePan: true, edgePadding: DEFAULT_EDGE_PADDING,
-      bottomInset: softKeys && !keyboardLayout.viewport ? 46 : 0 }),
+      bottomInset: softKeys && !keyboardLayout.viewport ? SOFT_KEYBOARD_BAR_HEIGHT : 0 }),
     [softKeys, keyboardLayout.viewport],
   );
 
@@ -3088,6 +3089,7 @@ export default function App() {
           inputRef={softKeyboardInputRef}
           mode={softKeyboardMode}
           reservedSpace={keyboardLayout.reservedSpace}
+          viewportHeight={stageViewport?.height ?? box.h}
           onSwitchMode={switchSoftKeyboard}
           onSendText={sendText}
           onSendControl={(action, control) => send({ type: 'key', action, control })}

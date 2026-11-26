@@ -1,5 +1,7 @@
 import { clampPan, DEFAULT_EDGE_PADDING, fitScale, type Point, type ViewMode, type ViewTransform } from './mapping';
 
+export const SOFT_KEYBOARD_BAR_HEIGHT = 84;
+
 export function keyboardView(
   width: number, height: number, remoteW: number, remoteH: number,
   mode: ViewMode, previous: ViewTransform, anchor: Point,
@@ -20,7 +22,7 @@ export function keyboardView(
 export function virtualKeyboardHeight(viewportHeight: number, landscape: boolean, systemHeight?: number): number {
   const fallback = Math.round(viewportHeight * (landscape ? 0.44 : 0.34));
   const preferred = systemHeight ?? Math.min(320, fallback);
-  return Math.min(Math.max(0, viewportHeight - 88), preferred);
+  return Math.min(Math.max(0, viewportHeight - SOFT_KEYBOARD_BAR_HEIGHT - 44), preferred);
 }
 
 export function keyboardSpaceToReserve(fullHeight: number, visibleHeight: number, keyboardHeight: number): number {
