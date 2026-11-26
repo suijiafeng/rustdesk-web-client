@@ -13,10 +13,10 @@ import {
 } from 'lucide-react';
 import { formatConnectionError } from '../lib/errors';
 import { statusLabel, t, type Locale } from '../lib/i18n';
-import { type PeerMessage, type QualityLevel } from '../lib/protocol';
+import { type CodecSupport, type PeerMessage, type QualityLevel } from '../lib/protocol';
 import type { ConnectionPhase } from './RustDeskShell';
 
-import type { PreferredCodec } from '../lib/displayPrefs';
+import { formatCodecLabel, PREFERRED_CODEC_OPTIONS, type PreferredCodec } from '../lib/displayPrefs';
 import { useSessionStats, type SessionStats, type SessionStatsStore } from '../lib/sessionStats';
 export type { SessionStats } from '../lib/sessionStats';
 
@@ -48,6 +48,7 @@ export interface SessionMenuProps {
   customQuality: number;
   targetFps: number;
   preferredCodec: PreferredCodec;
+  codecSupport?: CodecSupport | null;
   privacyEnabled: boolean;
   privacyPending: boolean;
   onTogglePrivacy: () => void;
@@ -92,6 +93,7 @@ function DesktopSessionMenu({
   customQuality,
   targetFps,
   preferredCodec,
+  codecSupport,
   onClose,
   onOpenConnection,
   onRestart,
@@ -267,8 +269,16 @@ function DesktopSessionMenu({
                 </label>
                 <label className="session-setting-row"><Film /><span>{t(locale, 'sessionCodecLabel')}</span>
                   <AdaptiveSelect label={t(locale, 'sessionCodecLabel')} testId="codec-select" value={preferredCodec}
-                    options={['auto','h264','vp8','vp9','av1'].map(value => ({ value, label: value === 'auto' ? t(locale, 'codecAuto') : value === 'h264' ? 'H.264' : value.toUpperCase() }))}
-                    onChange={value => { onChangeQuality(quality, targetFps, value as PreferredCodec); onNotify(t(locale, 'requestSent')+' · '+(value === 'auto' ? t(locale, 'codecAuto') : value === 'h264' ? 'H.264' : value.toUpperCase())); }} />
+                    options={PREFERRED_CODEC_OPTIONS.map(value => ({
+                      value,
+                      label: formatCodecLabel(value, t(locale, 'codecAuto')),
+                      disabled: value !== 'auto' && value !== preferredCodec && codecSupport?.[value] === false,
+                    }))}
+                    onChange={value => {
+                      const codec = value as PreferredCodec;
+                      onChangeQuality(quality, targetFps, codec);
+                      onNotify(t(locale, 'requestSent') + ' · ' + formatCodecLabel(codec, t(locale, 'codecAuto')));
+                    }} />
                 </label>
               </div>
               {hasMultipleDisplays && <div className="session-group">

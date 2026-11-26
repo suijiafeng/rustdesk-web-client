@@ -269,3 +269,12 @@ test('remote EOF preserves complete frames while a paused batch is drained', { t
   assert.equal(f.state.decoder.pendingBytes, 0);
   assert.equal(f.state.queuedBytes, 0);
 });
+
+test('sendRaw fails the stream if outbound socket backlog exceeds MAX_SEND_QUEUE_BYTES', async t => {
+  const { MAX_SEND_QUEUE_BYTES } = await import('./bytesCodec.ts');
+  const f = await tcpFixture(t);
+  Object.defineProperty(f.socket, 'writableLength', { value: MAX_SEND_QUEUE_BYTES, configurable: true });
+  assert.equal(f.stream.sendQueueBytes, MAX_SEND_QUEUE_BYTES);
+  await assert.rejects(f.stream.sendRaw(Buffer.from('overflow')), /send queue limit exceeded/);
+  assert.equal(f.socket.destroyed, true);
+});

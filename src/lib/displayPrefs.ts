@@ -5,6 +5,15 @@ export type ScrollStyle = 'auto' | 'scrollbar';
 export type ImageQualityPreset = QualityLevel;
 export type PreferredCodec = 'auto' | 'vp8' | 'vp9' | 'h264' | 'h265' | 'av1';
 
+export const PREFERRED_CODEC_OPTIONS: readonly PreferredCodec[] = ['auto', 'h264', 'h265', 'vp8', 'vp9', 'av1'];
+
+export function formatCodecLabel(codec: PreferredCodec, autoLabel: string): string {
+  if (codec === 'auto') return autoLabel;
+  if (codec === 'h264') return 'H.264';
+  if (codec === 'h265') return 'H.265';
+  return codec.toUpperCase();
+}
+
 export interface DisplayPrefs {
   viewStyle: DefaultViewStyle;
   scrollStyle: ScrollStyle;

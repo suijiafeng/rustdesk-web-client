@@ -1,12 +1,12 @@
 import { decodeAudioFrame } from '../../shared/audio';
-import { useCallback, useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from 'react';
+import { useCallback, useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react';
 import type { SessionStats } from '../components/SessionMenu';
 import type { ConnectionMode, ConnectionPhase, ConnectRequest } from '../types';
 import { probeCodecs, webCodecsStatus, type RemoteDecoder } from '../lib/decoder';
 import { deviceKeyFor } from '../lib/devices';
 import { filterCodecSupport } from '../lib/displayPrefs';
 import { t } from '../lib/i18n';
-import { decodeFrame, wsUrl, type PeerMessage, type QualityLevel, type ServerMessage } from '../lib/protocol';
+import { decodeFrame, wsUrl, type CodecSupport, type PeerMessage, type QualityLevel, type ServerMessage } from '../lib/protocol';
 import { RemoteSocket } from '../lib/remoteSocket';
 import { createSessionMessageHandler, type SessionMessageContext } from '../lib/sessionMessages';
 import { createFrameStats, type FrameStatsState } from '../lib/stats';
@@ -106,6 +106,7 @@ export function useGatewaySession(context: GatewaySessionContext) {
     emptyStats: EMPTY_STATS,
   } = context;
 
+  const [codecSupport, setCodecSupport] = useState<CodecSupport | null>(null);
   const messageDisposer = useRef<(() => void) | null>(null);
   const clearSessionMessages = useCallback(() => {
     messageDisposer.current?.();
@@ -181,6 +182,7 @@ export function useGatewaySession(context: GatewaySessionContext) {
 
       const rawSupport = await probeCodecs();
       if (generation !== connectGeneration.current) return;
+      setCodecSupport(rawSupport);
       if (
         !rawSupport.vp8 &&
         !rawSupport.vp9 &&
@@ -481,5 +483,5 @@ export function useGatewaySession(context: GatewaySessionContext) {
     }
   }, [setStatusDetail]);
 
-  return { connectSession, disconnect, requestRestart, handleDismissError };
+  return { connectSession, disconnect, requestRestart, handleDismissError, codecSupport };
 }

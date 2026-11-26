@@ -59,6 +59,35 @@ export class RemoteAudio {
     })().catch(error => { this.fail('module', error); });
   }
 
+  private get isRunning(): boolean {
+    return this.context.state === 'running';
+  }
+
+  get suspended(): boolean {
+    return !this.closed && !this.isRunning;
+  }
+
+  /** Best-effort recovery after tab suspension or audio route interruption without failing the toggle. */
+  async tryResume(): Promise<boolean> {
+    if (this.closed) return false;
+    if (this.isRunning) return true;
+    if (this.resuming) {
+      await this.resuming;
+      return !this.closed && this.isRunning;
+    }
+    try {
+      await this.context.resume();
+    } catch {
+      return false;
+    }
+    if (this.closed || !this.isRunning) return false;
+    if (this.node && this.format) {
+      this.configure(this.format.sampleRate, this.format.channels);
+    }
+    this.pump();
+    return true;
+  }
+
   resume(): Promise<void> {
     if (this.closed) return Promise.resolve();
     if (this.resuming) return this.resuming;

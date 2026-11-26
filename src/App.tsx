@@ -285,6 +285,23 @@ export default function App() {
     return () => { audioRef.current?.close(); audioRef.current = null; };
   }, [phase, stopAudio]);
 
+  useEffect(() => {
+    if (phase !== 'live' || !audioEnabled) return;
+    const recoverAudio = () => {
+      if (document.visibilityState === 'hidden') return;
+      const player = audioRef.current;
+      if (player?.suspended) void player.tryResume();
+    };
+    document.addEventListener('visibilitychange', recoverAudio);
+    window.addEventListener('pointerdown', recoverAudio, true);
+    window.addEventListener('keydown', recoverAudio, true);
+    return () => {
+      document.removeEventListener('visibilitychange', recoverAudio);
+      window.removeEventListener('pointerdown', recoverAudio, true);
+      window.removeEventListener('keydown', recoverAudio, true);
+    };
+  }, [phase, audioEnabled]);
+
   const toggleAudio = async () => {
     if (audioRef.current) {
       stopAudio();

@@ -5,9 +5,12 @@ import { decodeClipboard } from '../../../shared/clipboard.ts';
 import { Buffer } from 'buffer';
 import { type ClientMessage, type CodecCaps, buildRefreshVideoMessage, buildVideoReceivedMessage, decodingPreferenceChanged, humanizeError, toHostMessage } from '../../../shared/control.ts';
 import { decodeMessage, encodeMessage } from '../../../shared/protos.ts';
-import { CODEC_VP8, encodeRdv1Frame, vp8KeyframeSize, encodedFrameIsKey, extractEncodedFrames } from '../../../shared/video.ts';
+import { CODEC_VP8, HEADER_LEN, encodeRdv1Frame, vp8KeyframeSize, encodedFrameIsKey, extractEncodedFrames } from '../../../shared/video.ts';
+import { GatewayVideoBuffer, VIDEO_RESUME_BYTES } from '../../../shared/videoBuffer.ts';
 import { CursorShapes, CursorPublisher } from '../../../shared/cursor.ts';
 import type { DataChannelStream } from './stream';
+
+const SEND_PRESSURE_BYTES = 64 * 1024;
 
 export interface NativeConnection {
   stream: DataChannelStream;
@@ -30,6 +33,8 @@ export function createNativeSession(
 ) {
   let state: 'live' | 'closed' = 'live';
   const cursorPublisher = new CursorPublisher(new CursorShapes(), media?.cursorIds === true);
+  const videoBuffer = new GatewayVideoBuffer();
+  let recoveryTimer: ReturnType<typeof setTimeout> | undefined;
   const hostConn = conn;
   let resolutionDisplay = 0;
   let sizes: { width: number; height: number }[] = [];
@@ -44,9 +49,22 @@ export function createNativeSession(
   const cleanup = (_sendClosedStatus = false) => {
     if (state === 'closed') return;
     state = 'closed';
+    clearTimeout(recoveryTimer);
+    recoveryTimer = undefined;
     cursorPublisher.clear();
     conn.stream.close();
     onClose();
+  };
+  const scheduleVideoRecovery = () => {
+    if (recoveryTimer || !videoBuffer.needsRefresh) return;
+    recoveryTimer = setTimeout(() => {
+      recoveryTimer = undefined;
+      if (state !== 'live' || !videoBuffer.needsRefresh) return;
+      if (videoBuffer.shouldRequestRefresh(conn.stream.queuedBytes, performance.now())) {
+        void conn.stream.sendRaw(encodeMessage(buildRefreshVideoMessage())).catch(fail);
+      }
+      scheduleVideoRecovery();
+    }, 250);
   };
   const fail = (error: unknown) => {
     sendJson({ type: 'status', state: 'error', ...errorPayload(error) });
@@ -213,6 +231,8 @@ export function createNativeSession(
           if (extracted) {
             const display = Math.max(0, Number(vf.display ?? 0));
             const nowMs = BigInt(Date.now());
+            const queuedBefore = conn.stream.queuedBytes;
+            let forwarded = 0;
             for (const f of extracted.frames) {
               const payload = f.data ? new Uint8Array(f.data) : new Uint8Array(0);
               const isKey = encodedFrameIsKey(extracted.codec, payload, f.key);
@@ -221,6 +241,10 @@ export function createNativeSession(
                 if (parsedSize) {
                   currentSize = parsedSize;
                 }
+              }
+              if (!videoBuffer.shouldForward(display, isKey, payload.byteLength + HEADER_LEN, conn.stream.queuedBytes)) {
+                scheduleVideoRecovery();
+                continue;
               }
               const pts = BigInt(f.pts ?? 0);
               const packet = encodeRdv1Frame({
@@ -234,11 +258,14 @@ export function createNativeSession(
                 data: payload,
               });
               sendBinary(packet);
+              forwarded++;
             }
             // RustDesk 1.5 QoS ACK once per message containing video frames (non-blocking)
-            void conn.stream
-              .sendRaw(encodeMessage(buildVideoReceivedMessage()))
-              .catch(fail);
+            if (forwarded > 0 && !videoBuffer.recovering && queuedBefore <= VIDEO_RESUME_BYTES) {
+              void conn.stream
+                .sendRaw(encodeMessage(buildVideoReceivedMessage()))
+                .catch(fail);
+            }
           }
         }
       }
@@ -261,6 +288,9 @@ export function createNativeSession(
     }
     if (parsed.type === 'disconnect') { cleanup(); return; }
     if (hostConn) {
+      if (parsed.type === 'mouse' && parsed.action === 'move' && hostConn.stream.sendQueueBytes > SEND_PRESSURE_BYTES) {
+        return;
+      }
       if (parsed.type === 'clipboard' && (!hostConn.clipboardAllowed || typeof parsed.text !== 'string')) return;
       if (parsed.type === 'privacy') {
         if (!permissions(hostConn).privacyAllowed || typeof parsed.enabled !== 'boolean') {

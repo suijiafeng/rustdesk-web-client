@@ -112,7 +112,8 @@ export function isH264AnnexBKeyframe(data: Uint8Array): boolean {
       }
       if (nalOffset !== -1 && nalOffset < data.length) {
         const nalType = data[nalOffset] & 0x1f;
-        if (nalType === 5 || nalType === 7) return true; // IDR slice (5) or SPS (7)
+        // Require an IDR slice (5); parameter sets (SPS/PPS) alone are not decodable frames.
+        if (nalType === 5) return true;
       }
     }
   }
@@ -165,6 +166,7 @@ export function isH265AnnexBKeyframe(data: Uint8Array): boolean {
 
 export function encodedFrameIsKey(codec: number, data: Uint8Array, declaredKey = false): boolean {
   return Boolean(declaredKey) ||
+    (codec === CODEC_VP8 && vp8KeyframeSize(data) !== null) ||
     (codec === CODEC_H264 && isH264AnnexBKeyframe(data)) ||
     (codec === CODEC_H265 && isH265AnnexBKeyframe(data)) ||
     (codec === CODEC_VP9 && isVp9Keyframe(data));

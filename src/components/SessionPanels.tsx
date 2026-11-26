@@ -127,7 +127,7 @@ export function SessionPanels({
   const { statsStore, decoderError } = video;
   const { sendText, sendChord, handleQuickKey } = keyboard;
   const { touchMode, handleToggleTouchMode } = pointer;
-  const { connectSession, disconnect, requestRestart, handleDismissError } = gateway;
+  const { connectSession, disconnect, requestRestart, handleDismissError, codecSupport } = gateway;
   const { phase, detail, connectionError, peer, password, setPassword, authRequired, handleSelectDevice, handleUpdateDisplayPrefs } = connection;
   const {
     send, display, setDisplay, resolutionOptions, quality, setQuality, targetFps, setTargetFps,
@@ -360,6 +360,7 @@ export function SessionPanels({
           customQuality={displayPrefs.customBitrate}
           targetFps={targetFps}
           preferredCodec={displayPrefs.codec}
+          codecSupport={codecSupport}
           privacyEnabled={privacyEnabled}
           privacyPending={privacyPending}
           onTogglePrivacy={() => {

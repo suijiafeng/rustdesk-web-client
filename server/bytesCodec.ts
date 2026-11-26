@@ -8,6 +8,8 @@ import { getRuntimeConfig } from './config.ts';
 export const MAX_FRAME_LENGTH = 16 * 1024 * 1024;
 export const MAX_RECEIVE_BYTES = MAX_FRAME_LENGTH * 2 + 8;
 export const MAX_QUEUED_FRAMES = 256;
+export const MAX_SEND_QUEUE_BYTES = 4 * 1024 * 1024;
+export const SEND_PRESSURE_BYTES = 64 * 1024;
 const RECEIVE_HIGH_BYTES = MAX_FRAME_LENGTH;
 const RECEIVE_LOW_BYTES = RECEIVE_HIGH_BYTES / 2;
 const RECEIVE_HIGH_FRAMES = MAX_QUEUED_FRAMES / 2;
@@ -450,9 +452,18 @@ export class EncryptedFramedStream {
     this.cipher = StreamCipher.fromNegotiated(key, isInitiator, transcript);
   }
 
+  get sendQueueBytes(): number {
+    return this.socket.writableLength;
+  }
+
   sendRaw(payload: Uint8Array): Promise<void> {
     if (this.closed || this.socket.destroyed) {
       return Promise.reject(this.fatalErr ?? new Error('host closed the connection'));
+    }
+    if (this.socket.writableLength + payload.byteLength > MAX_SEND_QUEUE_BYTES) {
+      const err = new Error('RustDesk send queue limit exceeded');
+      this.fail(err);
+      return Promise.reject(err);
     }
     const body = this.cipher ? this.cipher.seal(payload) : payload;
     const framed = encodeBytesFrame(body);

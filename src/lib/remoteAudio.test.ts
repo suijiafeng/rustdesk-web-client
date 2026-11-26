@@ -262,3 +262,28 @@ test('raw Opus bytes and legacy base64 share the bounded decoder path', async t 
   assert.equal(f.errors(), 1);
   assert.equal(f.context.closeCalls, 1);
 });
+
+test('tryResume recovers a suspended AudioContext without tearing down audio if autoplay blocks it', async t => {
+  const f = fixture(t);
+  await f.player.resume();
+  f.player.configure(48000, 2);
+  const initialDecoder = FakeDecoder.latest;
+  f.context.state = 'suspended';
+  assert.equal(f.player.suspended, true);
+
+  // Blocked background resume must fail softly without invoking onError or closing.
+  const originalResume = f.context.resume.bind(f.context);
+  f.context.resume = async () => { throw new Error('NotAllowedError'); };
+  assert.equal(await f.player.tryResume(), false);
+  assert.equal(f.errors(), 0);
+  assert.equal(f.context.closeCalls, 0);
+  assert.equal(f.player.suspended, true);
+
+  // Subsequent user-gesture resume succeeds and flushes stale decoder state.
+  f.context.resume = originalResume;
+  assert.equal(await f.player.tryResume(), true);
+  assert.equal(f.player.suspended, false);
+  assert.equal(initialDecoder.closeCalls, 1);
+  assert.notEqual(FakeDecoder.latest, initialDecoder);
+  assert.equal(f.errors(), 0);
+});

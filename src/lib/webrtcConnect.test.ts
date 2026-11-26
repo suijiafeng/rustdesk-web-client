@@ -476,3 +476,43 @@ test('WebRTC login preserves HostPermission.Audio denial before the session begi
   assert.ok(json.some(message => message.type === 'audioDenied'));
   session.close();
 });
+
+test('WebRTC session sheds congested video delta frames and droppable mouse moves', async t => {
+  const { VIDEO_QUEUE_LIMIT_BYTES } = await import('../../shared/videoBuffer.ts');
+  const f = fixture(t);
+  await f.openSignal(); await f.answer();
+  f.pc.channel.open(); f.identity();
+  f.pc.channel.receive(encodeMessage({ hash: { salt: 'salt', challenge: 'challenge' } }));
+  f.pc.channel.receive(encodeMessage({ login_response: { peer_info: { hostname: 'congested-peer' } } }));
+  await f.outcome;
+  const connected = f.connected(); assert.ok(connected);
+  const replies: Array<string | ArrayBuffer> = [];
+  const session = createNativeSession(connected, selectCodecs(), data => replies.push(data), () => {});
+  session.start();
+  await flush();
+
+  // Simulate inbound receive queue above VIDEO_QUEUE_LIMIT_BYTES while a delta video frame is processed.
+  Object.defineProperty(connected.stream, 'queuedBytes', { value: VIDEO_QUEUE_LIMIT_BYTES, configurable: true });
+  const sentBeforeVideo = f.pc.channel.sent.length;
+  f.pc.channel.receive(encodeMessage({ video_frame: { display: 0, h264s: { frames: [{ key: false, data: new Uint8Array(1024) }] } } }));
+  await flush();
+  assert.equal(replies.filter(v => v instanceof ArrayBuffer).length, 0, 'congested delta frame must be shed');
+  assert.equal(f.pc.channel.sent.length, sentBeforeVideo, 'video_received ACK must be suppressed while shedding');
+
+  // Once queue drains, keyframe resumes forwarding cleanly.
+  Object.defineProperty(connected.stream, 'queuedBytes', { value: 0, configurable: true });
+  f.pc.channel.receive(encodeMessage({ video_frame: { display: 0, h264s: { frames: [{ key: true, data: new Uint8Array(1024) }] } } }));
+  await flush();
+  assert.equal(replies.filter(v => v instanceof ArrayBuffer).length, 1);
+
+  // Under outbound send pressure, mouse moves are dropped while clicks still transmit.
+  Object.defineProperty(connected.stream, 'sendQueueBytes', { value: 128 * 1024, configurable: true });
+  const sentBeforeMouse = f.pc.channel.sent.length;
+  session.send({ type: 'mouse', action: 'move', x: 100, y: 100 });
+  await flush();
+  assert.equal(f.pc.channel.sent.length, sentBeforeMouse);
+  session.send({ type: 'mouse', action: 'down', button: 'left', x: 100, y: 100 });
+  await flush();
+  assert.ok(f.pc.channel.sent.length > sentBeforeMouse);
+  session.close();
+});

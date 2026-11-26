@@ -6,7 +6,7 @@ import { ArrowDownUp, Clipboard, Shield, Activity, Eye, Focus, LockKeyhole, LogO
 import { t, type I18nKey } from '../lib/i18n';
 import { formatConnectionError } from '../lib/errors';
 import type { SessionMenuProps } from './SessionMenu';
-import type { PreferredCodec } from '../lib/displayPrefs';
+import { formatCodecLabel, PREFERRED_CODEC_OPTIONS, type PreferredCodec } from '../lib/displayPrefs';
 import type { QualityLevel } from '../lib/protocol';
 const qualityNames = { low: 'qualityLow', balanced: 'qualityBalanced', best: 'qualityBest', custom: 'qualityCustom' } as const;
 
@@ -95,8 +95,16 @@ export function MobileSessionPanel(p: MobileSessionPanelProps) {
                 onChange={value => { p.onChangeQuality(p.quality, Number(value)); notify(label('requestSent')+' · '+value+' FPS'); }} /></label>
             <label className="tool-row"><Film /><span>{label('sessionCodecLabel')}</span>
               <AdaptiveSelect tone="remote" label={label('sessionCodecLabel')} testId="codec-select" value={p.preferredCodec}
-                options={['auto','h264','vp8','vp9','av1'].map(value => ({ value, label: value==='auto'?label('codecAuto'):value === 'h264' ? 'H.264' : value.toUpperCase() }))}
-                onChange={value => { p.onChangeQuality(p.quality,p.targetFps,value as PreferredCodec); notify(label('requestSent')+' · '+(value === 'auto' ? label('codecAuto') : value === 'h264' ? 'H.264' : value.toUpperCase())); }} /></label>
+                options={PREFERRED_CODEC_OPTIONS.map(value => ({
+                  value,
+                  label: formatCodecLabel(value, label('codecAuto')),
+                  disabled: value !== 'auto' && value !== p.preferredCodec && p.codecSupport?.[value] === false,
+                }))}
+                onChange={value => {
+                  const codec = value as PreferredCodec;
+                  p.onChangeQuality(p.quality, p.targetFps, codec);
+                  notify(label('requestSent') + ' · ' + formatCodecLabel(codec, label('codecAuto')));
+                }} /></label>
           </div>
         </div>
         {monitors.length > 1 && <div className="tool-group">

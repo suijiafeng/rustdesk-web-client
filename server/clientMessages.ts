@@ -12,6 +12,7 @@ import {
 } from '../shared/control.ts';
 import { encodeMessage } from '../shared/protos.ts';
 import type { HostMessage } from '../shared/protoTypes.ts';
+import { SEND_PRESSURE_BYTES } from './bytesCodec.ts';
 import { type ConnectedHost, connectDirect, connectViaId } from './rustdeskClient.ts';
 import type { GatewayConfig, SessionContext } from './sessionState.ts';
 import { canRestart, permissions, supportsModernDisplayControls } from '../shared/peer.ts';
@@ -244,7 +245,12 @@ export function createClientMessageHandler(context: ClientMessageContext) {
       pending!.delete(parsed.id);
       forwardToHost({ test_delay: probe });
     },
-    mouse: forwardControl,
+    mouse: parsed => {
+      if (parsed.action === 'move' && state.hostConn && state.hostConn.stream.sendQueueBytes > SEND_PRESSURE_BYTES) {
+        return;
+      }
+      forwardControl(parsed);
+    },
     key: forwardControl,
     text: forwardControl,
     followWindow: forwardControl,

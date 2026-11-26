@@ -33,6 +33,18 @@ export class DataChannelStream {
     channel.onerror = () => this.fail(new Error('WebRTC data channel failed'));
   }
 
+  get queuedBytes(): number {
+    return this.queueBytes;
+  }
+
+  get queuedMessages(): number {
+    return this.queue.length;
+  }
+
+  get sendQueueBytes(): number {
+    return this.pendingBytes + this.channel.bufferedAmount;
+  }
+
   fail(error: unknown): void {
     this.error = error instanceof Error ? error : new Error(String(error));
     this.close();

@@ -67,3 +67,18 @@ test('HEVC fallback recognizes random access slices and never treats parameter s
   assert.equal(encodedFrameIsKey(CODEC_AV1, Uint8Array.from([0x0a, 0]), false), false);
   assert.equal(encodedFrameIsKey(CODEC_AV1, Uint8Array.from([0x0a, 0]), true), true);
 });
+
+test('VP8 fallback detects uncompressed keyframe headers and H.264 requires an IDR slice', async () => {
+  const { encodedFrameIsKey, CODEC_VP8, CODEC_H264 } = await import('../shared/video.ts');
+  const vp8Key = Uint8Array.from([0x10, 0x00, 0x00, 0x9d, 0x01, 0x2a, 0x00, 0x05, 0xd0, 0x02]);
+  const vp8Inter = Uint8Array.from([0x11, 0x00, 0x00, 0x9d, 0x01, 0x2a, 0x00, 0x05, 0xd0, 0x02]);
+  assert.equal(encodedFrameIsKey(CODEC_VP8, vp8Key, false), true);
+  assert.equal(encodedFrameIsKey(CODEC_VP8, vp8Inter, false), false);
+
+  const h264SpsOnly = Uint8Array.from([0, 0, 0, 1, 0x67, 0x64, 0x00, 0x1f]);
+  const h264PpsOnly = Uint8Array.from([0, 0, 0, 1, 0x68, 0xee, 0x3c, 0x80]);
+  const h264Idr = Uint8Array.from([0, 0, 0, 1, 0x67, 0x64, 0, 0, 1, 0x65, 0x88, 0x84]);
+  assert.equal(encodedFrameIsKey(CODEC_H264, h264SpsOnly, false), false);
+  assert.equal(encodedFrameIsKey(CODEC_H264, h264PpsOnly, false), false);
+  assert.equal(encodedFrameIsKey(CODEC_H264, h264Idr, false), true);
+});

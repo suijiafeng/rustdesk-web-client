@@ -234,3 +234,14 @@ test('delayAck echoes a pending host TestDelay probe once and ignores unknown or
   await f.send({ type: 'delayAck', id: 1 });
   assert.equal(f.writes.length, 1, 'replayed delayAck IDs must not echo twice');
 });
+
+test('mouse moves are shed under host send-queue pressure while clicks still forward', async t => {
+  const { SEND_PRESSURE_BYTES } = await import('./bytesCodec.ts');
+  const f = fixture(t);
+  Object.defineProperty(f.conn.stream, 'sendQueueBytes', { value: SEND_PRESSURE_BYTES + 1, configurable: true });
+  await f.send({ type: 'mouse', action: 'move', x: 10, y: 20 });
+  assert.equal(f.writes.length, 0);
+  await f.send({ type: 'mouse', action: 'down', button: 'left', x: 10, y: 20 });
+  assert.equal(f.writes.length, 1);
+  assert.equal(f.writes[0].mouse_event?.x, 10);
+});
