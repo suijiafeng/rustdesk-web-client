@@ -51,9 +51,10 @@ function clampInt(val: unknown, min: number, max: number, fallback: number): num
   return Math.min(max, Math.max(min, Math.round(n)));
 }
 
-export function normalizeDisplayPrefs(raw: unknown): DisplayPrefs {
-  if (!raw || typeof raw !== 'object') {
-    return { ...DEFAULT_DISPLAY_PREFS };
+export function normalizeDisplayPrefs(raw: unknown, useTouchDefaults = false): DisplayPrefs {
+  const defaults = { ...DEFAULT_DISPLAY_PREFS, autoKeyboard: useTouchDefaults };
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return defaults;
   }
   const obj = raw as Record<string, unknown>;
   const viewStyle: DefaultViewStyle = obj.viewStyle === 'original' ? 'original' : 'fit';
@@ -91,7 +92,7 @@ export function normalizeDisplayPrefs(raw: unknown): DisplayPrefs {
     viewOnly: Boolean(obj.viewOnly),
     followWindow: obj.followWindow === true,
     enlargeCursor: obj.enlargeCursor === true,
-    autoKeyboard: obj.autoKeyboard === true,
+    autoKeyboard: typeof obj.autoKeyboard === 'boolean' ? obj.autoKeyboard : defaults.autoKeyboard,
     followRemoteCursor: obj.followRemoteCursor === true,
     showRemoteCursor:
       typeof obj.showRemoteCursor === 'boolean'
@@ -104,13 +105,13 @@ export function normalizeDisplayPrefs(raw: unknown): DisplayPrefs {
   };
 }
 
-export function loadDisplayPrefs(): DisplayPrefs {
+export function loadDisplayPrefs(useTouchDefaults = false): DisplayPrefs {
   try {
     const raw = window.localStorage.getItem(DISPLAY_PREFS_STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_DISPLAY_PREFS };
-    return normalizeDisplayPrefs(JSON.parse(raw));
+    if (!raw) return normalizeDisplayPrefs(null, useTouchDefaults);
+    return normalizeDisplayPrefs(JSON.parse(raw), useTouchDefaults);
   } catch {
-    return { ...DEFAULT_DISPLAY_PREFS };
+    return normalizeDisplayPrefs(null, useTouchDefaults);
   }
 }
 

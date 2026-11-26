@@ -43,11 +43,6 @@ export function DisplaySettings({
             options={[{ value: 'original', label: t(locale, 'viewStyleOriginal') }, { value: 'fit', label: t(locale, 'viewStyleFit') }]}
             onChange={value => onUpdateDisplayPrefs({ viewStyle: value as DisplayPrefs['viewStyle'] })} />
         </label>
-        <label className="settings-option-row"><span>{t(locale, 'defaultScrollStyle')}</span>
-          <AdaptiveSelect label={t(locale, 'defaultScrollStyle')} testId="settings-scroll" value={displayPrefs.scrollStyle}
-            options={[{ value: 'auto', label: t(locale, 'scrollStyleAuto') }, { value: 'scrollbar', label: t(locale, 'scrollStyleBar') }]}
-            onChange={value => onUpdateDisplayPrefs({ scrollStyle: value as DisplayPrefs['scrollStyle'] })} />
-        </label>
         <label className="settings-option-row"><span>{t(locale, 'defaultImageQuality')}</span>
           <AdaptiveSelect label={t(locale, 'defaultImageQuality')} testId="settings-quality" value={displayPrefs.qualityPreset}
             options={QUALITY_OPTIONS.map(opt => ({ value: opt.id, label: t(locale, opt.key) }))}

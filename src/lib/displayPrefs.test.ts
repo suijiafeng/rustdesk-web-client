@@ -52,6 +52,22 @@ test('legacy quality preferences migrate their effective FPS and retain a contin
   assert.equal(normalizeDisplayPrefs({ customBitrate: 100 }).customBitrate, 100);
 });
 
+test('touch defaults fill missing preferences without overriding explicit saved choices', () => {
+  assert.equal(normalizeDisplayPrefs(null, true).autoKeyboard, true);
+  assert.equal(normalizeDisplayPrefs({}, true).autoKeyboard, true);
+  assert.equal(normalizeDisplayPrefs({ autoKeyboard: 'false' }, true).autoKeyboard, true);
+  assert.equal(normalizeDisplayPrefs({ autoKeyboard: false }, true).autoKeyboard, false);
+  assert.equal(normalizeDisplayPrefs({ autoKeyboard: true }, false).autoKeyboard, true);
+  assert.equal(normalizeDisplayPrefs(null, false).autoKeyboard, false);
+  const choices = { autoKeyboard: false, showRemoteCursor: false, enlargeCursor: true, followRemoteCursor: true };
+  for (const mobile of [true, false]) {
+    const restored = normalizeDisplayPrefs(choices, mobile);
+    for (const [key, value] of Object.entries(choices)) assert.equal(restored[key as keyof typeof choices], value);
+  }
+  assert.equal(normalizeDisplayPrefs({ scrollStyle: 'scrollbar' }, true).scrollStyle, 'scrollbar',
+    'Hiding an unsupported UI control must not erase an older preference');
+});
+
 test('new FPS preferences remain independent of quality presets after persistence', () => {
   for (const qualityPreset of ['low', 'balanced', 'best', 'custom']) {
     const prefs = normalizeDisplayPrefs({ qualityPreset, targetFps: 25, customFps: 60 });

@@ -20,6 +20,8 @@ import type { ClientMessage } from '../lib/protocol';
 
 interface Options {
   isCoarseDevice: boolean;
+  touchMode: boolean;
+  setTouchMode: Dispatch<SetStateAction<boolean>>;
   isMobileViewport: boolean;
   isTouchLayout: boolean;
   remoteInput: boolean;
@@ -57,6 +59,8 @@ interface Options {
 
 export function useRemotePointer({
   isCoarseDevice,
+  touchMode,
+  setTouchMode,
   isMobileViewport,
   isTouchLayout,
   remoteInput,
@@ -88,7 +92,6 @@ export function useRemotePointer({
   toolbarPinned,
   setToolbarExpanded,
 }: Options) {
-  const [touchMode, setTouchMode] = useState<boolean>(isCoarseDevice);
   const [virtualCursorVisible, setVirtualCursorVisible] = useState(false);
 
   const touchGestureRef = useRef<TouchGestureState>(createTouchGestureState());

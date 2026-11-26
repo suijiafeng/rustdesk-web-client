@@ -28,6 +28,7 @@ interface SavedConnectionPrefs {
   serverKey?: string;
   forceRelay?: boolean;
   webRtcOptIn?: boolean;
+  touchMode?: boolean;
 }
 
 function loadSavedPrefs(): SavedConnectionPrefs {
@@ -65,6 +66,7 @@ export function usePreferences(isCoarseDevice: boolean) {
   );
   const [forceRelay, setForceRelay] = useState(Boolean(prefs.forceRelay));
   const [webRtcOptIn, setWebRtcOptIn] = useState(prefs.webRtcOptIn === true);
+  const [touchMode, setTouchMode] = useState(typeof prefs.touchMode === 'boolean' ? prefs.touchMode : isCoarseDevice);
 
   useEffect(() => {
     try {
@@ -79,12 +81,13 @@ export function usePreferences(isCoarseDevice: boolean) {
         serverKey,
         forceRelay,
         webRtcOptIn,
+        touchMode,
       };
       window.localStorage.setItem(PREFS_STORAGE_KEY, JSON.stringify(next));
     } catch {
       // Ignore storage quota or private-mode errors
     }
-  }, [mode, directIpEnabled, host, port, peerId, idServer, relayServer, serverKey, forceRelay, webRtcOptIn]);
+  }, [mode, directIpEnabled, host, port, peerId, idServer, relayServer, serverKey, forceRelay, webRtcOptIn, touchMode]);
 
   const handleToggleDirectIp = useCallback(() => {
     setDirectIpEnabled((prev) => {
@@ -145,19 +148,9 @@ export function usePreferences(isCoarseDevice: boolean) {
   }, [theme]);
 
   // Display preferences (persisted locally & wired end-to-end to view, quality, codec, and input)
-  const [displayPrefs, setDisplayPrefs] = useState<DisplayPrefs>(() => {
-    const saved = loadDisplayPrefs();
-    if (isCoarseDevice || window.innerWidth <= 768) {
-      return {
-        ...saved,
-        autoKeyboard: true,
-        showRemoteCursor: true,
-        enlargeCursor: false,
-        followRemoteCursor: false,
-      };
-    }
-    return saved;
-  });
+  const [displayPrefs, setDisplayPrefs] = useState<DisplayPrefs>(() =>
+    loadDisplayPrefs(isCoarseDevice || window.innerWidth <= 768),
+  );
   const displayPrefsRef = useRef(displayPrefs);
   displayPrefsRef.current = displayPrefs;
 
@@ -182,6 +175,8 @@ export function usePreferences(isCoarseDevice: boolean) {
     setForceRelay,
     webRtcOptIn,
     setWebRtcOptIn,
+    touchMode,
+    setTouchMode,
     handleToggleDirectIp,
     localePreference,
     locale,

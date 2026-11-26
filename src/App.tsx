@@ -364,6 +364,8 @@ export default function App() {
   const pointer = useRemotePointer({
     ...viewport,
     isCoarseDevice,
+    touchMode: preferences.touchMode,
+    setTouchMode: preferences.setTouchMode,
     isMobileViewport,
     isTouchLayout,
     remoteInput,
@@ -583,7 +585,6 @@ export default function App() {
       stageViewport={stageViewport}
       keyboardAvoiding={Boolean(keyboardLayout.viewport)}
       remoteInput={remoteInput}
-      scrollStyle={displayPrefs.scrollStyle}
       pointer={pointer}
       canvas={{ canvasRef, remoteW, remoteH, view }}
       cursor={{ cursorElRef, cursorCanvasRef, cursorShape, showRemoteCursor, enlargeCursor: displayPrefs.enlargeCursor }}

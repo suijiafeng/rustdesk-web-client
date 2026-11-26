@@ -9,7 +9,6 @@ interface RemoteStageProps {
   stageViewport: { left: number; top: number; width: number; height: number } | null;
   keyboardAvoiding: boolean;
   remoteInput: boolean;
-  scrollStyle: DisplayPrefs['scrollStyle'];
   pointer: {
     handlePointerDown: (event: React.PointerEvent<HTMLElement>) => void;
     handlePointerMove: (event: React.PointerEvent<HTMLElement>) => void;
@@ -40,7 +39,7 @@ interface RemoteStageProps {
 }
 
 export function RemoteStage({
-  stageRef, live, stageViewport, keyboardAvoiding, remoteInput, scrollStyle,
+  stageRef, live, stageViewport, keyboardAvoiding, remoteInput,
   pointer, canvas, cursor, capture, children,
 }: RemoteStageProps) {
   const { handlePointerDown, handlePointerMove, handlePointerUpOrCancel, handleLostPointerCapture } = pointer;
@@ -59,7 +58,6 @@ export function RemoteStage({
       data-testid="stage"
       data-keyboard-avoiding={keyboardAvoiding ? 'true' : undefined}
       data-remote-active={remoteInput ? 'true' : 'false'}
-      data-scroll-style={scrollStyle}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUpOrCancel}
