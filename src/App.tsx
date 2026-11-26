@@ -31,6 +31,8 @@ import {
 import {
   clearLegacyPasswordStorage,
   restoreDevicePasswords,
+  restoreGatewayToken,
+  persistGatewayToken,
   persistDevicePassword,
   forgetDevicePassword,
   PASSWORD_STORAGE_PREFIX,
@@ -208,7 +210,42 @@ export default function App() {
     typeof prefs.serverKey === 'string' ? prefs.serverKey : '',
   );
   const [forceRelay, setForceRelay] = useState(Boolean(prefs.forceRelay));
-  const [gatewayToken, setGatewayToken] = useState('');
+  const [savedGatewayToken, setSavedGatewayToken] = useState('');
+  const [temporaryGatewayToken, setTemporaryGatewayToken] = useState<string>();
+  const gatewayToken = temporaryGatewayToken ?? savedGatewayToken;
+  const [gatewayTokenReady, setGatewayTokenReady] = useState(false);
+  const [gatewayTokenRejected, setGatewayTokenRejected] = useState(false);
+  const [gatewayTokenReadFailed, setGatewayTokenReadFailed] = useState(false);
+  const gatewayTokenSaveRef = useRef(false);
+
+  useEffect(() => {
+    let active = true;
+    void restoreGatewayToken().then(token => {
+      if (active) setSavedGatewayToken(token);
+    }).catch(() => {
+      if (active) setGatewayTokenReadFailed(true);
+    }).finally(() => {
+      if (active) setGatewayTokenReady(true);
+    });
+    return () => { active = false; };
+  }, []);
+
+  const saveGatewayToken = useCallback(async (value: string) => {
+    if (gatewayTokenSaveRef.current) return false;
+    gatewayTokenSaveRef.current = true;
+    try {
+      await persistGatewayToken(value);
+      setSavedGatewayToken(value);
+      setTemporaryGatewayToken(undefined);
+      setGatewayTokenRejected(false);
+      setGatewayTokenReadFailed(false);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      gatewayTokenSaveRef.current = false;
+    }
+  }, []);
   const [authRequired, setAuthRequired] = useState(false);
   const [webRtcEnabled, setWebRtcEnabled] = useState(false);
   const [devices, setDevices] = useState<SavedDevice[]>(() => loadSavedDevices());
@@ -1170,6 +1207,7 @@ export default function App() {
       const targetPortStr = String(req?.port ?? port).trim() || '21118';
       const targetPort = Number(targetPortStr) || 21118;
       const targetPassword = req?.password ?? password;
+      const targetGatewayToken = req?.gatewayToken ?? gatewayToken;
       const shouldRemember = req?.remember ?? false;
       const targetDeviceKey = deviceKeyFor({
         mode: activeMode,
@@ -1287,7 +1325,7 @@ export default function App() {
               key: targetServerKey,
               forceRelay: targetForceRelay,
               password: targetPassword,
-              token: gatewayToken,
+              token: targetGatewayToken,
               codecs: support,
               quality: initialQuality,
               fps: initialFps,
@@ -1302,7 +1340,7 @@ export default function App() {
               host: targetHost,
               port: targetPort,
               password: targetPassword,
-              token: gatewayToken,
+              token: targetGatewayToken,
               codecs: support,
               quality: initialQuality,
               fps: initialFps,
@@ -1342,9 +1380,11 @@ export default function App() {
               reconnectRequest.current = {
                 mode: activeMode, peerId: targetPeerId, idServer: targetIdServer, relayServer: targetRelayServer,
                 serverKey: targetServerKey, forceRelay: targetForceRelay, host: targetHost, port: targetPortStr,
-                password: targetPassword, remember: shouldRemember,
+                password: targetPassword, remember: shouldRemember, gatewayToken: targetGatewayToken,
               };
               setRestartState(null);
+              setGatewayTokenRejected(false);
+              if (req?.gatewayToken !== undefined) setTemporaryGatewayToken(targetGatewayToken);
               phaseRef.current = 'live';
               setPhase('live');
               setConnectDialog(false);
@@ -1379,6 +1419,7 @@ export default function App() {
               }
               if (msg.detail && /token/i.test(msg.detail)) {
                 setAuthRequired(true);
+                setGatewayTokenRejected(true);
                 setStatusDetail('detailTokenError');
               } else if (msg.detail) {
                 setStatusDetail(null, msg.detail);
@@ -2986,7 +3027,7 @@ export default function App() {
       )}
 
       {passwordStorageFailed && <div className="restart-notice" role="alert">{t(locale, 'passwordStorageFailed')} <button onClick={() => setPasswordStorageFailed(false)}>OK</button></div>}
-      {showConnectSheet && passwordsReady && (
+      {showConnectSheet && passwordsReady && gatewayTokenReady && (
         <RustDeskShell
           locale={locale}
           localePreference={localePreference}
@@ -3008,7 +3049,10 @@ export default function App() {
           serverKey={serverKey}
           forceRelay={forceRelay}
           gatewayToken={gatewayToken}
-          authRequired={authRequired}
+          savedGatewayToken={savedGatewayToken}
+          gatewayTokenNeedsInput={authRequired && (!gatewayToken.trim() || gatewayTokenRejected)}
+          gatewayTokenReadFailed={gatewayTokenReadFailed}
+          onSaveGatewayToken={saveGatewayToken}
           detail={detail}
           decoderError={decoderError}
           touchMode={touchMode}
@@ -3025,7 +3069,6 @@ export default function App() {
             else if (field === 'idServer') setIdServer(val);
             else if (field === 'relayServer') setRelayServer(val);
             else if (field === 'serverKey') setServerKey(val);
-            else if (field === 'gatewayToken') setGatewayToken(val);
           }}
           onChangeForceRelay={setForceRelay}
           onClearSavedPassword={handleClearSavedPassword}

@@ -41,6 +41,7 @@ export function clearLegacyPasswordStorage(): void {
 }
 
 export const PASSWORD_STORAGE_PREFIX = 'rd_web_device_password_v1:';
+const GATEWAY_TOKEN_KEY = 'rd_web_gateway_token_v1';
 const SESSION_KEY = 'rd_web_session_credentials_v1';
 
 async function passwordEncryptionKey(): Promise<CryptoKey> {
@@ -74,10 +75,10 @@ function bytesFromBase64(value: string) {
   return Uint8Array.from(atob(value), char => char.charCodeAt(0));
 }
 
-async function decryptPasswordData(stored: string, key: CryptoKey, deviceKey?: string): Promise<unknown> {
+async function decryptCredential(stored: string, key: CryptoKey, context?: string): Promise<unknown> {
   const { iv, data } = JSON.parse(stored);
   const algorithm: AesGcmParams = { name: 'AES-GCM', iv: bytesFromBase64(iv) };
-  if (deviceKey !== undefined) algorithm.additionalData = new TextEncoder().encode(deviceKey);
+  if (context !== undefined) algorithm.additionalData = new TextEncoder().encode(context);
   const plain = await crypto.subtle.decrypt(algorithm, key, bytesFromBase64(data));
   return JSON.parse(new TextDecoder().decode(plain));
 }
@@ -94,12 +95,12 @@ export async function restoreDevicePasswords(): Promise<SavedPasswordMap> {
     const deviceKey = storageKey.slice(PASSWORD_STORAGE_PREFIX.length);
     const stored = window.localStorage.getItem(storageKey);
     if (!stored) continue;
-    const password = await decryptPasswordData(stored, key, deviceKey);
+    const password = await decryptCredential(stored, key, deviceKey);
     if (typeof password !== 'string') throw new Error('Invalid saved password');
     passwords[deviceKey] = password;
   }
   if (legacy) {
-    const saved = await decryptPasswordData(legacy, key);
+    const saved = await decryptCredential(legacy, key);
     if (!saved || Array.isArray(saved) || typeof saved !== 'object') throw new Error('Invalid saved passwords');
     for (const [deviceKey, password] of Object.entries(saved)) {
       if (typeof password !== 'string' || !password || passwords[deviceKey]) continue;
@@ -107,7 +108,7 @@ export async function restoreDevicePasswords(): Promise<SavedPasswordMap> {
       await persistDevicePassword(deviceKey, password, () => window.localStorage.getItem(storageKey) === null);
       const stored = window.localStorage.getItem(storageKey);
       if (!stored) continue;
-      const migrated = await decryptPasswordData(stored, key, deviceKey);
+      const migrated = await decryptCredential(stored, key, deviceKey);
       if (typeof migrated === 'string') passwords[deviceKey] = migrated;
     }
     forgetTabPasswords();
@@ -115,16 +116,37 @@ export async function restoreDevicePasswords(): Promise<SavedPasswordMap> {
   return passwords;
 }
 
-export async function persistDevicePassword(deviceKey: string, password: string, current: () => boolean) {
+async function encryptCredential(value: string, context: string): Promise<string> {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const encoder = new TextEncoder();
   const encrypted = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv, additionalData: encoder.encode(deviceKey) },
-    await passwordEncryptionKey(), encoder.encode(JSON.stringify(password)),
+    { name: 'AES-GCM', iv, additionalData: encoder.encode(context) },
+    await passwordEncryptionKey(), encoder.encode(JSON.stringify(value)),
   );
   const base64 = (bytes: Uint8Array) => btoa(Array.from(bytes, byte => String.fromCharCode(byte)).join(''));
-  if (current()) window.localStorage.setItem(PASSWORD_STORAGE_PREFIX + deviceKey,
-    JSON.stringify({ iv: base64(iv), data: base64(new Uint8Array(encrypted)) }));
+  return JSON.stringify({ iv: base64(iv), data: base64(new Uint8Array(encrypted)) });
+}
+
+export async function persistDevicePassword(deviceKey: string, password: string, current: () => boolean) {
+  const encrypted = await encryptCredential(password, deviceKey);
+  if (current()) window.localStorage.setItem(PASSWORD_STORAGE_PREFIX + deviceKey, encrypted);
+}
+
+export async function restoreGatewayToken(): Promise<string> {
+  const stored = window.localStorage.getItem(GATEWAY_TOKEN_KEY);
+  if (!stored) return '';
+  const token = await decryptCredential(stored, await passwordEncryptionKey(), GATEWAY_TOKEN_KEY);
+  if (typeof token !== 'string') throw new Error('Invalid saved gateway token');
+  return token;
+}
+
+export async function persistGatewayToken(token: string): Promise<void> {
+  if (!token) {
+    window.localStorage.removeItem(GATEWAY_TOKEN_KEY);
+    return;
+  }
+  const encrypted = await encryptCredential(token, GATEWAY_TOKEN_KEY);
+  window.localStorage.setItem(GATEWAY_TOKEN_KEY, encrypted);
 }
 
 export function forgetDevicePassword(deviceKey: string) {

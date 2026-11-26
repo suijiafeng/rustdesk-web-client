@@ -68,6 +68,13 @@ const mock = `if (location.protocol === 'http:') localStorage.setItem("rd_web_pr
   idServer: "localhost", peerId: new URLSearchParams(location.search).get('peer') ?? "123456789",
 }));
 window.sent = [];
+const tokenTest = new URLSearchParams(location.search).has('tokenTest');
+if (tokenTest) {
+  const browserFetch = window.fetch.bind(window);
+  window.fetch = (input, options) => input === '/api/health'
+    ? Promise.resolve(Response.json({ authRequired: true, webRtcEnabled: false }))
+    : browserFetch(input, options);
+}
 const BrowserSocket = window.WebSocket;
 window.WebSocket = class extends EventTarget {
   static OPEN = 1;
@@ -85,7 +92,7 @@ window.WebSocket = class extends EventTarget {
       gatewayVideo: { queuedBytes: 131072, droppedFrames: 42, recovering: true },
     }) }), 10);
     if (message.type === 'connect') setTimeout(() => {
-      if (new URLSearchParams(location.search).has('requireToken')) {
+      if (new URLSearchParams(location.search).has('requireToken') || (tokenTest && message.token !== 'test-gateway-token')) {
         this.onmessage?.({ data: JSON.stringify({ type: 'status', state: 'error', detail: 'gateway token required' }) });
         return;
       }
@@ -584,6 +591,61 @@ try {
   assert.equal(await evaluate(`sessionStorage.getItem('${legacyKey}')`), null);
   await evaluate(`localStorage.removeItem('${credentialPrefix + legacyPeer}')`);
   console.log('Remembered passwords: encrypted per device, restored without session storage, migrated, and cleared independently.');
+
+  const gatewayStorageKey = 'rd_web_gateway_token_v1';
+  const gatewayUrl = new URL(appUrl);
+  gatewayUrl.searchParams.set('tokenTest', '1');
+  gatewayUrl.searchParams.set('peer', '901234570');
+  const gatewaySettingsInput = select('settings-gateway-token');
+  const editGatewayToken = select('settings-gateway-token-edit');
+  const saveGatewayToken = select('settings-gateway-token-save');
+  async function openNetworkSettings() {
+    await until(select('mobile-open-settings'));
+    await evaluate(select('mobile-open-settings') + '.click()');
+    await until(select('settings-tab-network'));
+    await evaluate(select('settings-tab-network') + '.click()');
+    await until(editGatewayToken);
+  }
+  await evaluate(`localStorage.removeItem('${gatewayStorageKey}')`);
+  await cdp('Page.navigate', { url: gatewayUrl.href });
+  await openNetworkSettings();
+  assert.equal(await evaluate(gatewaySettingsInput), null);
+  await evaluate(editGatewayToken + '.click()');
+  await until(gatewaySettingsInput);
+  await evaluate(gatewaySettingsInput + '.focus()');
+  await cdp('Input.insertText', { text: 'test-gateway-token' });
+  await evaluate(saveGatewayToken + '.click()');
+  await until(gatewaySettingsInput + ' === null');
+  const encryptedToken = await evaluate(`localStorage.getItem('${gatewayStorageKey}')`);
+  assert.ok(JSON.parse(encryptedToken).iv && JSON.parse(encryptedToken).data);
+  assert.ok(!encryptedToken.includes('test-gateway-token'));
+  await cdp('Page.reload');
+  await until(select('connect'));
+  await evaluate(select('connect') + '.click()');
+  await until(select('password-confirm-connect'));
+  assert.equal(await evaluate(select('gateway-token')), null);
+  await evaluate(select('password-confirm-connect') + '.click()');
+  await until(`${select('stage')}.dataset.remoteActive === 'true'`);
+  assert.equal(await evaluate("window.sent.find(event => event.type === 'connect').token"), 'test-gateway-token');
+
+  await cdp('Page.reload');
+  await openNetworkSettings();
+  assert.equal(await evaluate(gatewaySettingsInput), null);
+  await evaluate(editGatewayToken + '.click()');
+  assert.equal(await evaluate(gatewaySettingsInput + '.value'), 'test-gateway-token');
+  await evaluate(gatewaySettingsInput + '.select()');
+  await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8 });
+  await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8 });
+  assert.equal(await evaluate(gatewaySettingsInput + '.value'), '');
+  await evaluate(saveGatewayToken + '.click()');
+  await until(gatewaySettingsInput + ' === null');
+  assert.equal(await evaluate(`localStorage.getItem('${gatewayStorageKey}')`), null);
+  await cdp('Page.reload');
+  await until(select('connect'));
+  await evaluate(select('connect') + '.click()');
+  await until(select('gateway-token'));
+  assert.equal(await evaluate(select('gateway-token') + '.value'), '');
+  console.log('Gateway token: hidden by default, encrypted and reused after reload, and prompts again after clearing.');
 } finally {
   socket.close();
   const closed = await fetch(`${debuggerUrl}/json/close/${tab.id}`);

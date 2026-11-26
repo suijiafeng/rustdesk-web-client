@@ -1,7 +1,7 @@
 import { Server, X } from 'lucide-react';
 import { t, type Locale } from '../../lib/i18n';
 
-export type ServerField = 'idServer' | 'relayServer' | 'serverKey' | 'gatewayToken';
+export type ServerField = 'idServer' | 'relayServer' | 'serverKey';
 
 interface IdServerModalProps {
   locale: Locale;
@@ -9,8 +9,6 @@ interface IdServerModalProps {
   relayServer: string;
   serverKey: string;
   forceRelay: boolean;
-  gatewayToken: string;
-  authRequired: boolean;
   idServerError: boolean;
   onChangeField: (field: ServerField, value: string) => void;
   onChangeForceRelay: (checked: boolean) => void;
@@ -24,8 +22,6 @@ export function IdServerModal({
   relayServer,
   serverKey,
   forceRelay,
-  gatewayToken,
-  authRequired,
   idServerError,
   onChangeField,
   onChangeForceRelay,
@@ -125,20 +121,6 @@ export function IdServerModal({
             <span>{t(locale, 'forceRelay')}</span>
           </label>
 
-          {authRequired && (
-            <label className="flex flex-col gap-1 text-xs font-medium text-[var(--ink-soft)]">
-              <span>{t(locale, 'gatewayToken')}</span>
-              <input
-                type="password"
-                className="rd-input"
-                data-testid="gateway-token"
-                value={gatewayToken}
-                autoComplete="off"
-                placeholder={t(locale, 'gatewayTokenPlaceholder')}
-                onChange={(e) => onChangeField('gatewayToken', e.target.value)}
-              />
-            </label>
-          )}
         </div>
 
         <div className="flex items-center justify-end gap-2 mt-4">
