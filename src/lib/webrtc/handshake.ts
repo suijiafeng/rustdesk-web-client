@@ -55,7 +55,7 @@ export async function loginWebRtc(
     stream, route: 'webrtc', encrypted: true, peerInfo: {}, username: peerId,
     privacyAllowed: true, clipboardAllowed: true, restartAllowed: true,
   };
-  const option = buildLoginOptions(codecs, request.quality, request.fps, request.codec, request.customQuality);
+  const option = buildLoginOptions(codecs, request.quality, request.fps, request.codec, request.customQuality, request.lockAfterSessionEnd);
   const deadline = Date.now() + 20_000;
   let submitted = false;
   try {

@@ -46,6 +46,7 @@ export type ClientMessage =
       customQuality?: number;
       fps?: number;
       codec?: string;
+      lockAfterSessionEnd?: boolean;
     }
   | {
       type: 'mouse';
@@ -74,6 +75,7 @@ export type ClientMessage =
   | { type: 'restart' }
   | { type: 'audio'; enabled: boolean }
   | { type: 'followWindow'; enabled: boolean }
+  | { type: 'lockAfterSessionEnd'; enabled: boolean }
   | {
       type: 'switchDisplay';
       display?: number;
@@ -256,6 +258,7 @@ export function buildLoginOptions(
   fps?: number,
   preferCodec?: string,
   customQuality?: number,
+  lockAfterSessionEnd = false,
 ): Record<string, unknown> {
   const customFps =
     typeof fps === 'number' && Number.isFinite(fps) && fps >= 5 && fps <= 120
@@ -266,6 +269,7 @@ export function buildLoginOptions(
     supported_decoding: buildSupportedDecoding(codecs, preferCodec),
     custom_fps: customFps,
     ...buildQualityOptions(quality, customQuality, ImageQualityValues.Balanced),
+    lock_after_session_end: lockAfterSessionEnd === true ? BoolOptionValues.Yes : BoolOptionValues.No,
     disable_audio: BoolOptionValues.Yes,
     show_remote_cursor: BoolOptionValues.Yes,
   };
@@ -383,6 +387,11 @@ export function toHostMessage(
 
     case 'refresh': {
       return buildRefreshVideoMessage();
+    }
+
+    case 'lockAfterSessionEnd': {
+      if (typeof msg.enabled !== 'boolean') return null;
+      return { misc: { option: { lock_after_session_end: msg.enabled ? BoolOptionValues.Yes : BoolOptionValues.No } } };
     }
 
     case 'quality': {

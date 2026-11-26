@@ -99,7 +99,7 @@ class FakeSignal {
 
 async function flush() { for (let index = 0; index < 16; index++) await Promise.resolve(); }
 
-function fixture(t: TestContext, quality: Partial<typeof request> & { quality?: string; customQuality?: number; fps?: number } = {}) {
+function fixture(t: TestContext, quality: Partial<typeof request> & { quality?: string; customQuality?: number; fps?: number; lockAfterSessionEnd?: boolean } = {}) {
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
   const descriptors = new Map(['RTCPeerConnection', 'WebSocket'].map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
   Object.defineProperty(globalThis, 'RTCPeerConnection', { value: FakePeer, configurable: true });
@@ -312,7 +312,7 @@ test('a rejected password keeps WebRtcLoginError so gateway fallback cannot subm
 });
 
 test('WebRTC forwards custom quality in login and live updates without changing an independent FPS', async t => {
-  const f = fixture(t, { quality: 'custom', customQuality: 100, fps: 25 });
+  const f = fixture(t, { quality: 'custom', customQuality: 100, fps: 25, lockAfterSessionEnd: true });
   await f.openSignal();
   await f.answer();
   f.pc.channel.open();
@@ -327,12 +327,16 @@ test('WebRTC forwards custom quality in login and live updates without changing 
   assert.equal(login.option.image_quality ?? 0, 0);
   assert.equal(login.option.custom_image_quality, 50 * 256);
   assert.equal(login.option.custom_fps, 25);
+  assert.equal(login.option.lock_after_session_end, 2);
 
   const replies: string[] = [];
   const session = createNativeSession(connected, selectCodecs(), value => {
     if (typeof value === 'string') replies.push(value);
   }, () => {});
   session.start();
+  session.send({ type: 'lockAfterSessionEnd', enabled: false });
+  await flush();
+  assert.equal(messages().at(-1)!.misc.option.lock_after_session_end, 1);
   session.send({ type: 'quality', quality: 'custom', customQuality: 200, fps: 25 });
   await flush();
   assert.equal(messages().at(-1)!.misc.option.custom_image_quality, 100 * 256);

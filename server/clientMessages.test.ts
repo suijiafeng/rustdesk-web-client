@@ -169,3 +169,17 @@ test('continuous quality updates preserve FPS, switch back to presets and reject
   assert.match(String(f.replies.at(-1)?.message), /even percentage/);
   assert.deepEqual(f.closed, []);
 });
+
+
+test('session-end lock settings reach the host before disconnect and reject non-boolean values', async t => {
+  const f = fixture(t);
+  await f.send({ type: 'lockAfterSessionEnd', enabled: true });
+  assert.equal(f.writes[0].misc.option.lock_after_session_end, BoolOptionValues.Yes);
+  await f.send({ type: 'lockAfterSessionEnd', enabled: false });
+  assert.equal(f.writes[1].misc.option.lock_after_session_end, BoolOptionValues.No);
+  await f.send({ type: 'lockAfterSessionEnd', enabled: 'true' });
+  assert.equal(f.writes.length, 2);
+  await f.send({ type: 'disconnect' });
+  assert.deepEqual(f.closed, [true]);
+  assert.equal(f.writes.length, 2, 'disconnect does not race a final synthetic LockScreen key');
+});

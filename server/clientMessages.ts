@@ -123,6 +123,7 @@ export function createClientMessageHandler(context: ClientMessageContext) {
                   forceRelay: Boolean(parsed.forceRelay),
                   quality: parsed.quality,
                   customQuality: parsed.customQuality,
+                  lockAfterSessionEnd: parsed.lockAfterSessionEnd === true,
                   fps: parsed.fps,
                   preferCodec: parsed.codec,
                 },
@@ -136,6 +137,7 @@ export function createClientMessageHandler(context: ClientMessageContext) {
                   password: parsed.password ?? '',
                   quality: parsed.quality,
                   customQuality: parsed.customQuality,
+                  lockAfterSessionEnd: parsed.lockAfterSessionEnd === true,
                   fps: parsed.fps,
                   preferCodec: parsed.codec,
                 },
@@ -234,6 +236,7 @@ export function createClientMessageHandler(context: ClientMessageContext) {
     key: forwardControl,
     text: forwardControl,
     followWindow: forwardControl,
+    lockAfterSessionEnd: forwardControl,
     switchDisplay: forwardControl,
     refresh: forwardControl,
   };

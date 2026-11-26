@@ -534,6 +534,10 @@ export default function App() {
             fps: nextFps, codec: next.codec });
         }
 
+        if (patch.lockAfterSessionEnd !== undefined) {
+          send({ type: 'lockAfterSessionEnd', enabled: next.lockAfterSessionEnd });
+        }
+
         return next;
       });
     },

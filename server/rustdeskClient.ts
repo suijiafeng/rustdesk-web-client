@@ -37,6 +37,7 @@ export interface DirectTarget {
   password: string;
   quality?: string;
   customQuality?: number;
+  lockAfterSessionEnd?: boolean;
   fps?: number;
   preferCodec?: string;
 }
@@ -50,6 +51,7 @@ export interface IdTarget {
   forceRelay: boolean;
   quality?: string;
   customQuality?: number;
+  lockAfterSessionEnd?: boolean;
   fps?: number;
   preferCodec?: string;
 }
@@ -78,8 +80,9 @@ async function loginHost(
   fps?: number,
   preferCodec?: string,
   customQuality?: number,
+  lockAfterSessionEnd?: boolean,
 ): Promise<ConnectedHost> {
-  const loginOption = buildLoginOptions(codecs, quality, fps, preferCodec, customQuality);
+  const loginOption = buildLoginOptions(codecs, quality, fps, preferCodec, customQuality, lockAfterSessionEnd);
   const loginReq = {
     login_request: {
       username,
@@ -175,6 +178,7 @@ export async function connectDirect(
       target.fps,
       target.preferCodec,
       target.customQuality,
+      target.lockAfterSessionEnd,
     );
   } catch (err) {
     stream.close();
@@ -457,6 +461,7 @@ export async function connectViaId(
           target.fps,
           target.preferCodec,
           target.customQuality,
+          target.lockAfterSessionEnd,
         );
       }
 
@@ -503,6 +508,7 @@ export async function connectViaId(
           target.fps,
           target.preferCodec,
           target.customQuality,
+          target.lockAfterSessionEnd,
         );
       }
     }

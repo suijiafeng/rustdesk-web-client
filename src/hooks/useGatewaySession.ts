@@ -257,6 +257,7 @@ export function useGatewaySession(context: GatewaySessionContext) {
               codecs: support,
               quality: initialQuality,
               customQuality,
+              lockAfterSessionEnd: displayPrefsRef.current.lockAfterSessionEnd,
               fps: initialFps,
               codec: preferredCodec,
             }),
@@ -273,6 +274,7 @@ export function useGatewaySession(context: GatewaySessionContext) {
               codecs: support,
               quality: initialQuality,
               customQuality,
+              lockAfterSessionEnd: displayPrefsRef.current.lockAfterSessionEnd,
               fps: initialFps,
               codec: preferredCodec,
             }),
@@ -426,10 +428,6 @@ export function useGatewaySession(context: GatewaySessionContext) {
     setRestartState(null);
     finishPendingClick();
     clearLongPress();
-    if (phaseRef.current === 'live' && displayPrefsRef.current.lockAfterSessionEnd) {
-      send({ type: 'key', action: 'down', control: 'LockScreen' });
-      send({ type: 'key', action: 'up', control: 'LockScreen' });
-    }
     send({ type: 'disconnect' });
     if (wsRef.current) {
       wsRef.current.onclose = null;

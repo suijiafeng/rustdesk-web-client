@@ -129,7 +129,7 @@ async function routingFixture(t: TestContext, options: {
     get relayRequests() { return relayRequests; },
     get requestedForceRelay() { return requestedForceRelay; },
     get directSocket() { return routeSockets.direct; },
-    connect(forceRelay = false, quality: { quality?: string; customQuality?: number; fps?: number } = {}) {
+    connect(forceRelay = false, quality: { quality?: string; customQuality?: number; fps?: number; lockAfterSessionEnd?: boolean } = {}) {
       if (options.directIp) return connectDirect({
         host: '127.0.0.1', port: (direct.address() as net.AddressInfo).port, password, ...quality,
       }, selectCodecs({ vp8: true, reported: true }), controller.signal);
@@ -142,14 +142,15 @@ async function routingFixture(t: TestContext, options: {
   };
 }
 
-test('custom quality reaches login over ID direct, relay and direct-IP routes', { timeout: 5_000 }, async t => {
+test('custom quality and session-end locking reach login over ID direct, relay and direct-IP routes', { timeout: 5_000 }, async t => {
   for (const mode of ['id-direct', 'id-relay', 'direct-ip']) await t.test(mode, async t => {
     const fixture = await routingFixture(t, { directIp: mode === 'direct-ip' });
-    const connected = await fixture.connect(mode === 'id-relay', { quality: 'custom', customQuality: 120, fps: 25 });
+    const connected = await fixture.connect(mode === 'id-relay', { quality: 'custom', customQuality: 120, fps: 25, lockAfterSessionEnd: true });
     const options = fixture.loginOptions[connected.route]!;
     assert.equal(options.image_quality ?? 0, 0);
     assert.equal(options.custom_image_quality, 60 * 256);
     assert.equal(options.custom_fps, 25);
+    assert.equal(options.lock_after_session_end, 2);
     connected.stream.close();
   });
 });

@@ -130,6 +130,7 @@ export type ClientMessage =
       codecs: CodecSupport;
       quality?: QualityLevel;
       customQuality?: number;
+      lockAfterSessionEnd?: boolean;
       fps?: number;
       codec?: string;
     }
@@ -151,6 +152,7 @@ export type ClientMessage =
   | { type: 'text'; text: string }
   | { type: 'clipboard'; text: string }
   | { type: 'followWindow'; enabled: boolean }
+  | { type: 'lockAfterSessionEnd'; enabled: boolean }
   | { type: 'switchDisplay'; display: number }
   | { type: 'refresh' }
   | { type: 'quality'; quality: QualityLevel; customQuality?: number; fps: number; codec?: string }
