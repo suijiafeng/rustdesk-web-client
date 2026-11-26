@@ -271,7 +271,7 @@ try {
   const functionRow = select('soft-function-row');
   const operationRow = select('soft-operation-row');
   assert.equal(await evaluate(`${operationRow}.getBoundingClientRect().top - ${functionRow}.getBoundingClientRect().bottom`), 4);
-  assert.equal(await evaluate(`getComputedStyle(${functionRow}).backgroundColor`), 'rgba(0, 0, 0, 0)');
+  assert.equal(await css(functionRow, 'backgroundColor'), 'rgb(34, 37, 43)');
   await until(`getComputedStyle(${select('soft-mod-ctrl')}).borderColor === 'rgb(100, 117, 138)'`);
   await until(`getComputedStyle(${select('soft-mod-ctrl')}).backgroundColor === 'rgb(48, 53, 60)'`);
   assert.equal(await css(select('soft-shortcut-toggle'), 'backgroundColor'), 'rgb(48, 53, 60)');
@@ -306,7 +306,8 @@ try {
   const letterA = `${virtualKeyboard}.querySelector('[data-key-feedback="letter-a"]')`;
   await setSystemTheme('light');
   const ctrl = select('soft-mod-ctrl');
-  assert.equal(await css(functionRow, 'backgroundColor'), 'rgba(0, 0, 0, 0)');
+  assert.equal(await css(functionRow, 'backgroundColor'), 'rgb(242, 245, 249)');
+  assert.equal(await evaluate(`${operationRow}.getBoundingClientRect().top - ${functionRow}.getBoundingClientRect().bottom`), 4);
   await until(`getComputedStyle(${ctrl}).backgroundColor === 'rgb(252, 253, 255)'`);
   assert.equal(await css(ctrl, 'color'), 'rgb(23, 44, 73)');
   assert.equal(await css(select('soft-shortcut-toggle'), 'backgroundColor'), 'rgb(252, 253, 255)');

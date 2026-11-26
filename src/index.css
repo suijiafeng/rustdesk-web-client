@@ -566,15 +566,16 @@ button:focus-visible {
   min-width: 0;
   gap: 5px;
   padding-inline: max(5px, env(safe-area-inset-left, 0px)) max(5px, env(safe-area-inset-right, 0px));
+  background: var(--remote-toolbar-surface);
 }
 
 .soft-function-row {
   gap: 6px;
+  box-shadow: inset 0 1px var(--remote-line);
 }
 
 .soft-operation-row {
   justify-content: space-between;
-  background: var(--remote-toolbar-surface);
   border-top: 1px solid var(--remote-line);
 }
 
