@@ -109,7 +109,7 @@ export default function App() {
   }, []);
 
   const video = useVideoPipeline({ phase, send });
-  const { stats, decoderRef, sizeRef } = video;
+  const { statsStore, videoLayout, decoderRef, sizeRef } = video;
   const [rtt, setRtt] = useState(0);
   const [gatewayVideo, setGatewayVideo] = useState<Extract<ServerMessage, { type: 'pong' }>['gatewayVideo']>();
   const [quality, setQuality] = useState<QualityLevel>(displayPrefs.qualityPreset);
@@ -226,7 +226,7 @@ export default function App() {
     softKeyboardMode,
     stageRef,
     sizeRef,
-    stats,
+    stats: videoLayout,
     cursorRef,
     lastInputPointRef,
     followCursorRef,
@@ -393,32 +393,37 @@ export default function App() {
 
   const { touchMode, virtualCursorVisible, touchGestureRef, moveRafRef, finishPendingClick, clearLongPress } = pointer;
 
-  // Expose window.__rd and window.__rdView on every render
+  // Keep diagnostics current without making telemetry rerender the desktop.
   useEffect(() => {
-    window.__rd = {
-      state: phase,
-      codec: stats.codec,
-      width: stats.width,
-      height: stats.height,
-      fps: stats.fps,
-      delayMs: rtt || stats.delayMs,
-      bitrate: stats.bitrate,
-      decoded: stats.decoded,
-      cursorX: Math.round(cursorRef.current.x),
-      cursorY: Math.round(cursorRef.current.y),
-      touchMode,
-      gesturePhase: touchGestureRef.current.phase,
-      activePointers: touchGestureRef.current.pointers.size,
+    const update = () => {
+      const stats = statsStore.getSnapshot();
+      window.__rd = {
+        state: phase,
+        codec: stats.codec,
+        width: stats.width,
+        height: stats.height,
+        fps: stats.fps,
+        delayMs: rtt || stats.delayMs,
+        bitrate: stats.bitrate,
+        decoded: stats.decoded,
+        cursorX: Math.round(cursorRef.current.x),
+        cursorY: Math.round(cursorRef.current.y),
+        touchMode,
+        gesturePhase: touchGestureRef.current.phase,
+        activePointers: touchGestureRef.current.pointers.size,
+      };
+      window.__rdView = {
+        scale: view.scale,
+        panX: view.panX,
+        panY: view.panY,
+        width: box.w,
+        height: box.h,
+      };
+      window.__rdDiag = diagSummary;
     };
-    window.__rdView = {
-      scale: view.scale,
-      panX: view.panX,
-      panY: view.panY,
-      width: box.w,
-      height: box.h,
-    };
-    window.__rdDiag = diagSummary;
-  }, [phase, stats, rtt, touchMode, view.scale, view.panX, view.panY, box.w, box.h, diagSummary]);
+    update();
+    return statsStore.subscribe(update);
+  }, [phase, statsStore, rtt, touchMode, view.scale, view.panX, view.panY, box.w, box.h, diagSummary]);
 
   const resetDiagnostics = useCallback(() => {
     diagStateRef.current = createDiagnosticsState();

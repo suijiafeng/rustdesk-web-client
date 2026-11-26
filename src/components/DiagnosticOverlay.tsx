@@ -3,10 +3,10 @@ import { ChevronDown, ChevronUp, LockKeyhole, X } from 'lucide-react';
 import type { DiagnosticsSummary } from '../lib/diagnostics';
 import { t, type Locale } from '../lib/i18n';
 import { formatBitrate, type GatewayVideoStats } from '../lib/protocol';
-import type { SessionStats } from './SessionMenu';
+import { useSessionStats, type SessionStatsStore } from '../lib/sessionStats';
 
 interface DiagnosticOverlayProps {
-  stats: SessionStats;
+  statsStore: SessionStatsStore;
   locale: Locale;
   summary: DiagnosticsSummary;
   routeLabel: string;
@@ -63,8 +63,9 @@ function TrendChart({ samples, metric, floor, label }: {
 }
 
 export function DiagnosticOverlay({
-  locale, stats, summary, routeLabel, browserDirect, encryptionLabel, gatewayVideo, onClose,
+  locale, statsStore, summary, routeLabel, browserDirect, encryptionLabel, gatewayVideo, onClose,
 }: DiagnosticOverlayProps) {
+  const stats = useSessionStats(statsStore);
   const [collapsed, setCollapsed] = useState(false);
   const [samples, setSamples] = useState<TrendSample[]>([]);
   const latest = useRef({ stats, summary });

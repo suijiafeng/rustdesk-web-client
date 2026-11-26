@@ -17,22 +17,8 @@ import { type PeerMessage, type QualityLevel } from '../lib/protocol';
 import type { ConnectionPhase } from './RustDeskShell';
 
 import type { PreferredCodec } from '../lib/displayPrefs';
-import type { StreamActivityState } from '../lib/stats';
-
-export interface SessionStats {
-  codec: string;
-  width: number;
-  height: number;
-  fps: number;
-  rxFps: number;
-  renderFps: number;
-  decodeQueueSize: number;
-  delayMs: number;
-  bitrate: number;
-  decoded: number;
-  dropped: number;
-  streamState: StreamActivityState;
-}
+import { useSessionStats, type SessionStats, type SessionStatsStore } from '../lib/sessionStats';
+export type { SessionStats } from '../lib/sessionStats';
 
 type MenuTab = 'control' | 'display';
 
@@ -78,9 +64,10 @@ export interface SessionMenuProps {
   onChangeQuality: (quality: QualityLevel, fps: number, codec?: PreferredCodec, customQuality?: number) => void;
 }
 
-export function SessionMenu(props: MobileSessionPanelProps) {
-  if (props.mobileLayout) return <MobileSessionPanel key={props.mobilePanel} {...props} />;
-  return <DesktopSessionMenu {...props} />;
+export function SessionMenu({ statsStore, ...props }: Omit<MobileSessionPanelProps, 'stats'> & { statsStore: SessionStatsStore }) {
+  const stats = useSessionStats(statsStore);
+  if (props.mobileLayout) return <MobileSessionPanel key={props.mobilePanel} {...props} stats={stats} />;
+  return <DesktopSessionMenu {...props} stats={stats} />;
 }
 
 function DesktopSessionMenu({

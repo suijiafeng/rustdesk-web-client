@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { SessionStats } from '../components/SessionMenu';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { createSessionStatsStore } from '../lib/sessionStats';
 import type { ConnectionPhase } from '../types';
 import { RemoteDecoder, webCodecsStatus } from '../lib/decoder';
 import type { ClientMessage } from '../lib/protocol';
@@ -8,20 +8,7 @@ import {
   type FrameStatsState,
 } from '../lib/stats';
 
-export const EMPTY_STATS: SessionStats = {
-  codec: '—',
-  width: 0,
-  height: 0,
-  fps: 0,
-  rxFps: 0,
-  renderFps: 0,
-  decodeQueueSize: 0,
-  delayMs: 0,
-  bitrate: 0,
-  decoded: 0,
-  dropped: 0,
-  streamState: 'waiting',
-};
+export { EMPTY_STATS } from '../lib/sessionStats';
 
 interface Options {
   phase: ConnectionPhase;
@@ -30,7 +17,9 @@ interface Options {
 
 export function useVideoPipeline({ phase, send }: Options) {
   const initialWebCodecs = webCodecsStatus();
-  const [stats, setStats] = useState<SessionStats>(EMPTY_STATS);
+  const [statsStore] = useState(createSessionStatsStore);
+  const { setStats } = statsStore;
+  const videoLayout = useSyncExternalStore(statsStore.subscribeLayout, statsStore.getLayoutSnapshot, statsStore.getLayoutSnapshot);
   const [decoderError, setDecoderError] = useState(initialWebCodecs.ok ? '' : initialWebCodecs.reason);
   const decoderRef = useRef<RemoteDecoder | null>(null);
   const sizeRef = useRef({ width: 1280, height: 720 });
@@ -147,7 +136,7 @@ export function useVideoPipeline({ phase, send }: Options) {
   }, [phase, publishStatsSnapshot]);
 
   return {
-    stats, setStats, decoderError, setDecoderError,
+    statsStore, videoLayout, setStats, decoderError, setDecoderError,
     decoderRef, sizeRef, frameStatsRef, statAccRef,
     ensureDecoder, noteFrame,
   };

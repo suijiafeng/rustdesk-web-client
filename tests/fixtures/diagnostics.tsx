@@ -2,7 +2,7 @@ import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
 import { DiagnosticOverlay } from '../../src/components/DiagnosticOverlay';
 import { computeDiagnosticsSummary, createDiagnosticsState } from '../../src/lib/diagnostics';
-import { EMPTY_STATS } from '../../src/hooks/useVideoPipeline';
+import { EMPTY_STATS, createSessionStatsStore } from '../../src/lib/sessionStats';
 import '../../src/index.css';
 
 const result = { status: 'running', error: '', checks: [] as string[], violations: [] as string[] };
@@ -31,6 +31,7 @@ let dark = false;
 let browserDirect = false;
 let pointerEvents = 0;
 let stats = { ...EMPTY_STATS };
+const statsStore = createSessionStatsStore();
 let summary = computeDiagnosticsSummary(createDiagnosticsState(), now);
 const select = (id: string) => document.querySelector<HTMLElement>(`[data-testid="${id}"]`)!;
 const check = (value: unknown, message: string) => { if (!value) throw new Error(message); };
@@ -38,11 +39,12 @@ const value = (metric: string) => select(`diag-value-${metric}`).textContent;
 const line = (metric: string) => select(`diag-chart-${metric}`).querySelector('.diag-chart-line')!.getAttribute('d')!;
 
 function render() {
+  statsStore.setStats(stats);
   flushSync(() => root.render(
     <section data-testid="fixture-stage" style={{ position: 'fixed', inset: 0 }}
       onPointerDown={() => { pointerEvents++; }} onPointerUp={() => { pointerEvents++; }}>
       <canvas data-testid="fixture-desktop" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
-      {open && <DiagnosticOverlay locale="zh" stats={stats} summary={summary}
+      {open && <DiagnosticOverlay locale="zh" statsStore={statsStore} summary={summary}
         routeLabel={browserDirect ? 'WebRTC 浏览器直连' : '网关中继'} browserDirect={browserDirect}
         encryptionLabel="已加密" onClose={() => { open = false; render(); }} />}
     </section>,

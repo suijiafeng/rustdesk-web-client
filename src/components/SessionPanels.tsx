@@ -124,7 +124,7 @@ export function SessionPanels({
     handleToggleFavorite, handleRemoveDevice,
   } = savedDevices;
   const { pageZoomed, resetPageZoom, box, viewMode, setViewMode, setPan, setZoom, remoteW, remoteH, keyboardLayout, visibleViewport } = viewport;
-  const { stats, decoderError } = video;
+  const { statsStore, decoderError } = video;
   const { sendText, sendChord, handleQuickKey } = keyboard;
   const { touchMode, handleToggleTouchMode } = pointer;
   const { connectSession, disconnect, requestRestart, handleDismissError } = gateway;
@@ -219,7 +219,7 @@ export function SessionPanels({
       {diagnosticsOpen && phase === 'live' && (
         <DiagnosticOverlay
           locale={locale}
-          stats={stats}
+          statsStore={statsStore}
           summary={diagSummary}
           routeLabel={routeLabel}
           browserDirect={peer?.route?.startsWith('webrtc')}
@@ -355,7 +355,7 @@ export function SessionPanels({
           sizes={resolutionOptions?.display === display ? resolutionOptions.sizes : []}
           onResolution={(width, height) => send({ type: 'resolution', display, width, height })}
           diagnosticsOpen={diagnosticsOpen}
-          stats={stats}
+          statsStore={statsStore}
           rtt={rtt}
           quality={quality}
           customQuality={displayPrefs.customBitrate}
