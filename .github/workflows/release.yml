@@ -18,6 +18,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build the local image
-        run: docker build -f deploy/Dockerfile -t rustdesk-web-client:local .
+        run: docker build -f Dockerfile -t rustdesk-web-client:local .
       - name: Do not publish
         run: echo "Release gate is not met. No image push, GitHub Release, or package publish is performed."

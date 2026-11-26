@@ -4,7 +4,7 @@
 
 This is not `v0.1.0-rc.1` and not `v0.1.0`. No tag, GitHub Release, package, or container image has been published. The build is an alpha for controlled development and is not recommended for public exposure.
 
-The local Docker image `rustdesk-web-client:local` can be built from `deploy/Dockerfile`. That name is not a registry release.
+The local Docker image `rustdesk-web-client:local` can be built from the root `Dockerfile`. That name is not a registry release.
 
 ### Release gate
 

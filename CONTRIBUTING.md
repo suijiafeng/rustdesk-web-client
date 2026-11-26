@@ -21,7 +21,7 @@ yarn build
 
 Author and committer are the person who wrote the change. Subjects are one English Conventional Commits line, with no body and no `Co-authored-by` trailer. The line should say what the change adds or fixes. Each commit should still typecheck and test.
 
-Do not commit `.env`, `deploy/.env.docker`, certificates, `node_modules`, or build output. `docs/migration/` stays untracked.
+Do not commit local `.env` or `.env.*` files (except `.env.example`), certificates, `node_modules`, or build output. `docs/migration/` stays untracked.
 
 ## Pull requests
 
