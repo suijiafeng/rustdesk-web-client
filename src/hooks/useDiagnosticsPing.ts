@@ -9,9 +9,9 @@ import {
   recordPingSent,
   sweepTimeouts,
   type DiagnosticsState,
-  type DiagnosticsSummary,
 } from '../lib/diagnostics';
 import type { RemoteSocket } from '../lib/remoteSocket';
+import { createTelemetryStore } from '../lib/sessionStats';
 
 interface UseDiagnosticsPingOptions {
   phase: ConnectionPhase;
@@ -34,15 +34,15 @@ export function useDiagnosticsPing({ phase, wsRef }: UseDiagnosticsPingOptions) 
   const [diagnosticsOpen, setDiagnosticsOpen] = useState<boolean>(readInitialDiagnosticsOpen);
   const diagStateRef = useRef<DiagnosticsState>(createDiagnosticsState());
   const diagSeqRef = useRef(0);
-  const [diagSummary, setDiagSummary] = useState<DiagnosticsSummary>(() =>
-    computeDiagnosticsSummary(diagStateRef.current, performance.now()),
+  const [telemetryStore] = useState(() =>
+    createTelemetryStore(computeDiagnosticsSummary(diagStateRef.current, performance.now())),
   );
 
   const resetDiagnostics = useCallback(() => {
     diagStateRef.current = createDiagnosticsState();
     diagSeqRef.current = 0;
-    setDiagSummary(computeDiagnosticsSummary(diagStateRef.current, performance.now()));
-  }, []);
+    telemetryStore.setDiagSummary(computeDiagnosticsSummary(diagStateRef.current, performance.now()));
+  }, [telemetryStore]);
 
   useEffect(() => {
     if (!diagnosticsOpen || phase !== 'live') {
@@ -59,7 +59,7 @@ export function useDiagnosticsPing({ phase, wsRef }: UseDiagnosticsPingOptions) 
         diagStateRef.current = recordPingSent(diagStateRef.current, seq, now);
         sock.send(JSON.stringify({ type: 'ping', seq, clientTs: now }));
       }
-      setDiagSummary(computeDiagnosticsSummary(diagStateRef.current, now, PING_TIMEOUT_MS));
+      telemetryStore.setDiagSummary(computeDiagnosticsSummary(diagStateRef.current, now, PING_TIMEOUT_MS));
     };
 
     sendProbe();
@@ -67,14 +67,13 @@ export function useDiagnosticsPing({ phase, wsRef }: UseDiagnosticsPingOptions) 
     return () => {
       window.clearInterval(timer);
     };
-  }, [diagnosticsOpen, phase, wsRef]);
+  }, [diagnosticsOpen, phase, wsRef, telemetryStore]);
 
   return {
     diagnosticsOpen,
     setDiagnosticsOpen,
     diagStateRef,
-    diagSummary,
-    setDiagSummary,
+    telemetryStore,
     resetDiagnostics,
   };
 }

@@ -1,4 +1,6 @@
 import { useSyncExternalStore } from 'react';
+import type { DiagnosticsSummary } from './diagnostics';
+import type { GatewayVideoStats } from './protocol';
 import type { StreamActivityState } from './stats';
 
 export interface SessionStats {
@@ -58,4 +60,75 @@ export type SessionStatsStore = ReturnType<typeof createSessionStatsStore>;
 
 export function useSessionStats(store: SessionStatsStore): SessionStats {
   return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+}
+
+export interface TelemetrySnapshot {
+  rtt: number;
+  gatewayVideo?: GatewayVideoStats;
+  diagSummary: DiagnosticsSummary;
+}
+
+export function createTelemetryStore(initialDiagSummary: DiagnosticsSummary) {
+  let snapshot: TelemetrySnapshot = {
+    rtt: 0,
+    gatewayVideo: undefined,
+    diagSummary: initialDiagSummary,
+  };
+  const subscribers = new Set<() => void>();
+  const rttSubscribers = new Set<() => void>();
+  const subscribeTo = (listeners: Set<() => void>) => (listener: () => void) => {
+    listeners.add(listener);
+    return () => { listeners.delete(listener); };
+  };
+  const notifyAll = () => { subscribers.forEach(notify => notify()); };
+  const notifyRtt = () => { rttSubscribers.forEach(notify => notify()); };
+  return {
+    getSnapshot: () => snapshot,
+    getRttSnapshot: () => snapshot.rtt,
+    subscribe: subscribeTo(subscribers),
+    subscribeRtt: subscribeTo(rttSubscribers),
+    setRtt(update: number | ((previous: number) => number)): void {
+      const next = typeof update === 'function' ? update(snapshot.rtt) : update;
+      if (Object.is(next, snapshot.rtt)) return;
+      snapshot = { ...snapshot, rtt: next };
+      notifyRtt();
+      notifyAll();
+    },
+    setGatewayVideo(
+      update: GatewayVideoStats | undefined | ((previous: GatewayVideoStats | undefined) => GatewayVideoStats | undefined),
+    ): void {
+      const next = typeof update === 'function' ? update(snapshot.gatewayVideo) : update;
+      if (next === snapshot.gatewayVideo) return;
+      snapshot = { ...snapshot, gatewayVideo: next };
+      notifyAll();
+    },
+    setDiagSummary(update: DiagnosticsSummary | ((previous: DiagnosticsSummary) => DiagnosticsSummary)): void {
+      const next = typeof update === 'function' ? update(snapshot.diagSummary) : update;
+      if (next === snapshot.diagSummary) return;
+      snapshot = { ...snapshot, diagSummary: next };
+      notifyAll();
+    },
+  };
+}
+
+export type TelemetryStore = ReturnType<typeof createTelemetryStore>;
+
+const NOOP_SUBSCRIBE = () => () => {};
+const EMPTY_TELEMETRY = () => null;
+const EMPTY_RTT = () => undefined;
+
+export function useTelemetry(store?: TelemetryStore): TelemetrySnapshot | null {
+  return useSyncExternalStore(
+    store ? store.subscribe : NOOP_SUBSCRIBE,
+    store ? store.getSnapshot : EMPTY_TELEMETRY,
+    store ? store.getSnapshot : EMPTY_TELEMETRY,
+  );
+}
+
+export function useTelemetryRtt(store?: TelemetryStore): number | undefined {
+  return useSyncExternalStore(
+    store ? store.subscribeRtt : NOOP_SUBSCRIBE,
+    store ? store.getRttSnapshot : EMPTY_RTT,
+    store ? store.getRttSnapshot : EMPTY_RTT,
+  );
 }

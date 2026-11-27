@@ -23,6 +23,8 @@ import type { ViewMode } from '../lib/mapping';
 import type { DisplayInfo } from '../lib/protocol';
 import { ConfirmDialog } from './RestartAction';
 
+import { useTelemetryRtt, type TelemetryStore } from '../lib/sessionStats';
+
 interface SessionHandleProps {
   locale: Locale;
   handleX: number;
@@ -31,6 +33,7 @@ interface SessionHandleProps {
   pinned: boolean;
   hostTitle: string;
   rtt?: number;
+  telemetryStore?: TelemetryStore;
   diagnosticsOpen?: boolean;
   displays: DisplayInfo[];
   activeDisplay: number;
@@ -59,7 +62,8 @@ export function SessionHandle({
   expanded,
   pinned,
   hostTitle,
-  rtt = 0,
+  rtt: propRtt = 0,
+  telemetryStore,
   diagnosticsOpen = false,
   displays,
   activeDisplay,
@@ -80,6 +84,7 @@ export function SessionHandle({
   onOpenMenu,
   onDisconnect,
 }: SessionHandleProps) {
+  const rtt = useTelemetryRtt(telemetryStore) ?? propRtt;
   const showCtrlAltDel = Boolean(onCtrlAltDel);
   const dragRef = useRef<{ startX: number; origin: number; moved: boolean } | null>(null);
   const barRef = useRef<HTMLDivElement>(null);

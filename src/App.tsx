@@ -108,8 +108,6 @@ export default function App() {
   const video = useVideoPipeline({ phase, send, targetFps,
     settingsKey: `${quality}:${displayPrefs.customBitrate}:${displayPrefs.codec}` });
   const { statsStore, videoLayout, decoderRef, sizeRef } = video;
-  const [rtt, setRtt] = useState(0);
-  const [gatewayVideo, setGatewayVideo] = useState<Extract<ServerMessage, { type: 'pong' }>['gatewayVideo']>();
   const [sessionTip, setSessionTip] = useState<{ text: string; error: boolean } | null>(null);
   const [webRtcFallbackReason, setWebRtcFallbackReason] = useState<string | null>(null);
   const showSessionTip = useCallback((text: string, error = false) => {
@@ -158,8 +156,7 @@ export default function App() {
     diagnosticsOpen,
     setDiagnosticsOpen,
     diagStateRef,
-    diagSummary,
-    setDiagSummary,
+    telemetryStore,
     resetDiagnostics,
   } = useDiagnosticsPing({ phase, wsRef });
 
@@ -317,13 +314,14 @@ export default function App() {
   useEffect(() => {
     const update = () => {
       const stats = statsStore.getSnapshot();
+      const telemetry = telemetryStore.getSnapshot();
       window.__rd = {
         state: phase,
         codec: stats.codec,
         width: stats.width,
         height: stats.height,
         fps: stats.fps,
-        delayMs: rtt || stats.delayMs,
+        delayMs: telemetry.rtt || stats.delayMs,
         bitrate: stats.bitrate,
         decoded: stats.decoded,
         rxFps: stats.rxFps,
@@ -345,11 +343,16 @@ export default function App() {
         width: box.w,
         height: box.h,
       };
-      window.__rdDiag = diagSummary;
+      window.__rdDiag = telemetry.diagSummary;
     };
     update();
-    return statsStore.subscribe(update);
-  }, [phase, statsStore, rtt, touchMode, view.scale, view.panX, view.panY, box.w, box.h, diagSummary]);
+    const unsubStats = statsStore.subscribe(update);
+    const unsubTelemetry = telemetryStore.subscribe(update);
+    return () => {
+      unsubStats();
+      unsubTelemetry();
+    };
+  }, [phase, statsStore, telemetryStore, touchMode, view.scale, view.panX, view.panY, box.w, box.h]);
 
   const gateway = useGatewaySession({
     ...preferences,
@@ -376,9 +379,9 @@ export default function App() {
     setMobilePanel,
     setResolutionOptions,
     setCursorShape,
-    setRtt,
-    setGatewayVideo,
-    setDiagSummary,
+    setRtt: telemetryStore.setRtt,
+    setGatewayVideo: telemetryStore.setGatewayVideo,
+    setDiagSummary: telemetryStore.setDiagSummary,
     setStatusDetail,
     focusDesktopCapture,
     showSessionTip,
@@ -533,7 +536,7 @@ export default function App() {
           hideSoftKeyboard, isMobileViewport, isCoarseDevice, isTouchLayout, remoteInput,
           isFullscreen, toggleFullscreen }}
         notices={{ restartState, setRestartState, sessionTip, showSessionTip, webRtcFallbackReason, setWebRtcFallbackReason }}
-        diagnostics={{ diagnosticsOpen, setDiagnosticsOpen, diagSummary, rtt, gatewayVideo }}
+        diagnostics={{ diagnosticsOpen, setDiagnosticsOpen, telemetryStore }}
       />
       <PwaUpdateToast locale={locale} hidden={phase === 'live'} />
     </RemoteStage>

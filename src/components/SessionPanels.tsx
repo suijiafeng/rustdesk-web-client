@@ -11,7 +11,7 @@ import type { useViewTransform } from '../hooks/useViewTransform';
 import type { SoftKeyboardMode } from '../hooks/useKeyboardViewport';
 import type { SavedDevice } from '../lib/devices';
 import { persistDisplayPrefs, type DisplayPrefs } from '../lib/displayPrefs';
-import type { DiagnosticsSummary } from '../lib/diagnostics';
+import type { TelemetryStore } from '../lib/sessionStats';
 import { t } from '../lib/i18n';
 import type { ClientMessage, PeerMessage, QualityLevel, ServerMessage } from '../lib/protocol';
 import type { ConnectionPhase } from '../types';
@@ -113,9 +113,7 @@ interface SessionPanelsProps {
   diagnostics: {
     diagnosticsOpen: boolean;
     setDiagnosticsOpen: Setter<boolean>;
-    diagSummary: DiagnosticsSummary;
-    rtt: number;
-    gatewayVideo: Extract<ServerMessage, { type: 'pong' }>['gatewayVideo'];
+    telemetryStore: TelemetryStore;
   };
 }
 
@@ -155,7 +153,7 @@ export function SessionPanels({
     isFullscreen, toggleFullscreen,
   } = chrome;
   const { restartState, setRestartState, sessionTip, showSessionTip, webRtcFallbackReason, setWebRtcFallbackReason } = notices;
-  const { diagnosticsOpen, setDiagnosticsOpen, diagSummary, rtt, gatewayVideo } = diagnostics;
+  const { diagnosticsOpen, setDiagnosticsOpen, telemetryStore } = diagnostics;
   const showConnectSheet = phase !== 'live' || connectDialog;
   const showSessionMenu = menuOpen && phase === 'live' && !connectDialog;
   const showHandle = phase === 'live' && !connectDialog && !menuOpen && !isTouchLayout;
@@ -206,7 +204,7 @@ export function SessionPanels({
             expanded={toolbarExpanded}
             pinned={toolbarPinned}
             hostTitle={liveHostTitle}
-            rtt={rtt}
+            telemetryStore={telemetryStore}
             diagnosticsOpen={diagnosticsOpen}
             displays={peer?.displays ?? []}
             activeDisplay={display}
@@ -255,12 +253,11 @@ export function SessionPanels({
           <DiagnosticOverlay
             locale={locale}
             statsStore={statsStore}
-            summary={diagSummary}
+            telemetryStore={telemetryStore}
             routeLabel={routeLabel}
             browserDirect={peer?.route?.startsWith('webrtc')}
             encrypted={peer?.encrypted}
             preferredCodec={displayPrefs.codec}
-            gatewayVideo={gatewayVideo}
             onClose={() => setDiagnosticsOpen(false)}
           />
         </Suspense>
@@ -392,7 +389,7 @@ export function SessionPanels({
             sizes={resolutionOptions?.display === display ? resolutionOptions.sizes : []}
             onResolution={(width, height) => send({ type: 'resolution', display, width, height })}
             statsStore={statsStore}
-            rtt={rtt}
+            telemetryStore={telemetryStore}
             quality={quality}
             customQuality={displayPrefs.customBitrate}
             targetFps={targetFps}

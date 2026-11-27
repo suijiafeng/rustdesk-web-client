@@ -17,7 +17,7 @@ import { type CodecSupport, type PeerMessage, type QualityLevel } from '../lib/p
 import type { ConnectionPhase } from './RustDeskShell';
 
 import { type PreferredCodec } from '../lib/displayPrefs';
-import { useSessionStats, type SessionStats, type SessionStatsStore } from '../lib/sessionStats';
+import { useSessionStats, useTelemetryRtt, type SessionStats, type SessionStatsStore, type TelemetryStore } from '../lib/sessionStats';
 export type { SessionStats } from '../lib/sessionStats';
 
 type MenuTab = 'control' | 'display';
@@ -63,10 +63,20 @@ export interface SessionMenuProps {
   onChangeQuality: (quality: QualityLevel, fps: number, codec?: PreferredCodec, customQuality?: number) => void;
 }
 
-export function SessionMenu({ statsStore, ...props }: Omit<MobileSessionPanelProps, 'stats'> & { statsStore: SessionStatsStore }) {
+export function SessionMenu({
+  statsStore,
+  telemetryStore,
+  rtt,
+  ...props
+}: Omit<MobileSessionPanelProps, 'stats' | 'rtt'> & {
+  statsStore: SessionStatsStore;
+  telemetryStore?: TelemetryStore;
+  rtt?: number;
+}) {
   const stats = useSessionStats(statsStore);
-  if (props.mobileLayout) return <MobileSessionPanel key={props.mobilePanel} {...props} stats={stats} />;
-  return <DesktopSessionMenu {...props} stats={stats} />;
+  const liveRtt = useTelemetryRtt(telemetryStore) ?? rtt ?? 0;
+  if (props.mobileLayout) return <MobileSessionPanel key={props.mobilePanel} {...props} stats={stats} rtt={liveRtt} />;
+  return <DesktopSessionMenu {...props} stats={stats} rtt={liveRtt} />;
 }
 
 function DesktopSessionMenu({

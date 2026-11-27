@@ -4,12 +4,13 @@ import { classifyLinkHealth, type DiagnosticsSummary } from '../lib/diagnostics'
 import { formatCodecLabel, normalizeCodecName, type PreferredCodec } from '../lib/displayPrefs';
 import { t, type Locale } from '../lib/i18n';
 import { formatBitrate, type GatewayVideoStats } from '../lib/protocol';
-import { useSessionStats, type SessionStatsStore } from '../lib/sessionStats';
+import { useSessionStats, useTelemetry, type SessionStatsStore, type TelemetryStore } from '../lib/sessionStats';
 
 interface DiagnosticOverlayProps {
   statsStore: SessionStatsStore;
+  telemetryStore?: TelemetryStore;
   locale: Locale;
-  summary: DiagnosticsSummary;
+  summary?: DiagnosticsSummary;
   routeLabel: string;
   browserDirect?: boolean;
   encrypted?: boolean;
@@ -21,9 +22,12 @@ interface DiagnosticOverlayProps {
 const finite = (value: number | null) => value !== null && Number.isFinite(value) && value >= 0 ? value : null;
 
 export function DiagnosticOverlay({
-  locale, statsStore, summary, routeLabel, browserDirect, encrypted, preferredCodec, gatewayVideo, onClose,
+  locale, statsStore, telemetryStore, summary: propSummary, routeLabel, browserDirect, encrypted, preferredCodec, gatewayVideo: propGatewayVideo, onClose,
 }: DiagnosticOverlayProps) {
   const stats = useSessionStats(statsStore);
+  const telemetry = useTelemetry(telemetryStore);
+  const summary = telemetry?.diagSummary ?? propSummary!;
+  const gatewayVideo = telemetry ? telemetry.gatewayVideo : propGatewayVideo;
   const firstSequence = useRef(summary.totalSent);
   const overlayRef = useRef<HTMLElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
