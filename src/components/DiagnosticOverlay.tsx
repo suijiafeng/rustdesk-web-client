@@ -108,12 +108,14 @@ export function DiagnosticOverlay({
       data-testid="diagnostic-overlay"
       aria-label={t(locale, 'diagTitle')}
       style={pos ? { left: `${pos.left}px`, top: `${pos.top}px`, right: 'auto' } : undefined}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={() => { dragRef.current = null; }}
     >
-      <div className="diag-header">
+      <div
+        className="diag-header"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={() => { dragRef.current = null; }}
+      >
         <span className="diag-status" data-testid="diag-picture-state" data-state={state}
           role="img" aria-label={activity} title={activity} tabIndex={0} data-session-notice>
           <StatusIcon size={16} aria-hidden="true" />
