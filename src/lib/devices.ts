@@ -1,4 +1,4 @@
-import type { ConnectionMode } from '../components/RustDeskShell';
+import type { ConnectionMode } from '../types';
 
 export const DEVICES_STORAGE_KEY = 'rd_web_devices';
 export const MAX_SAVED_DEVICES = 20;
@@ -30,6 +30,12 @@ export function formatPeerId(raw: string): string {
     return clean.replace(/(\d{3})(?=\d)/g, '$1 ');
   }
   return raw.trim();
+}
+
+export function formatPrimaryId(device: Pick<SavedDevice, 'mode' | 'peerId' | 'host' | 'port'>): string {
+  return device.mode === 'id'
+    ? formatPeerId(device.peerId ?? '')
+    : `${device.host ?? ''}:${device.port ?? '21118'}`;
 }
 
 export function deviceKeyFor(

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MutableRefObject } from 'react';
-import type { ConnectionPhase } from '../components/RustDeskShell';
+import type { ConnectionPhase } from '../types';
 import {
   computeDiagnosticsSummary,
   createDiagnosticsState,

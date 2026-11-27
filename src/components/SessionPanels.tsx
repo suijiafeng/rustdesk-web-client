@@ -162,7 +162,17 @@ export function SessionPanels({
   const showMobileDock = phase === 'live' && !connectDialog && !softKeys && isTouchLayout;
   const liveHostTitle =
     peer?.hostname || peer?.username || (mode === 'id' ? peerId : host) || 'Remote';
-  const routeLabel = t(locale, peer?.route === 'webrtc-relay' ? 'routeWebRtcRelay' : peer?.route === 'webrtc' ? 'routeWebRtcUnknown' : peer?.route === 'webrtc-direct' ? 'routeWebRtc' : peer?.route === 'relay' ? 'routeRelay' : peer?.route === 'direct' ? 'routeDirect' : 'routeUnknown');
+  const routeLabelKeys = {
+    'webrtc-relay': 'routeWebRtcRelay',
+    webrtc: 'routeWebRtcUnknown',
+    'webrtc-direct': 'routeWebRtc',
+    relay: 'routeRelay',
+    direct: 'routeDirect',
+  } as const;
+  const routeKey = peer?.route && peer.route in routeLabelKeys
+    ? routeLabelKeys[peer.route as keyof typeof routeLabelKeys]
+    : 'routeUnknown';
+  const routeLabel = t(locale, routeKey);
   const stageViewport = keyboardLayout.viewport ?? visibleViewport;
 
   return (
@@ -381,7 +391,6 @@ export function SessionPanels({
             viewOnly={displayPrefs.viewOnly}
             sizes={resolutionOptions?.display === display ? resolutionOptions.sizes : []}
             onResolution={(width, height) => send({ type: 'resolution', display, width, height })}
-            diagnosticsOpen={diagnosticsOpen}
             statsStore={statsStore}
             rtt={rtt}
             quality={quality}
@@ -403,10 +412,6 @@ export function SessionPanels({
               setConnectDialog(true);
             }}
             onDisconnect={disconnect}
-            onToggleDiagnostics={() => {
-              setDiagnosticsOpen(true);
-              setMenuOpen(false);
-            }}
             onToggleTouchMode={handleToggleTouchMode}
             reverseScroll={displayPrefs.reverseMouseWheel}
             onReverseScrollChange={reverseMouseWheel => handleUpdateDisplayPrefs({ reverseMouseWheel })}

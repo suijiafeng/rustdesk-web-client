@@ -12,7 +12,6 @@ import {
   type TouchGestureEffect,
   type TouchGestureState,
 } from '../lib/gestures';
-import { isBrowserNavOrAuxButton } from '../lib/inputIsolation';
 import { mapFromRemote, mapToRemote, mapToRemoteClamped, type Point, type ViewTransform } from '../lib/mapping';
 import type { ClientMessage } from '../lib/protocol';
 import { useStageNativeEvents } from './useStageNativeEvents';

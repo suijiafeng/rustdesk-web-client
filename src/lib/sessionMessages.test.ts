@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { Dispatch, SetStateAction } from 'react';
-import type { SessionStats } from '../components/SessionMenu';
+import type { SessionStats } from './sessionStats.ts';
 import { createDiagnosticsState, recordPingSent } from './diagnostics';
 import { normalizeDisplayPrefs } from './displayPrefs';
 import type { PeerMessage, ServerMessage } from './protocol';

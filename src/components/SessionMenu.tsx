@@ -41,7 +41,6 @@ export interface SessionMenuProps {
   viewOnly: boolean;
   sizes: { width: number; height: number }[];
   onResolution: (width: number, height: number) => void;
-  diagnosticsOpen: boolean;
   stats: SessionStats;
   rtt: number;
   quality: QualityLevel;
@@ -56,7 +55,6 @@ export interface SessionMenuProps {
   onOpenConnection: () => void;
   onRestart: () => void;
   onDisconnect: () => void;
-  onToggleDiagnostics: () => void;
   onToggleTouchMode: () => void;
   reverseScroll: boolean;
   onReverseScrollChange: (reverse: boolean) => void;
@@ -86,7 +84,6 @@ function DesktopSessionMenu({
   touchMode,
   viewOnly,
   sizes, onResolution,
-  diagnosticsOpen,
   stats,
   rtt,
   quality,
@@ -98,7 +95,6 @@ function DesktopSessionMenu({
   onOpenConnection,
   onRestart,
   onDisconnect,
-  onToggleDiagnostics,
   onToggleTouchMode,
   reverseScroll, onReverseScrollChange,
   onSwitchDisplay,
@@ -108,9 +104,6 @@ function DesktopSessionMenu({
   const [activeTab, setActiveTab] = useState<MenuTab>('control');
   const [pendingConfirm, setPendingConfirm] = useState<'lock' | 'disconnect' | null>(null);
 
-  const displays = peer?.displays ?? [];
-  const hasMultipleDisplays = displays.length > 1;
-  const resolutionIndex = sizes.findIndex(s => s.width === stats.width && s.height === stats.height);
   const hostTitle = peer?.hostname || peer?.username || 'Host';
   const platformLabel = peer?.platform || 'remote';
   const linkLabel = peer?.encrypted ? t(locale, 'linkEncrypted') : t(locale, 'linkPlain');

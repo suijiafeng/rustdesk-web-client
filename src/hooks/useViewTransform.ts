@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
-import type { ConnectionPhase } from '../components/RustDeskShell';
+import type { ConnectionPhase } from '../types';
 import { isPageZoomed, keyboardInset } from '../lib/gestures';
 import { SOFT_KEYBOARD_BAR_HEIGHT } from '../lib/keyboardViewport';
 import {

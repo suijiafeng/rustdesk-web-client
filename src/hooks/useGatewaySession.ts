@@ -1,6 +1,6 @@
 import { decodeAudioFrame } from '../../shared/audio';
 import { useCallback, useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react';
-import type { SessionStats } from '../components/SessionMenu';
+import type { SessionStats } from '../lib/sessionStats';
 import type { ConnectionMode, ConnectionPhase, ConnectRequest } from '../types';
 import { probeCodecs, webCodecsStatus, type RemoteDecoder } from '../lib/decoder';
 import { deviceKeyFor } from '../lib/devices';

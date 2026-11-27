@@ -2,7 +2,7 @@ import { CursorImages } from './cursorImages';
 import { asAppError, readErrorPayload, type ErrorPayload } from '../../shared/errors';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import type { MobilePanel } from '../components/MobileSessionPanel';
-import type { SessionStats } from '../components/SessionMenu';
+import type { SessionStats } from './sessionStats';
 import type { ConnectionMode, ConnectionPhase, ConnectRequest } from '../types';
 import { upsertRecentDevice, type SavedDevice } from './devices';
 import type { DisplayPrefs } from './displayPrefs';

@@ -1,14 +1,8 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
-import { formatPeerId, type SavedDevice } from '../lib/devices';
+import { formatPrimaryId, type SavedDevice } from '../lib/devices';
 import { t, type Locale } from '../lib/i18n';
-
-function formatPrimaryId(device: SavedDevice): string {
-  return device.mode === 'id'
-    ? formatPeerId(device.peerId ?? '')
-    : `${device.host ?? ''}:${device.port ?? '21118'}`;
-}
 
 interface RenameDeviceDialogProps {
   locale: Locale;

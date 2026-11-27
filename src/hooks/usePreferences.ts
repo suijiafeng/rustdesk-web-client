@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ConnectionMode } from '../components/RustDeskShell';
+import type { ConnectionMode } from '../types';
 import { loadDisplayPrefs, type DisplayPrefs } from '../lib/displayPrefs';
 import {
   LOCALE_STORAGE_KEY,

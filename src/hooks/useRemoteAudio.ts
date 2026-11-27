@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ConnectionPhase } from '../components/RustDeskShell';
+import type { ConnectionPhase } from '../types';
 import { t, type Locale } from '../lib/i18n';
 import type { ClientMessage } from '../lib/protocol';
 import { RemoteAudio, type AudioFailureStage } from '../lib/remoteAudio';

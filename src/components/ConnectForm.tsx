@@ -35,8 +35,6 @@ export function ConnectForm({ model }: { model: ConnectFormModel }) {
     formattedIdValue,
     helpAnchorRef,
     helpVisible,
-    helpPinned,
-    setHelpPinned,
     setHelpHover,
     heroInputError,
     heroErrorShake,

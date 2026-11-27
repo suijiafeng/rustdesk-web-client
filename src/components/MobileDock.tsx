@@ -26,22 +26,67 @@ export function MobileDock({
   onOpenMenu,
 }: Props) {
   const buttons = [
-    ['dock-keyboard', 'keyboard', Keyboard, onToggleKeyboard, false],
-    ['dock-input-mode', touchMode ? 'touch' : 'mouse', touchMode ? Pointer : MousePointer2, onToggleTouchMode, !touchMode],
-    ['dock-display', 'screens', Monitor, () => onOpenMenu('display'), activePanel === 'display'],
-    ['dock-monitor', 'dockMonitor', Activity, onToggleDiagnostics, diagnosticsOpen],
-    ['dock-menu', 'moreActions', Layers2, () => onOpenMenu('actions'), activePanel === 'actions'],
-  ] as const;
+    {
+      id: 'dock-keyboard',
+      label: t(locale, 'keyboard'),
+      Icon: Keyboard,
+      action: onToggleKeyboard,
+      active: false,
+      ariaLabel: undefined,
+      pressed: undefined,
+      expanded: undefined,
+    },
+    {
+      id: 'dock-input-mode',
+      label: t(locale, touchMode ? 'touch' : 'mouse'),
+      Icon: touchMode ? Pointer : MousePointer2,
+      action: onToggleTouchMode,
+      active: !touchMode,
+      ariaLabel: t(locale, 'toggleInputMode'),
+      pressed: touchMode,
+      expanded: undefined,
+    },
+    {
+      id: 'dock-display',
+      label: t(locale, 'screens'),
+      Icon: Monitor,
+      action: () => onOpenMenu('display'),
+      active: activePanel === 'display',
+      ariaLabel: undefined,
+      pressed: undefined,
+      expanded: activePanel === 'display',
+    },
+    {
+      id: 'dock-monitor',
+      label: t(locale, 'dockMonitor'),
+      Icon: Activity,
+      action: onToggleDiagnostics,
+      active: diagnosticsOpen,
+      ariaLabel: undefined,
+      pressed: diagnosticsOpen,
+      expanded: diagnosticsOpen,
+    },
+    {
+      id: 'dock-menu',
+      label: t(locale, 'moreActions'),
+      Icon: Layers2,
+      action: () => onOpenMenu('actions'),
+      active: activePanel === 'actions',
+      ariaLabel: undefined,
+      pressed: undefined,
+      expanded: activePanel === 'actions',
+    },
+  ];
 
   if (activePanel) return (
     <nav className="remote-tools" data-testid="mobile-dock" aria-label={t(locale, 'session')} onPointerDown={e => e.stopPropagation()}>
-      {buttons.map(([id, label, Icon, action, active]) => (
+      {buttons.map(({ id, label, Icon, action, active, ariaLabel, pressed, expanded }) => (
         <button key={id} type="button" data-testid={id} className={active ? 'selected' : ''}
-          aria-label={id === 'dock-input-mode' ? t(locale, 'toggleInputMode') : undefined}
-          aria-pressed={id === 'dock-input-mode' ? touchMode : id === 'dock-monitor' ? diagnosticsOpen : undefined}
-          aria-expanded={id === 'dock-menu' || id === 'dock-display' || id === 'dock-monitor' ? active : undefined}
+          aria-label={ariaLabel}
+          aria-pressed={pressed}
+          aria-expanded={expanded}
           onClick={action}>
-          <Icon size={20} /><span>{t(locale, label)}</span>
+          <Icon size={20} /><span>{label}</span>
         </button>
       ))}
       <button type="button" data-testid="dock-collapse" aria-label={t(locale, 'dockHideControls')} onClick={onCollapse}>

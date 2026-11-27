@@ -12,7 +12,7 @@ import {
   Star,
   Trash2,
 } from 'lucide-react';
-import { formatPeerId, type SavedDevice } from '../lib/devices';
+import { formatPrimaryId, type SavedDevice } from '../lib/devices';
 import { t, type Locale } from '../lib/i18n';
 import type { SavedPasswordMap } from '../lib/passwords';
 import { RemoveDeviceDialog, RenameDeviceDialog } from './PeerDialogs';
@@ -29,12 +29,6 @@ interface PeerListProps {
   onRename?: (key: string, alias: string) => void;
   onClearSavedPassword?: (key: string) => void;
   onRemove: (key: string) => void;
-}
-
-function formatPrimaryId(device: SavedDevice): string {
-  return device.mode === 'id'
-    ? formatPeerId(device.peerId ?? '')
-    : `${device.host ?? ''}:${device.port ?? '21118'}`;
 }
 
 function formatCopyTarget(device: SavedDevice): string {

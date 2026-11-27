@@ -97,11 +97,11 @@ function Fixture() {
       <SessionMenu statsStore={video.statsStore} locale="zh" mobileLayout={false} mobilePanel="display"
         phase="live" peer={null} decoderError="" display={0} touchMode={false} viewOnly={false}
         clipboardSync={false} clipboardAllowed audioEnabled={false} followWindow={false}
-        sizes={[{ width: 1280, height: 720 }]} diagnosticsOpen rtt={0} quality="balanced" customQuality={100}
+        sizes={[{ width: 1280, height: 720 }]} rtt={0} quality="balanced" customQuality={100}
         targetFps={30} preferredCodec="auto" privacyEnabled={false} privacyPending={false} reverseScroll={false}
         onToggleClipboardSync={noop} onNotify={noop} onToggleAudio={noop} onToggleFollowWindow={noop}
         onResolution={noop} onTogglePrivacy={noop} onClose={noop} onOpenConnection={noop} onRestart={noop}
-        onDisconnect={noop} onToggleDiagnostics={noop} onToggleTouchMode={noop} onReverseScrollChange={noop}
+        onDisconnect={noop} onToggleTouchMode={noop} onReverseScrollChange={noop}
         onSwitchDisplay={noop} onQuickKey={noop} onChangeQuality={noop} />
     </Profiler>}
   </RemoteStage>;
