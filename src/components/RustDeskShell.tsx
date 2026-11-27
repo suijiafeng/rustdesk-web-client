@@ -8,6 +8,7 @@ import {
   Star,
   X,
 } from 'lucide-react';
+import type { AutoReconnectState } from '../hooks/useAutoReconnect';
 import type { SavedDevice } from '../lib/devices';
 import type { DisplayPrefs } from '../lib/displayPrefs';
 import { t, type Locale, type LocalePreference } from '../lib/i18n';
@@ -15,7 +16,6 @@ import type { SavedPasswordMap } from '../lib/passwords';
 import type { ThemePreference } from '../lib/theme';
 import type { ConnectionField, ConnectionMode, ConnectionPhase, ConnectRequest } from '../types';
 import { ConnectForm, ConnectPasswordPrompt, useConnectForm } from './ConnectForm';
-
 import { PeerList } from './PeerList';
 import type { SettingsSection } from './settings/SettingsView';
 
@@ -59,7 +59,7 @@ interface RustDeskShellProps {
   detail: string;
   connectionError?: ErrorPayload;
   decoderError: string;
-  autoReconnect?: import('../hooks/useGatewaySession').AutoReconnectState | null;
+  autoReconnect?: AutoReconnectState | null;
   onCancelAutoReconnect?: () => void;
   touchMode: boolean;
   diagnosticsOpen: boolean;

@@ -17,6 +17,7 @@ import type { ClientMessage, PeerMessage, QualityLevel, ServerMessage } from '..
 import type { ConnectionPhase } from '../types';
 import type { MobilePanel } from './MobileSessionPanel';
 import { RustDeskShell } from './RustDeskShell';
+import { SessionNotices } from './SessionNotices';
 import { SoftKeyboardBar } from './SoftKeyboardBar';
 
 const DiagnosticOverlay = lazy(() =>
@@ -46,7 +47,7 @@ interface SessionPanelsProps {
   connection: {
     phase: ConnectionPhase;
     detail: string;
-  connectionError?: ErrorPayload;
+    connectionError?: ErrorPayload;
     peer: PeerMessage | null;
     password: string;
     setPassword: Setter<string>;
@@ -255,30 +256,16 @@ export function SessionPanels({
         </Suspense>
       )}
 
-      {(phase === 'live' || webRtcFallbackReason !== null) && (
-        <div className="session-tip-region" aria-live="polite" aria-atomic="true">
-          {webRtcFallbackReason !== null && (
-            <div className="session-tip fallback-tip" data-testid="webrtc-fallback-tip" data-session-notice
-              onPointerDown={e => e.stopPropagation()} onPointerUp={e => e.stopPropagation()}
-              onPointerMove={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
-              <span>{t(locale, 'webRtcFallback')}<br />{webRtcFallbackReason}</span>
-              <button type="button" data-testid="webrtc-fallback-dismiss" aria-label={t(locale, 'close')}
-                onClick={() => setWebRtcFallbackReason(null)}>×</button>
-            </div>
-          )}
-          {phase === 'live' && sessionTip && <div className="session-tip" data-testid="session-tip">{sessionTip.text}</div>}
-          {phase === 'live' && clipboardSync && clipboardAllowed && clipboard.pending && (
-            <div className="session-tip clipboard-tip" data-testid="clipboard-tip"
-              onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
-              <span>{t(locale, clipboard.pending === 'write' ? 'clipRemoteReady' : 'clipLocalReady')}</span>
-              <button type="button" onClick={() => { void (clipboard.pending === 'write' ? clipboard.writeRemote() : clipboard.readLocal()); }}>
-                {t(locale, clipboard.pending === 'write' ? 'copy' : 'clipSyncAction')}
-              </button>
-              <button type="button" aria-label={t(locale, 'close')} onClick={clipboard.dismiss}>×</button>
-            </div>
-          )}
-        </div>
-      )}
+      <SessionNotices
+        locale={locale}
+        phase={phase}
+        webRtcFallbackReason={webRtcFallbackReason}
+        onDismissWebRtcFallback={() => setWebRtcFallbackReason(null)}
+        sessionTip={sessionTip}
+        clipboardSync={clipboardSync}
+        clipboardAllowed={clipboardAllowed}
+        clipboard={clipboard}
+      />
       {showMobileDock && (
         <Suspense fallback={null}>
           <MobileDock

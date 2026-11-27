@@ -2,7 +2,9 @@ import type { ErrorPayload } from '../shared/errors';
 import { EMPTY_STATS, useVideoPipeline } from './hooks/useVideoPipeline';
 import type { SoftKeyboardMode } from './hooks/useKeyboardViewport';
 import { useClipboardSync } from './hooks/useClipboardSync';
+import { useDiagnosticsPing } from './hooks/useDiagnosticsPing';
 import { usePreferences } from './hooks/usePreferences';
+import { useRemoteAudio } from './hooks/useRemoteAudio';
 import { useSavedDevices } from './hooks/useSavedDevices';
 import { useViewTransform } from './hooks/useViewTransform';
 import { useRemoteKeyboard } from './hooks/useRemoteKeyboard';
@@ -15,12 +17,12 @@ import { flushSync } from 'react-dom';
 import { PwaUpdateToast } from './components/PwaUpdateToast';
 import { RemoteStage } from './components/RemoteStage';
 import { SessionPanels } from './components/SessionPanels';
-import { RemoteAudio, type AudioFailureStage } from './lib/remoteAudio';
 import type { MobilePanel } from './components/MobileSessionPanel';
 import {
   type ConnectRequest,
   type ConnectionPhase,
 } from './components/RustDeskShell';
+import { isTextBeamCursor, type CursorShape } from './lib/cursorDetect';
 import {
   type SavedDevice,
 } from './lib/devices';
@@ -29,16 +31,6 @@ import {
   persistDisplayPrefs,
   type DisplayPrefs,
 } from './lib/displayPrefs';
-import {
-  computeDiagnosticsSummary,
-  createDiagnosticsState,
-  PING_INTERVAL_MS,
-  PING_TIMEOUT_MS,
-  recordPingSent,
-  sweepTimeouts,
-  type DiagnosticsState,
-  type DiagnosticsSummary,
-} from './lib/diagnostics';
 import { t, type I18nKey } from './lib/i18n';
 import { shouldEnableRemotePointerInput } from './lib/inputIsolation';
 import { remoteKeyboardProfile } from './lib/keys';
@@ -153,58 +145,23 @@ export default function App() {
   const [softKeys, setSoftKeys] = useState(false);
   const [softKeyboardMode, setSoftKeyboardMode] = useState<SoftKeyboardMode>('system');
   const [cursorEmbedded, setCursorEmbedded] = useState(false);
-  const [cursorShape, setCursorShape] = useState<{
-    pixels: ImageData;
-    hotX: number;
-    hotY: number;
-  } | null>(null);
-  const textCursor = useMemo(() => {
-    if (!cursorShape || cursorEmbedded || !displayPrefs.autoKeyboard) return false;
-    const { pixels, hotX, hotY } = cursorShape;
-    // Ignore transparent padding. An I-beam has narrow middle rows and wider caps.
-    const widths: number[] = [];
-    let left = pixels.width, right = -1;
-    for (let y = 0; y < pixels.height; y++) {
-      let first = pixels.width, last = -1;
-      for (let x = 0; x < pixels.width; x++) {
-        if (pixels.data[(y * pixels.width + x) * 4 + 3] < 96) continue;
-        first = Math.min(first, x);
-        last = x;
-      }
-      widths.push(Math.max(0, last - first + 1));
-      left = Math.min(left, first);
-      right = Math.max(right, last);
-    }
-    const top = widths.findIndex(w => w > 0);
-    if (top < 0) return false;
-    let bottom = widths.length - 1;
-    while (!widths[bottom]) bottom--;
-    const height = bottom - top + 1, width = right - left + 1;
-    const cap = Math.max(1, Math.floor(height / 4));
-    const stem = widths.slice(top + cap, bottom - cap + 1);
-    return height >= 8 && height >= width * 1.4 &&
-      Math.abs(hotX - (left + right) / 2) <= Math.max(1, width / 4) &&
-      Math.abs(hotY - (top + bottom) / 2) <= height / 3 &&
-      stem.every(w => w > 0 && w <= width * 0.7) &&
-      Math.max(...widths.slice(top, top + cap)) >= width * 0.8 &&
-      Math.max(...widths.slice(bottom - cap + 1, bottom + 1)) >= width * 0.8;
-  }, [cursorShape, cursorEmbedded, displayPrefs.autoKeyboard]);
+  const [cursorShape, setCursorShape] = useState<CursorShape | null>(null);
+  const textCursor = useMemo(
+    () => !cursorEmbedded && displayPrefs.autoKeyboard && isTextBeamCursor(cursorShape),
+    [cursorShape, cursorEmbedded, displayPrefs.autoKeyboard],
+  );
   const [restartState, setRestartState] = useState<'requested' | 'waiting' | null>(null);
   const restartDeadline = useRef(0);
   const reconnectRequest = useRef<ConnectRequest | null>(null);
   const connectGeneration = useRef(0);
-  const [diagnosticsOpen, setDiagnosticsOpen] = useState<boolean>(() => {
-    try {
-      return new URLSearchParams(window.location.search).get('diag') === '1';
-    } catch {
-      return false;
-    }
-  });
-  const diagStateRef = useRef<DiagnosticsState>(createDiagnosticsState());
-  const diagSeqRef = useRef(0);
-  const [diagSummary, setDiagSummary] = useState<DiagnosticsSummary>(() =>
-    computeDiagnosticsSummary(diagStateRef.current, performance.now()),
-  );
+  const {
+    diagnosticsOpen,
+    setDiagnosticsOpen,
+    diagStateRef,
+    diagSummary,
+    setDiagSummary,
+    resetDiagnostics,
+  } = useDiagnosticsPing({ phase, wsRef });
 
   // Refs
   const stageRef = useRef<HTMLElement>(null);
@@ -272,74 +229,13 @@ export default function App() {
     }
   }, [phase, peer, displayPrefs.followWindow, send]);
 
-  const audioRef = useRef<RemoteAudio | null>(null);
-  const [audioEnabled, setAudioEnabled] = useState(false);
-
-  const stopAudio = useCallback(() => {
-    const player = audioRef.current;
-    audioRef.current = null;
-    player?.close();
-    setAudioEnabled(false);
-  }, []);
-  useEffect(() => {
-    if (phase !== 'live') {
-      stopAudio();
-    }
-    return () => { audioRef.current?.close(); audioRef.current = null; };
-  }, [phase, stopAudio]);
-
-  useEffect(() => {
-    if (phase !== 'live' || !audioEnabled) return;
-    const recoverAudio = () => {
-      if (document.visibilityState === 'hidden') return;
-      const player = audioRef.current;
-      if (player?.suspended) void player.tryResume();
-    };
-    document.addEventListener('visibilitychange', recoverAudio);
-    window.addEventListener('pointerdown', recoverAudio, true);
-    window.addEventListener('keydown', recoverAudio, true);
-    return () => {
-      document.removeEventListener('visibilitychange', recoverAudio);
-      window.removeEventListener('pointerdown', recoverAudio, true);
-      window.removeEventListener('keydown', recoverAudio, true);
-    };
-  }, [phase, audioEnabled]);
-
-  const toggleAudio = async () => {
-    if (audioRef.current) {
-      stopAudio();
-      send({ type: 'audio', enabled: false });
-      showSessionTip(t(locale, 'audioStopped'));
-      return;
-    }
-    if (typeof AudioDecoder === 'undefined' || typeof AudioContext === 'undefined') {
-      showSessionTip(t(locale, 'audioUnsupported'), true);
-      return;
-    }
-    const socket = wsRef.current;
-    let player: RemoteAudio;
-    const fail = (stage: AudioFailureStage, error: unknown) => {
-      if (socket !== wsRef.current || (player && player !== audioRef.current)) return;
-      stopAudio();
-      console.error('Remote audio failure', { stage, error });
-      const messages = { start: 'audioStartFailed', module: 'audioModuleFailed',
-        decode: 'audioDecodeFailed', playback: 'audioFailed' } as const;
-      showSessionTip(t(locale, messages[stage]), true);
-      send({ type: 'audio', enabled: false });
-    };
-    try {
-      player = new RemoteAudio(fail);
-      audioRef.current = player;
-      setAudioEnabled(true);
-      await player.resume();
-      if (player === audioRef.current && socket === wsRef.current) {
-        send({ type: 'audio', enabled: true });
-        showSessionTip(t(locale, 'audioRequested'));
-      }
-    } catch (error) {
-      fail('start', error);
-    }
-  };
+  const { audioRef, audioEnabled, stopAudio, toggleAudio } = useRemoteAudio({
+    phase,
+    locale,
+    wsRef,
+    send,
+    showSessionTip,
+  });
 
   const focusDesktopCapture = useCallback(() => {
     if (window.matchMedia('(pointer: coarse)').matches) return;
@@ -454,38 +350,6 @@ export default function App() {
     update();
     return statsStore.subscribe(update);
   }, [phase, statsStore, rtt, touchMode, view.scale, view.panX, view.panY, box.w, box.h, diagSummary]);
-
-  const resetDiagnostics = useCallback(() => {
-    diagStateRef.current = createDiagnosticsState();
-    diagSeqRef.current = 0;
-    setDiagSummary(computeDiagnosticsSummary(diagStateRef.current, performance.now()));
-  }, []);
-
-  // Raw WebSocket ping-pong probing when Diagnostic Overlay is active during a session
-  useEffect(() => {
-    if (!diagnosticsOpen || phase !== 'live') {
-      return;
-    }
-
-    const sendProbe = () => {
-      const sock = wsRef.current;
-      const now = performance.now();
-      diagStateRef.current = sweepTimeouts(diagStateRef.current, now, PING_TIMEOUT_MS);
-      if (sock && sock.readyState === WebSocket.OPEN) {
-        const seq = diagSeqRef.current + 1;
-        diagSeqRef.current = seq;
-        diagStateRef.current = recordPingSent(diagStateRef.current, seq, now);
-        sock.send(JSON.stringify({ type: 'ping', seq, clientTs: now }));
-      }
-      setDiagSummary(computeDiagnosticsSummary(diagStateRef.current, now, PING_TIMEOUT_MS));
-    };
-
-    sendProbe();
-    const timer = window.setInterval(sendProbe, PING_INTERVAL_MS);
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, [diagnosticsOpen, phase]);
 
   const gateway = useGatewaySession({
     ...preferences,
