@@ -286,21 +286,6 @@ export function RustDeskShell({
           <div className="flex items-center justify-end gap-1.5 shrink-0">
             <button
               type="button"
-              className={`rd-topbar-server-btn${trimmedIdServer ? ' configured' : ''}`}
-              data-testid="topbar-server-status"
-              aria-label={t(locale, 'idRelayServerTitle')}
-              data-tooltip={t(locale, 'idRelayServerTitle')}
-              data-tooltip-pos="bottom-end"
-              onClick={() => openNetworkServerSetup(false)}
-            >
-              <span className="rd-topbar-dot" aria-hidden="true" />
-              <span className={`truncate${trimmedIdServer ? ' font-mono-tabular' : ''}`}>
-                {trimmedIdServer || t(locale, 'serverUnconfiguredShort')}
-              </span>
-            </button>
-
-            <button
-              type="button"
               className="rd-mobile-icon-btn"
               data-testid="mobile-open-settings"
               aria-label={t(locale, 'openSettings')}

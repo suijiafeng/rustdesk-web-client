@@ -148,7 +148,7 @@ export function IdServerModal({
             <span>{t(locale, 'serverPublicKey')}</span>
             <input
               ref={keyInput}
-              type="text"
+              type="password"
               className={`rd-input font-mono-tabular${showKeyError ? ' has-error' : ''}`}
               data-testid="server-key"
               value={draft.serverKey}
