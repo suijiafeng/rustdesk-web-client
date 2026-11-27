@@ -142,7 +142,9 @@ async function startServer() {
     closeFrontend = () => vite.close();
     app.use(vite.middlewares);
   } else {
-    const distDir = path.resolve(__dirname, 'dist');
+    const distDir = path.basename(__dirname) === 'dist'
+      ? path.resolve(__dirname, 'client')
+      : path.resolve(__dirname, 'dist/client');
     serveProductionFiles(app, distDir);
   }
 

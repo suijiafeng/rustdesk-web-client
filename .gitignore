@@ -1,6 +1,5 @@
 /node_modules/
 /dist/
-/server.js
 /test-results/
 .env
 .env.*

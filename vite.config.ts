@@ -18,4 +18,8 @@ export default defineConfig({
   resolve: {
     alias: { '@': root },
   },
+  build: {
+    outDir: 'dist/client',
+    emptyOutDir: true,
+  },
 });
