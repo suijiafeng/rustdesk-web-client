@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rd-web-shell-v1';
+const CACHE_NAME = 'rd-web-shell-v2';
 const SHELL_ASSETS = ['/', '/manifest.webmanifest', '/icon.svg', '/favicon.svg'];
 
 self.addEventListener('install', (event) => {
