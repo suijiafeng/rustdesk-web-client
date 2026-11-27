@@ -39,6 +39,7 @@ export interface DisplayPrefs {
   followRemoteCursor: boolean;
   disableClipboard: boolean;
   lockAfterSessionEnd: boolean;
+  keepScreenAwake: boolean;
   reverseMouseWheel: boolean;
   swapMouseButtons: boolean;
 }
@@ -60,6 +61,7 @@ export const DEFAULT_DISPLAY_PREFS: DisplayPrefs = {
   followRemoteCursor: false,
   disableClipboard: false,
   lockAfterSessionEnd: false,
+  keepScreenAwake: true,
   reverseMouseWheel: false,
   swapMouseButtons: false,
 };
@@ -119,6 +121,10 @@ export function normalizeDisplayPrefs(raw: unknown, useTouchDefaults = false): D
         : DEFAULT_DISPLAY_PREFS.showRemoteCursor,
     disableClipboard: Boolean(obj.disableClipboard),
     lockAfterSessionEnd: Boolean(obj.lockAfterSessionEnd),
+    keepScreenAwake:
+      typeof obj.keepScreenAwake === 'boolean'
+        ? obj.keepScreenAwake
+        : DEFAULT_DISPLAY_PREFS.keepScreenAwake,
     reverseMouseWheel: Boolean(obj.reverseMouseWheel),
     swapMouseButtons: Boolean(obj.swapMouseButtons),
   };

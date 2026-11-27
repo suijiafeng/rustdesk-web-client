@@ -138,6 +138,18 @@ export function DisplaySettings({
           />
           <span>{t(locale, 'optShowQualityMonitor')}</span>
         </label>
+        <label className="settings-option-row">
+          <input
+            type="checkbox"
+            role="switch"
+            className="ui-switch"
+            data-testid="settings-opt-keep-awake"
+            checked={displayPrefs.keepScreenAwake}
+            onChange={(e) => onUpdateDisplayPrefs({ keepScreenAwake: e.target.checked })}
+          />
+          <span>{t(locale, 'optKeepScreenAwake')}</span>
+        </label>
+        <p className="text-xs text-[var(--ink-soft)] m-0">{t(locale, 'optKeepScreenAwakeHint')}</p>
       </section>
     </div>
   );

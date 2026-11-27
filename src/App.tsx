@@ -503,7 +503,7 @@ export default function App() {
     }
   }, []);
 
-  useWakeLock(phase === 'live');
+  useWakeLock(phase === 'live' && displayPrefs.keepScreenAwake);
 
   return (
     <RemoteStage

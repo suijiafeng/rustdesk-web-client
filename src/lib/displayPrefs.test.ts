@@ -23,6 +23,7 @@ test('normalizeDisplayPrefs restores safe defaults and clamps bounds', () => {
     showRemoteCursor: false,
     disableClipboard: true,
     lockAfterSessionEnd: true,
+    keepScreenAwake: false,
     reverseMouseWheel: true,
     swapMouseButtons: true,
   });
@@ -37,6 +38,7 @@ test('normalizeDisplayPrefs restores safe defaults and clamps bounds', () => {
   assert.equal(normalized.showRemoteCursor, false);
   assert.equal(normalized.disableClipboard, true);
   assert.equal(normalized.lockAfterSessionEnd, true);
+  assert.equal(normalized.keepScreenAwake, false);
   assert.equal(normalized.reverseMouseWheel, true);
   assert.equal(normalized.swapMouseButtons, true);
 });
