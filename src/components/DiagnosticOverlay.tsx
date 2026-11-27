@@ -1,5 +1,5 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { Signal, SignalLow, SignalMedium, SignalZero, X } from 'lucide-react';
+import { Lock, Signal, SignalLow, SignalMedium, SignalZero, X } from 'lucide-react';
 import { classifyLinkHealth, type DiagnosticsSummary } from '../lib/diagnostics';
 import { t, type Locale } from '../lib/i18n';
 import { formatBitrate, type GatewayVideoStats } from '../lib/protocol';
@@ -11,6 +11,7 @@ interface DiagnosticOverlayProps {
   summary: DiagnosticsSummary;
   routeLabel: string;
   browserDirect?: boolean;
+  encrypted?: boolean;
   gatewayVideo?: GatewayVideoStats;
   onClose: () => void;
 }
@@ -18,7 +19,7 @@ interface DiagnosticOverlayProps {
 const finite = (value: number | null) => value !== null && Number.isFinite(value) && value >= 0 ? value : null;
 
 export function DiagnosticOverlay({
-  locale, statsStore, summary, routeLabel, browserDirect, gatewayVideo, onClose,
+  locale, statsStore, summary, routeLabel, browserDirect, encrypted, gatewayVideo, onClose,
 }: DiagnosticOverlayProps) {
   const stats = useSessionStats(statsStore);
   const firstSequence = useRef(summary.totalSent);
@@ -34,7 +35,7 @@ export function DiagnosticOverlay({
   const clampPos = (left: number, top: number) => {
     const el = overlayRef.current;
     const w = el?.offsetWidth ?? 240;
-    const h = el?.offsetHeight ?? 200;
+    const h = el?.offsetHeight ?? 240;
     const maxLeft = Math.max(8, window.innerWidth - w - 8);
     const maxTop = Math.max(8, window.innerHeight - h - 8);
     return {
@@ -81,8 +82,11 @@ export function DiagnosticOverlay({
   const rtt = probe && !probe.lost && probe.seq === summary.totalSent && probe.seq > firstSequence.current
     ? finite(probe.rttMs) : null;
   const jitter = finite(summary.jitterMs);
+  const resolution = stats.streamState !== 'waiting' && stats.width > 0 && stats.height > 0
+    ? `${stats.width}×${stats.height}` : null;
   const fps = stats.streamState === 'waiting' ? null : finite(stats.renderFps);
   const bitrate = stats.streamState === 'waiting' ? null : finite(stats.bitrate);
+  const packetLoss = summary.windowSent > 0 ? `${Math.round(summary.packetLossPct * 10) / 10}%` : null;
   const recovering = ((stats.inFlightFrames ?? 0) > 0 && (stats.oldestFrameAgeMs ?? 0) >= 200) || gatewayVideo?.recovering;
   const decodeLatency = stats.streamState === 'waiting' ? null : finite(stats.decodeLatencyMs ?? null);
   const networkHealth = classifyLinkHealth(finite(summary.avgRttMs), summary.packetLossPct, jitter);
@@ -121,6 +125,11 @@ export function DiagnosticOverlay({
           <StatusIcon size={16} aria-hidden="true" />
         </span>
         <span className="diag-route">{routeLabel}</span>
+        {encrypted && (
+          <span className="diag-encrypted" title={t(locale, 'diagEncrypted')} aria-label={t(locale, 'diagEncrypted')}>
+            <Lock size={12} aria-hidden="true" />
+          </span>
+        )}
         <button type="button" className="diag-close" data-testid="diag-close" data-session-notice
           aria-label={t(locale, 'diagClose')}
           onPointerDown={event => event.stopPropagation()} onPointerMove={event => event.stopPropagation()}
@@ -129,8 +138,8 @@ export function DiagnosticOverlay({
       </div>
       <dl className="diag-metrics">
         <div>
-          <dt>{t(locale, 'diagCodec')}</dt>
-          <dd data-testid="diag-codec">{stats.codec || '—'}</dd>
+          <dt>{t(locale, 'diagResolution')}</dt>
+          <dd data-testid="diag-value-resolution">{resolution ?? '—'}</dd>
         </div>
         <div>
           <dt>{t(locale, 'diagFrameRate')}</dt>
@@ -145,8 +154,16 @@ export function DiagnosticOverlay({
           <dd data-testid="diag-value-rtt">{rtt === null ? '—' : `${Math.round(rtt)} ms`}</dd>
         </div>
         <div>
+          <dt>{t(locale, 'diagPacketLoss')}</dt>
+          <dd data-testid="diag-value-loss">{packetLoss ?? '—'}</dd>
+        </div>
+        <div>
           <dt>{t(locale, 'diagJitter')}</dt>
           <dd data-testid="diag-value-jitter">{jitter === null ? '—' : `${Math.round(jitter * 10) / 10} ms`}</dd>
+        </div>
+        <div>
+          <dt>{t(locale, 'diagCodec')}</dt>
+          <dd data-testid="diag-codec">{stats.codec || '—'}</dd>
         </div>
         <div>
           <dt>{t(locale, 'diagDecodeLatency')}</dt>

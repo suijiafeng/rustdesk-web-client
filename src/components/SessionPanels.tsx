@@ -247,6 +247,7 @@ export function SessionPanels({
             summary={diagSummary}
             routeLabel={routeLabel}
             browserDirect={peer?.route?.startsWith('webrtc')}
+            encrypted={peer?.encrypted}
             gatewayVideo={gatewayVideo}
             onClose={() => setDiagnosticsOpen(false)}
           />

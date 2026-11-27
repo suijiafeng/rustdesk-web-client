@@ -795,6 +795,8 @@ try {
     if (reason.includes('gateway access token')) {
       assert.match(await evaluate(select('error-title') + '.textContent'), /Invalid Gateway Token|网关令牌无效/);
     } else {
+      await evaluate(select('error-info-toggle') + '.click()');
+      await until(select('error-technical-details'));
       assert.ok((await evaluate(select('error-technical-details') + '.textContent')).includes(reason), reason);
     }
   }

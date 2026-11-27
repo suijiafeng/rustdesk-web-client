@@ -72,6 +72,7 @@ export function RemoteStage({
       <canvas
         ref={canvasRef}
         data-testid="canvas"
+        hidden={!live}
         width={remoteW}
         height={remoteH}
         style={{

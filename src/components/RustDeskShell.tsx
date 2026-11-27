@@ -4,7 +4,6 @@ import {
   Clock,
   LayoutGrid,
   List,
-  Search,
   Settings,
   Star,
   X,
@@ -151,27 +150,13 @@ export function RustDeskShell({
     }
     return isDesktop ? 'grid' : 'list';
   });
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const isLive = phase === 'live';
   const effectiveLayout = isDesktop ? viewLayout : 'list';
-  const favoriteCount = useMemo(() => devices.filter((d) => d.favorite).length, [devices]);
 
-  const filteredDevices = useMemo(() => {
-    const base = listTab === 'favorites' ? devices.filter((d) => d.favorite) : devices;
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return base;
-    const compactQ = q.replace(/\s+/g, '');
-    return base.filter((d) => {
-      return (
-        (d.peerId ?? '').toLowerCase().includes(compactQ) ||
-        (d.host ?? '').toLowerCase().includes(q) ||
-        (d.alias ?? '').toLowerCase().includes(q) ||
-        (d.hostname ?? '').toLowerCase().includes(q) ||
-        (d.platform ?? '').toLowerCase().includes(q)
-      );
-    });
-  }, [devices, listTab, searchQuery]);
+  const filteredDevices = useMemo(
+    () => (listTab === 'favorites' ? devices.filter((d) => d.favorite) : devices),
+    [devices, listTab],
+  );
 
   const openNetworkServerSetup = (continueConnection = false) => {
     setConnectAfterServerSetup(continueConnection);
@@ -237,7 +222,7 @@ export function RustDeskShell({
   if (settingsOpen) {
     return (
       <>
-      <Suspense fallback={null}>
+      <Suspense fallback={<div className="rd-mobile-shell" aria-hidden="true" />}>
         <SettingsView
           locale={locale}
           localePreference={localePreference}
@@ -332,57 +317,29 @@ export function RustDeskShell({
                 role="tab"
                 aria-selected={listTab === 'recent'}
                 aria-label={t(locale, 'recentSessions')}
-                data-tooltip={t(locale, 'recentSessions')}
-                data-tooltip-pos="bottom-start"
                 data-testid="mobile-subtab-recent"
                 className={`rd-subtab-btn${listTab === 'recent' ? ' active' : ''}`}
                 onClick={() => setListTab('recent')}
               >
                 <Clock size={17} />
                 <span>{t(locale, 'recentSessions')}</span>
-                {devices.length > 0 && (
-                  <span className="text-[11px] font-mono-tabular opacity-75">({devices.length})</span>
-                )}
               </button>
               <button
                 type="button"
                 role="tab"
                 aria-selected={listTab === 'favorites'}
                 aria-label={t(locale, 'tabFavorites')}
-                data-tooltip={t(locale, 'tabFavorites')}
-                data-tooltip-pos="bottom"
                 data-testid="mobile-subtab-favorites"
                 className={`rd-subtab-btn${listTab === 'favorites' ? ' active' : ''}`}
                 onClick={() => setListTab('favorites')}
               >
                 <Star size={17} />
                 <span>{t(locale, 'tabFavorites')}</span>
-                {favoriteCount > 0 && (
-                  <span className="text-[11px] font-mono-tabular opacity-75">({favoriteCount})</span>
-                )}
               </button>
             </div>
 
-            <div className="flex items-center gap-0.5">
-              <button
-                type="button"
-                className={`rd-subtab-btn${searchOpen ? ' active' : ''}`}
-                aria-label={t(locale, 'searchDevicesAria')}
-                aria-expanded={searchOpen}
-                data-tooltip={t(locale, 'searchDevicesAria')}
-                data-tooltip-pos="bottom-end"
-                data-testid="mobile-search-toggle"
-                onClick={() => {
-                  setSearchOpen((prev) => {
-                    if (prev) setSearchQuery('');
-                    return !prev;
-                  });
-                }}
-              >
-                <Search size={18} />
-              </button>
-
-              {isDesktop && (
+            {isDesktop && (
+              <div className="flex items-center gap-0.5">
                 <button
                   type="button"
                   className="rd-subtab-btn"
@@ -408,38 +365,9 @@ export function RustDeskShell({
                 >
                   {viewLayout === 'grid' ? <LayoutGrid size={18} /> : <List size={18} />}
                 </button>
-              )}
-            </div>
-          </div>
-
-          {/* Inline Search Bar */}
-          {searchOpen && (
-            <div className="px-4 md:px-0 pt-3 pb-1">
-              <div className="rd-search-bar">
-                <Search size={16} className="text-[var(--ink-soft)] shrink-0" />
-                <input
-                  type="text"
-                  className="w-full bg-transparent border-0 outline-none text-sm text-[var(--ink)]"
-                  data-testid="mobile-search-input"
-                  value={searchQuery}
-                  placeholder={t(locale, 'searchDevicesPlaceholder')}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    className="inline-flex items-center justify-center w-8 h-8 border-0 bg-transparent text-[var(--ink-soft)]"
-                    aria-label={t(locale, 'clearInput')}
-                    data-tooltip={t(locale, 'clearInput')}
-                    data-tooltip-pos="top-end"
-                    onClick={() => setSearchQuery('')}
-                  >
-                    <X size={16} />
-                  </button>
-                )}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Peer Cards Grid / List */}
           <section className="flex-1 flex flex-col px-4 md:px-0 py-4">
@@ -448,7 +376,7 @@ export function RustDeskShell({
               devices={filteredDevices}
               savedPasswords={savedPasswords}
               listTab={listTab}
-              searchQuery={searchQuery}
+              searchQuery=""
               layout={effectiveLayout}
               onSelect={connectForm.handleDeviceRowTap}
               onToggleFavorite={onToggleFavorite}

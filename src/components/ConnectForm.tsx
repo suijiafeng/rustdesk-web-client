@@ -378,14 +378,6 @@ export function ConnectForm({ model }: { model: ConnectFormModel }) {
                 aria-label={t(locale, 'helpButtonAria')}
                 aria-expanded={helpVisible}
                 aria-controls="remote-help-popover"
-                onClick={() => {
-                  if (helpPinned) {
-                    setHelpPinned(false);
-                    setHelpHover(false);
-                  } else {
-                    setHelpPinned(true);
-                  }
-                }}
               >
                 <HelpCircle size={17} />
               </button>

@@ -198,11 +198,11 @@ try {
 
   const rawDiagnostic = 'Host diagnostic: instance-42 failed at <internal-step>';
   await evaluate(`window.replyConnectionError(${JSON.stringify(rawDiagnostic)})`);
-  await until(select('error-technical-details'));
+  await until(select('error-info-toggle'));
   assert.ok(!(await evaluate(select('detail') + '.textContent')).includes(rawDiagnostic));
-  assert.equal(await evaluate(select('error-technical-details') + '.open'), false);
-  await evaluate(select('error-technical-details') + '.querySelector("summary").click()');
-  assert.equal(await evaluate(select('error-technical-details') + '.open'), true);
+  assert.equal(await evaluate(select('error-technical-details')), null);
+  await evaluate(select('error-info-toggle') + '.click()');
+  await until(select('error-technical-details'));
   assert.ok((await evaluate(select('error-technical-details') + '.textContent')).includes(rawDiagnostic));
   console.log('Unknown host errors: localized guidance is primary and raw details remain collapsed until expanded.');
   await click('mobile-open-settings');

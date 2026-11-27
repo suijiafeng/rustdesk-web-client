@@ -66,8 +66,8 @@ test('text connection details stay compact, accurate and transparent to remote i
           })()`);
           assert.ok(layout.width <= 240 && layout.x + layout.width < width, JSON.stringify(layout));
           assert.ok(layout.scroll <= width, JSON.stringify(layout));
-          assert.equal(layout.rows.length, 6);
-          assert.equal(new Set(layout.rows.map(row => row.y)).size, 6);
+          assert.equal(layout.rows.length, 8);
+          assert.equal(new Set(layout.rows.map(row => row.y)).size, 8);
           for (const row of layout.rows) {
             assert.equal(row.y, row.metricY);
             assert.equal(row.left, layout.rows[0].left);
