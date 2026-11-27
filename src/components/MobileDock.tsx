@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Keyboard, Layers2, Monitor, MousePointer2, Pointer } from 'lucide-react';
+import { Activity, ChevronLeft, ChevronRight, Keyboard, Layers2, Monitor, MousePointer2, Pointer } from 'lucide-react';
 import { t, type Locale } from '../lib/i18n';
 import type { MobilePanel } from './MobileSessionPanel';
 
@@ -6,17 +6,30 @@ interface Props {
   locale: Locale;
   activePanel: MobilePanel | null;
   touchMode: boolean;
+  diagnosticsOpen: boolean;
+  onToggleDiagnostics: () => void;
   onToggleTouchMode: () => void;
   onToggleKeyboard: () => void;
   onCollapse: () => void;
   onOpenMenu: (panel: MobilePanel) => void;
 }
 
-export function MobileDock({ locale, activePanel, touchMode, onToggleTouchMode, onToggleKeyboard, onCollapse, onOpenMenu }: Props) {
+export function MobileDock({
+  locale,
+  activePanel,
+  touchMode,
+  diagnosticsOpen,
+  onToggleDiagnostics,
+  onToggleTouchMode,
+  onToggleKeyboard,
+  onCollapse,
+  onOpenMenu,
+}: Props) {
   const buttons = [
     ['dock-keyboard', 'keyboard', Keyboard, onToggleKeyboard, false],
     ['dock-input-mode', touchMode ? 'touch' : 'mouse', touchMode ? Pointer : MousePointer2, onToggleTouchMode, !touchMode],
     ['dock-display', 'screens', Monitor, () => onOpenMenu('display'), activePanel === 'display'],
+    ['dock-monitor', 'dockMonitor', Activity, onToggleDiagnostics, diagnosticsOpen],
     ['dock-menu', 'moreActions', Layers2, () => onOpenMenu('actions'), activePanel === 'actions'],
   ] as const;
 
@@ -25,8 +38,8 @@ export function MobileDock({ locale, activePanel, touchMode, onToggleTouchMode, 
       {buttons.map(([id, label, Icon, action, active]) => (
         <button key={id} type="button" data-testid={id} className={active ? 'selected' : ''}
           aria-label={id === 'dock-input-mode' ? t(locale, 'toggleInputMode') : undefined}
-          aria-pressed={id === 'dock-input-mode' ? touchMode : undefined}
-          aria-expanded={id === 'dock-menu' || id === 'dock-display' ? active : undefined}
+          aria-pressed={id === 'dock-input-mode' ? touchMode : id === 'dock-monitor' ? diagnosticsOpen : undefined}
+          aria-expanded={id === 'dock-menu' || id === 'dock-display' || id === 'dock-monitor' ? active : undefined}
           onClick={action}>
           <Icon size={20} /><span>{t(locale, label)}</span>
         </button>

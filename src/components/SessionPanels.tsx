@@ -1,5 +1,5 @@
 import type { ErrorPayload } from '../../shared/errors';
-import { lazy, Suspense, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react';
+import { lazy, Suspense, type Dispatch, type RefObject, type SetStateAction } from 'react';
 import type { useClipboardSync } from '../hooks/useClipboardSync';
 import type { useGatewaySession } from '../hooks/useGatewaySession';
 import type { usePreferences } from '../hooks/usePreferences';
@@ -12,9 +12,8 @@ import type { SoftKeyboardMode } from '../hooks/useKeyboardViewport';
 import type { SavedDevice } from '../lib/devices';
 import { persistDisplayPrefs, type DisplayPrefs } from '../lib/displayPrefs';
 import type { DiagnosticsSummary } from '../lib/diagnostics';
-import { t, type Locale } from '../lib/i18n';
-import { formatBitrate, type ClientMessage, type PeerMessage, type QualityLevel, type ServerMessage } from '../lib/protocol';
-import { useSessionStats, type SessionStatsStore } from '../lib/sessionStats';
+import { t } from '../lib/i18n';
+import type { ClientMessage, PeerMessage, QualityLevel, ServerMessage } from '../lib/protocol';
 import type { ConnectionPhase } from '../types';
 import type { MobilePanel } from './MobileSessionPanel';
 import { RustDeskShell } from './RustDeskShell';
@@ -239,14 +238,6 @@ export function SessionPanels({
         {t(locale, restartState === 'requested' ? 'restartWaiting' : 'retryWaiting')}
         <button type="button" onClick={restartState === 'requested' ? () => setRestartState(null) : disconnect}>{t(locale,'cancel')}</button>
       </div>}
-      {phase === 'live' && isTouchLayout && !showSessionMenu && (
-        <MobileConnectionInfo
-          locale={locale}
-          statsStore={statsStore}
-          rtt={rtt}
-          browserDirect={Boolean(peer?.route?.startsWith('webrtc'))}
-        />
-      )}
 
       {diagnosticsOpen && phase === 'live' && (
         <Suspense fallback={null}>
@@ -292,6 +283,11 @@ export function SessionPanels({
             locale={locale}
             activePanel={menuOpen ? mobilePanel : null}
             touchMode={touchMode}
+            diagnosticsOpen={diagnosticsOpen}
+            onToggleDiagnostics={() => {
+              setMobilePanel('toolbar');
+              setDiagnosticsOpen((prev) => !prev);
+            }}
             onToggleTouchMode={() => {
               handleToggleTouchMode();
               setMobilePanel('toolbar');
@@ -299,6 +295,7 @@ export function SessionPanels({
             onToggleKeyboard={toggleSoftKeyboard}
             onCollapse={closeChrome}
             onOpenMenu={panel => {
+              setDiagnosticsOpen(false);
               setMobilePanel(current => menuOpen && panel === current ? 'toolbar' : panel);
               setMenuOpen(true);
             }}
@@ -460,118 +457,5 @@ export function SessionPanels({
         />
       )}
     </>
-  );
-}
-
-function MobileConnectionInfo({
-  locale,
-  statsStore,
-  rtt,
-  browserDirect,
-}: {
-  locale: Locale;
-  statsStore: SessionStatsStore;
-  rtt: number;
-  browserDirect: boolean;
-}) {
-  const stats = useSessionStats(statsStore);
-  const [compact, setCompact] = useState(false);
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
-  const boxRef = useRef<HTMLElement>(null);
-  const dragRef = useRef<{
-    startX: number;
-    startY: number;
-    originLeft: number;
-    originTop: number;
-    moved: boolean;
-  } | null>(null);
-
-  const bitrate =
-    stats.streamState === 'waiting' || stats.bitrate === null || !Number.isFinite(stats.bitrate) || stats.bitrate < 0
-      ? null
-      : stats.bitrate;
-
-  const clampPos = (left: number, top: number) => {
-    const el = boxRef.current;
-    const w = el?.offsetWidth ?? 130;
-    const h = el?.offsetHeight ?? 48;
-    const maxLeft = Math.max(8, window.innerWidth - w - 8);
-    const maxTop = Math.max(8, window.innerHeight - h - 8);
-    return {
-      left: Math.min(maxLeft, Math.max(8, left)),
-      top: Math.min(maxTop, Math.max(8, top)),
-    };
-  };
-
-  const onPointerDown = (e: React.PointerEvent<HTMLElement>) => {
-    e.stopPropagation();
-    const el = boxRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    e.currentTarget.setPointerCapture?.(e.pointerId);
-    dragRef.current = {
-      startX: e.clientX,
-      startY: e.clientY,
-      originLeft: rect.left,
-      originTop: rect.top,
-      moved: false,
-    };
-  };
-
-  const onPointerMove = (e: React.PointerEvent<HTMLElement>) => {
-    const drag = dragRef.current;
-    if (!drag) return;
-    e.stopPropagation();
-    const dx = e.clientX - drag.startX;
-    const dy = e.clientY - drag.startY;
-    if (!drag.moved && Math.hypot(dx, dy) >= 5) {
-      drag.moved = true;
-    }
-    if (drag.moved) {
-      setPos(clampPos(drag.originLeft + dx, drag.originTop + dy));
-    }
-  };
-
-  const onPointerUp = (e: React.PointerEvent<HTMLElement>) => {
-    const drag = dragRef.current;
-    dragRef.current = null;
-    if (!drag) return;
-    e.stopPropagation();
-    if (!drag.moved) {
-      setCompact((prev) => !prev);
-    }
-  };
-
-  return (
-    <aside
-      ref={boxRef}
-      className={`rd-mobile-conn-info${compact ? ' compact' : ''}`}
-      data-testid="mobile-connection-info"
-      aria-label={t(locale, 'diagTitle')}
-      style={pos ? { left: `${pos.left}px`, top: `${pos.top}px`, right: 'auto' } : undefined}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={() => { dragRef.current = null; }}
-    >
-      {!compact && (
-        <div className="rd-mobile-conn-row">
-          <span className="rd-mobile-conn-label">{t(locale, 'diagBandwidth')}</span>
-          <span className="rd-mobile-conn-val font-mono-tabular" data-testid="mobile-conn-bitrate">
-            {bitrate === null ? '—' : formatBitrate(bitrate)}
-          </span>
-        </div>
-      )}
-      <div className="rd-mobile-conn-row">
-        {!compact && (
-          <span className="rd-mobile-conn-label">
-            {t(locale, browserDirect ? 'diagRemoteRoundTrip' : 'diagGatewayRoundTrip')}
-          </span>
-        )}
-        <span className="rd-mobile-conn-val font-mono-tabular" data-testid="mobile-conn-rtt">
-          {rtt > 0 ? `${Math.round(rtt)} ms` : '—'}
-        </span>
-      </div>
-    </aside>
   );
 }
