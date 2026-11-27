@@ -11,6 +11,14 @@ import { RemoteSocket } from '../lib/remoteSocket';
 import { createSessionMessageHandler, type SessionMessageContext } from '../lib/sessionMessages';
 import { createFrameStats, type FrameStatsState } from '../lib/stats';
 
+export interface AutoReconnectState {
+  attempt: number;
+  maxAttempts: number;
+  secondsLeft: number;
+}
+
+const AUTO_RECONNECT_DELAYS_SEC = [2, 4, 8] as const;
+
 interface GatewaySessionContext extends Omit<SessionMessageContext, 'connection' | 'onTerminalError'> {
   mode: ConnectionMode;
   password: string;
@@ -107,6 +115,34 @@ export function useGatewaySession(context: GatewaySessionContext) {
   } = context;
 
   const [codecSupport, setCodecSupport] = useState<CodecSupport | null>(null);
+  const [autoReconnect, setAutoReconnect] = useState<AutoReconnectState | null>(null);
+  const autoReconnectAttemptRef = useRef(0);
+  const restartStateRef = useRef(restartState);
+  restartStateRef.current = restartState;
+
+  const cancelAutoReconnect = useCallback(() => {
+    autoReconnectAttemptRef.current = 0;
+    setAutoReconnect(null);
+  }, []);
+
+  const scheduleAutoReconnect = useCallback((wasLive: boolean) => {
+    if (restartStateRef.current || !reconnectRequest.current) return;
+    const nextAttempt = wasLive ? 1 : autoReconnectAttemptRef.current + 1;
+    if (!wasLive && autoReconnectAttemptRef.current === 0) return;
+    if (nextAttempt > AUTO_RECONNECT_DELAYS_SEC.length) {
+      autoReconnectAttemptRef.current = 0;
+      setAutoReconnect(null);
+      reconnectRequest.current = null;
+      return;
+    }
+    autoReconnectAttemptRef.current = nextAttempt;
+    setAutoReconnect({
+      attempt: nextAttempt,
+      maxAttempts: AUTO_RECONNECT_DELAYS_SEC.length,
+      secondsLeft: AUTO_RECONNECT_DELAYS_SEC[nextAttempt - 1],
+    });
+  }, [reconnectRequest]);
+
   const messageDisposer = useRef<(() => void) | null>(null);
   const clearSessionMessages = useCallback(() => {
     messageDisposer.current?.();
@@ -139,6 +175,7 @@ export function useGatewaySession(context: GatewaySessionContext) {
       setWebRtcFallbackReason(null);
       if (!retry) {
         setRestartState(null);
+        cancelAutoReconnect();
         reconnectRequest.current = null;
       }
       const activeMode = req?.mode ?? mode;
@@ -313,7 +350,7 @@ export function useGatewaySession(context: GatewaySessionContext) {
           targetDeviceKey,
           req,
         },
-        onTerminalError: () => { receivedTerminalError = true; clearSessionMessages(); },
+        onTerminalError: () => { receivedTerminalError = true; cancelAutoReconnect(); clearSessionMessages(); },
       });
 
       messageDisposer.current = handleSessionMessage.dispose;
@@ -356,6 +393,7 @@ export function useGatewaySession(context: GatewaySessionContext) {
         setConnectDialog(true);
         setMenuOpen(false);
         setStatusDetail(wasLive ? 'detailSessionDisconnected' : 'detailGatewayError');
+        scheduleAutoReconnect(wasLive);
       };
 
       sock.onclose = () => {
@@ -372,6 +410,7 @@ export function useGatewaySession(context: GatewaySessionContext) {
           setConnectDialog(true);
           setMenuOpen(false);
           setStatusDetail(wasLive ? 'detailSessionDisconnected' : 'detailGatewayClosed');
+          scheduleAutoReconnect(wasLive);
         } else {
           phaseRef.current = 'idle';
           setPhase('idle');
@@ -399,12 +438,47 @@ export function useGatewaySession(context: GatewaySessionContext) {
       placeCursor,
       resetDiagnostics,
       setStatusDetail,
+      cancelAutoReconnect,
+      scheduleAutoReconnect,
     ],
   );
 
+  // Clear auto-reconnect once session recovers to live
+  useEffect(() => {
+    if (phase === 'live' && autoReconnectAttemptRef.current > 0) {
+      cancelAutoReconnect();
+    }
+  }, [phase, cancelAutoReconnect]);
+
+  // Countdown timer & browser online fast-retry for auto-reconnect
+  useEffect(() => {
+    if (!autoReconnect || phase !== 'error') return;
+    const triggerRetry = () => {
+      const req = reconnectRequest.current;
+      setAutoReconnect(null);
+      if (req) void connectSession(req, true);
+    };
+    if (autoReconnect.secondsLeft <= 0) {
+      triggerRetry();
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setAutoReconnect((prev) =>
+        prev ? { ...prev, secondsLeft: Math.max(0, prev.secondsLeft - 1) } : null,
+      );
+    }, 1000);
+    window.addEventListener('online', triggerRetry, { once: true });
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('online', triggerRetry);
+    };
+  }, [autoReconnect, phase, connectSession, reconnectRequest]);
+
   useEffect(() => {
     if (!restartState) {
-      if (phase === 'idle' || phase === 'error') reconnectRequest.current = null;
+      if ((phase === 'idle' || phase === 'error') && !autoReconnect && autoReconnectAttemptRef.current === 0) {
+        reconnectRequest.current = null;
+      }
       return;
     }
     if (restartState === 'requested' && phase !== 'live') {
@@ -419,7 +493,7 @@ export function useGatewaySession(context: GatewaySessionContext) {
       }, 5000);
       return () => window.clearTimeout(timer);
     }
-  }, [restartState, phase, connectSession]);
+  }, [restartState, phase, autoReconnect, connectSession]);
 
   useEffect(() => {
     if (!restartState) return;
@@ -449,6 +523,7 @@ export function useGatewaySession(context: GatewaySessionContext) {
     clearSessionMessages();
     connectGeneration.current++;
     setWebRtcFallbackReason(null);
+    cancelAutoReconnect();
     reconnectRequest.current = null;
     setRestartState(null);
     finishPendingClick();
@@ -473,15 +548,17 @@ export function useGatewaySession(context: GatewaySessionContext) {
     phaseRef.current = 'idle';
     setPhase('idle');
     setStatusDetail('detailDisconnected');
-  }, [clearLongPress, finishPendingClick, resetDiagnostics, send, setStatusDetail]);
+  }, [cancelAutoReconnect, clearLongPress, finishPendingClick, resetDiagnostics, send, setStatusDetail]);
 
   const handleDismissError = useCallback(() => {
+    cancelAutoReconnect();
+    reconnectRequest.current = null;
     setDecoderError('');
     if (phaseRef.current === 'error') {
       setPhase('idle');
       setStatusDetail('detailIdle');
     }
-  }, [setStatusDetail]);
+  }, [cancelAutoReconnect, setStatusDetail]);
 
-  return { connectSession, disconnect, requestRestart, handleDismissError, codecSupport };
+  return { connectSession, disconnect, requestRestart, handleDismissError, codecSupport, autoReconnect, cancelAutoReconnect };
 }

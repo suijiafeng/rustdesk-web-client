@@ -14,6 +14,16 @@ export function formatCodecLabel(codec: PreferredCodec, autoLabel: string): stri
   return codec.toUpperCase();
 }
 
+export function normalizeCodecName(raw: string): Exclude<PreferredCodec, 'auto'> | null {
+  const lower = raw.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (lower === 'h264' || lower === 'avc') return 'h264';
+  if (lower === 'h265' || lower === 'hevc') return 'h265';
+  if (lower === 'vp8') return 'vp8';
+  if (lower === 'vp9') return 'vp9';
+  if (lower === 'av1') return 'av1';
+  return null;
+}
+
 export interface DisplayPrefs {
   viewStyle: DefaultViewStyle;
   scrollStyle: ScrollStyle;

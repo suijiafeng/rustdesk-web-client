@@ -248,6 +248,7 @@ export function SessionPanels({
             routeLabel={routeLabel}
             browserDirect={peer?.route?.startsWith('webrtc')}
             encrypted={peer?.encrypted}
+            preferredCodec={displayPrefs.codec}
             gatewayVideo={gatewayVideo}
             onClose={() => setDiagnosticsOpen(false)}
           />
@@ -335,6 +336,8 @@ export function SessionPanels({
           detail={detail}
           connectionError={connectionError}
           decoderError={decoderError}
+          autoReconnect={gateway.autoReconnect}
+          onCancelAutoReconnect={gateway.cancelAutoReconnect}
           touchMode={touchMode}
           diagnosticsOpen={diagnosticsOpen}
           devices={devices}

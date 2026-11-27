@@ -59,6 +59,8 @@ interface RustDeskShellProps {
   detail: string;
   connectionError?: ErrorPayload;
   decoderError: string;
+  autoReconnect?: import('../hooks/useGatewaySession').AutoReconnectState | null;
+  onCancelAutoReconnect?: () => void;
   touchMode: boolean;
   diagnosticsOpen: boolean;
   devices: SavedDevice[];
@@ -112,6 +114,8 @@ export function RustDeskShell({
   detail,
   connectionError,
   decoderError,
+  autoReconnect,
+  onCancelAutoReconnect,
   touchMode,
   diagnosticsOpen,
   devices,
@@ -181,6 +185,8 @@ export function RustDeskShell({
     detail,
     connectionError,
     decoderError,
+    autoReconnect,
+    onCancelAutoReconnect,
     devices,
     savedPasswords,
     onChangeMode,

@@ -1,5 +1,5 @@
 import { Film, Focus, Gauge, Monitor, Shield, SlidersHorizontal } from 'lucide-react';
-import { formatCodecLabel, PREFERRED_CODEC_OPTIONS, type PreferredCodec } from '../lib/displayPrefs';
+import { formatCodecLabel, normalizeCodecName, PREFERRED_CODEC_OPTIONS, type PreferredCodec } from '../lib/displayPrefs';
 import { t, type Locale } from '../lib/i18n';
 import type { CodecSupport, PeerMessage, QualityLevel } from '../lib/protocol';
 import { AdaptiveSelect } from './AdaptiveSelect';
@@ -17,7 +17,7 @@ export interface SessionDisplayControlsProps {
   peer: PeerMessage | null;
   display: number;
   viewOnly: boolean;
-  stats: { width: number; height: number };
+  stats: { width: number; height: number; codec?: string };
   sizes: Array<{ width: number; height: number }>;
   quality: QualityLevel;
   customQuality: number;
@@ -150,6 +150,11 @@ export function SessionDisplayControls({
           }}
         />
       </label>
+      {stats.codec && stats.codec !== '—' && preferredCodec !== 'auto' && normalizeCodecName(stats.codec) !== preferredCodec && (
+        <p className="m-0 pb-1 text-xs text-[var(--ink-soft)]" data-testid="codec-actual-hint">
+          {t(locale, 'codecActualPrefix')}: {stats.codec}
+        </p>
+      )}
     </>
   );
 

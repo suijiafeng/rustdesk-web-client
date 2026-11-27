@@ -1,4 +1,5 @@
 import type { ErrorPayload } from '../../shared/errors';
+import type { AutoReconnectState } from '../hooks/useGatewaySession';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, HelpCircle, KeyRound, Loader2, X } from 'lucide-react';
 import { deviceKeyFor, formatPeerId, type SavedDevice } from '../lib/devices';
@@ -29,6 +30,8 @@ interface ConnectFormProps {
   detail: string;
   connectionError?: ErrorPayload;
   decoderError: string;
+  autoReconnect?: AutoReconnectState | null;
+  onCancelAutoReconnect?: () => void;
   devices?: SavedDevice[];
   savedPasswords: SavedPasswordMap;
   onChangeMode: (mode: ConnectionMode) => void;
@@ -685,6 +688,8 @@ export function ConnectForm({ model }: { model: ConnectFormModel }) {
             locale={locale}
             rawError={decoderError || detail}
             error={connectionError}
+            autoReconnect={model.autoReconnect}
+            onCancelAutoReconnect={model.onCancelAutoReconnect}
             onDismiss={onDismissError}
             onRetry={retryConnection}
             onOpenNetworkSettings={

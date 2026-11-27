@@ -1,4 +1,5 @@
 import type { ErrorPayload } from '../../shared/errors';
+import type { AutoReconnectState } from '../hooks/useGatewaySession';
 import { useEffect, useRef, useState } from 'react';
 import { AlertCircle, KeyRound, RotateCw, X } from 'lucide-react';
 import { formatConnectionError } from '../lib/errors';
@@ -8,6 +9,8 @@ interface ErrorBannerProps {
   locale: Locale;
   rawError: string;
   error?: ErrorPayload;
+  autoReconnect?: AutoReconnectState | null;
+  onCancelAutoReconnect?: () => void;
   onDismiss: () => void;
   onRetry?: () => void;
   onOpenNetworkSettings?: () => void;
@@ -18,6 +21,8 @@ export function ErrorBanner({
   locale,
   rawError,
   error,
+  autoReconnect,
+  onCancelAutoReconnect,
   onDismiss,
   onRetry,
   onRetryPassword,
@@ -88,7 +93,15 @@ export function ErrorBanner({
             {formatted.title}
           </div>
           {onRetry && formatted.kind !== 'auth' && (
-            <button type="button" className="rd-err-action-btn shrink-0" data-testid="error-action-retry" onClick={onRetry}>
+            <button
+              type="button"
+              className="rd-err-action-btn shrink-0"
+              data-testid="error-action-retry"
+              onClick={() => {
+                onCancelAutoReconnect?.();
+                onRetry();
+              }}
+            >
               <RotateCw size={13} />
               <span>{t(locale, 'actionRetryConnection')}</span>
             </button>
@@ -105,6 +118,25 @@ export function ErrorBanner({
             </button>
           )}
         </div>
+        {autoReconnect && (
+          <div className="mt-0.5 flex items-center gap-2 text-xs text-[var(--ink-soft)]" data-testid="auto-reconnect-status">
+            <span className="font-mono-tabular">
+              {locale === 'zh'
+                ? `${autoReconnect.secondsLeft} 秒后自动重连 (${autoReconnect.attempt}/${autoReconnect.maxAttempts})`
+                : `Reconnecting in ${autoReconnect.secondsLeft}s (${autoReconnect.attempt}/${autoReconnect.maxAttempts})`}
+            </span>
+            {onCancelAutoReconnect && (
+              <button
+                type="button"
+                className="rd-err-action-btn"
+                data-testid="auto-reconnect-cancel"
+                onClick={onCancelAutoReconnect}
+              >
+                {t(locale, 'cancel')}
+              </button>
+            )}
+          </div>
+        )}
         {formatted.message && (
           <p
             className="m-0 mt-0.5 text-xs text-[var(--ink)] leading-relaxed break-words"

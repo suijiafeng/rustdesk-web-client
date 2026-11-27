@@ -1,6 +1,7 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Activity, Lock, Signal, SignalLow, SignalMedium, X } from 'lucide-react';
 import { classifyLinkHealth, type DiagnosticsSummary } from '../lib/diagnostics';
+import { formatCodecLabel, normalizeCodecName, type PreferredCodec } from '../lib/displayPrefs';
 import { t, type Locale } from '../lib/i18n';
 import { formatBitrate, type GatewayVideoStats } from '../lib/protocol';
 import { useSessionStats, type SessionStatsStore } from '../lib/sessionStats';
@@ -12,6 +13,7 @@ interface DiagnosticOverlayProps {
   routeLabel: string;
   browserDirect?: boolean;
   encrypted?: boolean;
+  preferredCodec?: PreferredCodec;
   gatewayVideo?: GatewayVideoStats;
   onClose: () => void;
 }
@@ -19,7 +21,7 @@ interface DiagnosticOverlayProps {
 const finite = (value: number | null) => value !== null && Number.isFinite(value) && value >= 0 ? value : null;
 
 export function DiagnosticOverlay({
-  locale, statsStore, summary, routeLabel, browserDirect, encrypted, gatewayVideo, onClose,
+  locale, statsStore, summary, routeLabel, browserDirect, encrypted, preferredCodec, gatewayVideo, onClose,
 }: DiagnosticOverlayProps) {
   const stats = useSessionStats(statsStore);
   const firstSequence = useRef(summary.totalSent);
@@ -163,7 +165,18 @@ export function DiagnosticOverlay({
         </div>
         <div>
           <dt>{t(locale, 'diagCodec')}</dt>
-          <dd data-testid="diag-codec">{stats.codec || '—'}</dd>
+          <dd data-testid="diag-codec">
+            {(() => {
+              const actual = stats.codec && stats.codec !== '—' ? stats.codec : null;
+              const requested = preferredCodec && preferredCodec !== 'auto' ? preferredCodec : null;
+              if (!actual) return requested ? `${formatCodecLabel(requested, '')}…` : '—';
+              const actualNorm = normalizeCodecName(actual);
+              if (requested && actualNorm && actualNorm !== requested) {
+                return `${actual} (${t(locale, 'diagCodecReq')} ${formatCodecLabel(requested, '')})`;
+              }
+              return actual;
+            })()}
+          </dd>
         </div>
         <div>
           <dt>{t(locale, 'diagDecodeLatency')}</dt>
