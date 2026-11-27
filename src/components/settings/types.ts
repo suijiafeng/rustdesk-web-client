@@ -2,7 +2,7 @@ import type { DisplayPrefs } from '../../lib/displayPrefs';
 import type { Locale, LocalePreference } from '../../lib/i18n';
 import type { ThemePreference } from '../../lib/theme';
 
-export type SettingsSection = 'general' | 'network' | 'display' | 'input' | 'about';
+export type SettingsSection = 'general' | 'network' | 'display' | 'about';
 
 export interface SettingsViewProps {
   locale: Locale;

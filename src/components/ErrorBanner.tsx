@@ -35,12 +35,14 @@ export function ErrorBanner({
         <div className="text-[13px] font-semibold text-[var(--bad)] leading-snug" data-testid="error-title">
           {formatted.title}
         </div>
-        <p
-          className="m-0 mt-0.5 text-xs text-[var(--ink)] leading-relaxed break-words"
-          data-testid="detail"
-        >
-          {formatted.message}
-        </p>
+        {formatted.message && (
+          <p
+            className="m-0 mt-0.5 text-xs text-[var(--ink)] leading-relaxed break-words"
+            data-testid="detail"
+          >
+            {formatted.message}
+          </p>
+        )}
 
         {onRetry || (formatted.kind === 'network' && onOpenNetworkSettings) ||
         (formatted.kind === 'auth' && onRetryPassword) ? (

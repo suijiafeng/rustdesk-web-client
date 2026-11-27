@@ -1,13 +1,10 @@
 import React, { useState } from 'react';
 import { ConfirmDialog, RestartAction } from './RestartAction';
-import { AdaptiveSelect } from './AdaptiveSelect';
-import { Clipboard, Shield, Eye, Focus, LockKeyhole, LogOut, Monitor, SlidersHorizontal, Volume2, Gauge, Film } from 'lucide-react';
+import { SessionDisplayControls } from './SessionDisplayControls';
+import { Clipboard, Eye, LockKeyhole, LogOut, Volume2 } from 'lucide-react';
 import { t, type I18nKey } from '../lib/i18n';
 import { formatConnectionError } from '../lib/errors';
 import type { SessionMenuProps } from './SessionMenu';
-import { formatCodecLabel, PREFERRED_CODEC_OPTIONS, type PreferredCodec } from '../lib/displayPrefs';
-import type { QualityLevel } from '../lib/protocol';
-const qualityNames = { low: 'qualityLow', balanced: 'qualityBalanced', best: 'qualityBest', custom: 'qualityCustom' } as const;
 
 export type MobilePanel = 'toolbar' | 'actions' | 'display';
 
@@ -21,9 +18,6 @@ export function MobileSessionPanel(p: MobileSessionPanelProps) {
   React.useEffect(() => {
     if (p.decoderError) p.onNotify(formatConnectionError(p.locale, p.decoderError).message, true);
   }, [p.decoderError, p.locale, p.onNotify]);
-  const notify = (text: string) => p.onNotify(text);
-  const resolutionIndex = p.sizes.findIndex(s => s.width === p.stats.width && s.height === p.stats.height);
-  const monitors = p.peer?.displays ?? [];
   const panelName = { actions: 'moreActions', display: 'screens' } as const;
 
   const toggle = (Icon: typeof Eye, text: I18nKey, checked: boolean, change: () => void, disabled = false) => (
@@ -62,60 +56,31 @@ export function MobileSessionPanel(p: MobileSessionPanelProps) {
           }}
         />
       </>}
-      {p.mobilePanel === 'display' && <>
-        {monitors.length > 1 && <div className="tool-group tool-options">{monitors.map(d =>
-          <button key={d.index} aria-pressed={d.index === p.display} disabled={d.online === false}
-            onClick={() => { p.onSwitchDisplay(d.index); notify(label('requestSent')+' · '+(d.name || label('screens')+' '+(d.index+1))); }}><Monitor />{d.name || label('screens')+' '+(d.index+1)}</button>)}</div>}
-        <div className="tool-group">
-          {p.peer?.privacyAllowed && toggle(Shield, 'privacyMode', p.privacyEnabled, p.onTogglePrivacy, p.privacyPending || p.viewOnly)}
-          {p.sizes.length > 0 && <label className="tool-row"><Monitor /><span>{label('remoteResolution')}</span>
-            <AdaptiveSelect tone="remote" label={label('remoteResolution')} testId="resolution-select" disabled={p.viewOnly}
-              value={String(resolutionIndex)}
-              options={[...(resolutionIndex < 0 ? [{ value: '-1', label: `${p.stats.width} × ${p.stats.height}`, disabled: true }] : []), ...p.sizes.map((s,i) => ({ value: String(i), label: `${s.width} × ${s.height}` }))]}
-              onChange={value => { const size = p.sizes[Number(value)]; if (size) { p.onResolution(size.width,size.height); notify(label('requestSent')+' · '+size.width+' × '+size.height); } }} />
-            </label>}
-          <div data-testid="mobile-quality">
-            <label className="tool-row"><SlidersHorizontal /><span>{label('qualityAndFps')}</span>
-              <AdaptiveSelect tone="remote" label={label('qualityAndFps')} testId="quality-select" value={p.quality}
-                options={(['low', 'balanced', 'best', 'custom'] as const).map(level => ({ value: level, label: label(qualityNames[level]) }))}
-                onChange={value => {
-                const level = value as QualityLevel;
-                p.onChangeQuality(level, p.targetFps);
-                notify(label('requestSent')+' · '+label(qualityNames[level]));
-              }} />
-            </label>
-            {p.quality === 'custom' && <div className="rd-slider-group">
-              <label className="rd-slider-row">
-                <input type="range" className="rd-range" min={20} max={200} step={2}
-                  value={p.customQuality} aria-label={label('qualityRatioLabel')} data-testid="session-custom-quality"
-                  onChange={event => p.onChangeQuality('custom', p.targetFps, p.preferredCodec, Number(event.target.value))} />
-                <span className="rd-slider-val font-mono-tabular">{p.customQuality}%</span>
-                <span className="rd-slider-label">{label('qualityRatioLabel')}</span>
-              </label>
-              <p className="text-xs text-[var(--ink-soft)]">{label('qualityRatioHint')}</p>
-            </div>}
-            <label className="tool-row"><Gauge /><span>{label('targetFps')}</span>
-              <AdaptiveSelect tone="remote" label={label('targetFps')} testId="fps-select" value={String(p.targetFps)}
-                options={[...new Set([15,30,60,p.targetFps])].sort((a,b) => a-b).map(n => ({ value: String(n), label: `${n} FPS` }))}
-                onChange={value => { p.onChangeQuality(p.quality, Number(value)); notify(label('requestSent')+' · '+value+' FPS'); }} /></label>
-            <label className="tool-row"><Film /><span>{label('sessionCodecLabel')}</span>
-              <AdaptiveSelect tone="remote" label={label('sessionCodecLabel')} testId="codec-select" value={p.preferredCodec}
-                options={PREFERRED_CODEC_OPTIONS.map(value => ({
-                  value,
-                  label: formatCodecLabel(value, label('codecAuto')),
-                  disabled: value !== 'auto' && value !== p.preferredCodec && p.codecSupport?.[value] === false,
-                }))}
-                onChange={value => {
-                  const codec = value as PreferredCodec;
-                  p.onChangeQuality(p.quality, p.targetFps, codec);
-                  notify(label('requestSent') + ' · ' + formatCodecLabel(codec, label('codecAuto')));
-                }} /></label>
-          </div>
-        </div>
-        {monitors.length > 1 && <div className="tool-group">
-          {toggle(Focus,'followWindow',p.followWindow,() => { p.onToggleFollowWindow(); notify(label('followWindow')+' · '+label(p.followWindow ? 'optionOff' : 'optionOn')); })}
-        </div>}
-      </>}
+      {p.mobilePanel === 'display' && (
+        <SessionDisplayControls
+          variant="mobile"
+          locale={p.locale}
+          peer={p.peer}
+          display={p.display}
+          viewOnly={p.viewOnly}
+          stats={p.stats}
+          sizes={p.sizes}
+          quality={p.quality}
+          customQuality={p.customQuality}
+          targetFps={p.targetFps}
+          preferredCodec={p.preferredCodec}
+          codecSupport={p.codecSupport}
+          privacyEnabled={p.privacyEnabled}
+          privacyPending={p.privacyPending}
+          followWindow={p.followWindow}
+          onSwitchDisplay={p.onSwitchDisplay}
+          onTogglePrivacy={p.onTogglePrivacy}
+          onResolution={p.onResolution}
+          onChangeQuality={p.onChangeQuality}
+          onToggleFollowWindow={p.onToggleFollowWindow}
+          onNotify={p.onNotify}
+        />
+      )}
     </section>
   );
 }

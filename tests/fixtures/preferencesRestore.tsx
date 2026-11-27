@@ -3,7 +3,6 @@ import { createRoot } from 'react-dom/client';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { GeneralSettings } from '../../src/components/settings/GeneralSettings';
 import { DisplaySettings } from '../../src/components/settings/DisplaySettings';
-import { InputSettings } from '../../src/components/settings/InputSettings';
 import { persistDisplayPrefs, type DisplayPrefs } from '../../src/lib/displayPrefs';
 
 const result = { status: 'running', violations: [] as string[] };
@@ -26,13 +25,13 @@ function Fixture() {
   useEffect(() => { result.status = 'passed'; }, []);
   return <>
     <GeneralSettings locale="en" localePreference="en" theme={prefs.theme}
-      onChangeTheme={prefs.changeTheme} onChangeLocale={prefs.changeLocale} />
+      displayPrefs={prefs.displayPrefs} touchMode={prefs.touchMode}
+      onChangeTheme={prefs.changeTheme} onChangeLocale={prefs.changeLocale}
+      onUpdateDisplayPrefs={updateDisplay}
+      onToggleTouchMode={() => prefs.setTouchMode(previous => !previous)} />
     <DisplaySettings locale="en" displayPrefs={prefs.displayPrefs} touchMode={prefs.touchMode}
       diagnosticsOpen={false} onUpdateDisplayPrefs={updateDisplay}
       onToggleTouchMode={() => prefs.setTouchMode(previous => !previous)} onToggleDiagnostics={() => {}} />
-    <InputSettings locale="en" displayPrefs={prefs.displayPrefs} touchMode={prefs.touchMode}
-      onUpdateDisplayPrefs={updateDisplay}
-      onToggleTouchMode={() => prefs.setTouchMode(previous => !previous)} />
   </>;
 }
 createRoot(mount).render(<Fixture />);

@@ -1,11 +1,11 @@
 import { ConfirmDialog, RestartAction } from './RestartAction';
-import { AdaptiveSelect } from './AdaptiveSelect';
 import { ScrollDirectionSelect } from './ScrollDirectionSelect';
 import { MobileSessionPanel, type MobileSessionPanelProps } from './MobileSessionPanel';
+import { SessionDisplayControls } from './SessionDisplayControls';
 import React, { useState } from 'react';
 import {
-  Activity, ArrowDownUp,
-  Clipboard, Shield, LockKeyhole, Volume2, Gauge, Film, Focus, Hand, MousePointer2,
+  ArrowDownUp,
+  Clipboard, LockKeyhole, Volume2, Hand, MousePointer2,
   Power,
   Sliders,
   Monitor,
@@ -16,7 +16,7 @@ import { statusLabel, t, type Locale } from '../lib/i18n';
 import { type CodecSupport, type PeerMessage, type QualityLevel } from '../lib/protocol';
 import type { ConnectionPhase } from './RustDeskShell';
 
-import { formatCodecLabel, PREFERRED_CODEC_OPTIONS, type PreferredCodec } from '../lib/displayPrefs';
+import { type PreferredCodec } from '../lib/displayPrefs';
 import { useSessionStats, type SessionStats, type SessionStatsStore } from '../lib/sessionStats';
 export type { SessionStats } from '../lib/sessionStats';
 
@@ -242,59 +242,29 @@ function DesktopSessionMenu({
           )}
           {activeTab === 'display' && (
             <div role="tabpanel">
-              {hasMultipleDisplays && <div className="session-group session-mode-switch" role="group" aria-label={t(locale, 'displays')}>
-                {displays.map(d => <button key={d.index} type="button" aria-pressed={d.index === display} disabled={d.online === false}
-                  onClick={() => { onSwitchDisplay(d.index); onNotify(t(locale, 'requestSent')+' · '+(d.name || t(locale, 'screens')+' '+(d.index+1))); }}>
-                  <Monitor size={18} />{d.name || t(locale, 'screens')+' '+(d.index+1)}</button>)}
-              </div>}
-              <div className="session-group">
-                {peer?.privacyAllowed && <label className="session-setting-row"><Shield /><span>{t(locale, 'privacyMode')}</span>
-                  <input className="ui-switch" type="checkbox" role="switch" checked={privacyEnabled} disabled={privacyPending || viewOnly} onChange={onTogglePrivacy} />
-                </label>}
-                {sizes.length > 0 && <label className="session-setting-row"><Monitor /><span>{t(locale, 'remoteResolution')}</span>
-                  <AdaptiveSelect label={t(locale, 'remoteResolution')} testId="resolution-select" disabled={viewOnly} value={String(resolutionIndex)}
-                    options={[...(resolutionIndex < 0 ? [{ value: '-1', label: `${stats.width} × ${stats.height}`, disabled: true }] : []), ...sizes.map((s,i) => ({ value: String(i), label: `${s.width} × ${s.height}` }))]}
-                    onChange={value => { const size = sizes[Number(value)]; if (size) { onResolution(size.width, size.height); onNotify(t(locale, 'requestSent')+' · '+size.width+' × '+size.height); } }} />
-                </label>}
-                <label className="session-setting-row"><Sliders /><span>{t(locale, 'qualityAndFps')}</span>
-                  <AdaptiveSelect label={t(locale, 'qualityAndFps')} testId="quality-select" value={quality}
-                    options={[{ value: 'low', label: t(locale, 'qualityLow') }, { value: 'balanced', label: t(locale, 'qualityBalanced') }, { value: 'best', label: t(locale, 'qualityBest') }, { value: 'custom', label: t(locale, 'qualityCustom') }]}
-                    onChange={value => { onChangeQuality(value as QualityLevel, targetFps); onNotify(t(locale, 'requestSent')+' · '+t(locale, value === 'low' ? 'qualityLow' : value === 'best' ? 'qualityBest' : value === 'custom' ? 'qualityCustom' : 'qualityBalanced')); }} />
-                </label>
-                {quality === 'custom' && <div className="rd-slider-group">
-                  <label className="rd-slider-row">
-                    <input type="range" className="rd-range" min={20} max={200} step={2}
-                      value={customQuality} aria-label={t(locale, 'qualityRatioLabel')} data-testid="session-custom-quality"
-                      onChange={event => onChangeQuality('custom', targetFps, preferredCodec, Number(event.target.value))} />
-                    <span className="rd-slider-val font-mono-tabular">{customQuality}%</span>
-                    <span className="rd-slider-label">{t(locale, 'qualityRatioLabel')}</span>
-                  </label>
-                  <p className="text-xs text-[var(--ink-soft)]">{t(locale, 'qualityRatioHint')}</p>
-                </div>}
-                <label className="session-setting-row"><Gauge /><span>{t(locale, 'targetFps')}</span>
-                  <AdaptiveSelect label={t(locale, 'targetFps')} testId="fps-select" value={String(targetFps)}
-                    options={[...new Set([15,30,60,targetFps])].sort((a,b) => a-b).map(n => ({ value: String(n), label: `${n} FPS` }))}
-                    onChange={value => { onChangeQuality(quality, Number(value), preferredCodec); onNotify(t(locale, 'requestSent')+' · '+value+' FPS'); }} />
-                </label>
-                <label className="session-setting-row"><Film /><span>{t(locale, 'sessionCodecLabel')}</span>
-                  <AdaptiveSelect label={t(locale, 'sessionCodecLabel')} testId="codec-select" value={preferredCodec}
-                    options={PREFERRED_CODEC_OPTIONS.map(value => ({
-                      value,
-                      label: formatCodecLabel(value, t(locale, 'codecAuto')),
-                      disabled: value !== 'auto' && value !== preferredCodec && codecSupport?.[value] === false,
-                    }))}
-                    onChange={value => {
-                      const codec = value as PreferredCodec;
-                      onChangeQuality(quality, targetFps, codec);
-                      onNotify(t(locale, 'requestSent') + ' · ' + formatCodecLabel(codec, t(locale, 'codecAuto')));
-                    }} />
-                </label>
-              </div>
-              {hasMultipleDisplays && <div className="session-group">
-                <label className="session-setting-row"><Focus /><span>{t(locale, 'followWindow')}</span>
-                  <input className="ui-switch" type="checkbox" role="switch" checked={followWindow} onChange={() => { onToggleFollowWindow(); onNotify(t(locale, 'followWindow')+' · '+t(locale, followWindow ? 'optionOff' : 'optionOn')); }} />
-                </label>
-              </div>}
+              <SessionDisplayControls
+                variant="desktop"
+                locale={locale}
+                peer={peer}
+                display={display}
+                viewOnly={viewOnly}
+                stats={stats}
+                sizes={sizes}
+                quality={quality}
+                customQuality={customQuality}
+                targetFps={targetFps}
+                preferredCodec={preferredCodec}
+                codecSupport={codecSupport}
+                privacyEnabled={privacyEnabled}
+                privacyPending={privacyPending}
+                followWindow={followWindow}
+                onSwitchDisplay={onSwitchDisplay}
+                onTogglePrivacy={onTogglePrivacy}
+                onResolution={onResolution}
+                onChangeQuality={onChangeQuality}
+                onToggleFollowWindow={onToggleFollowWindow}
+                onNotify={onNotify}
+              />
             </div>
           )}
 

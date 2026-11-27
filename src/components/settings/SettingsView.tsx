@@ -1,11 +1,10 @@
 import type React from 'react';
 import { useEffect } from 'react';
-import { ArrowLeft, Info, Keyboard, Link2, Monitor, Settings } from 'lucide-react';
+import { ArrowLeft, Info, Link2, Monitor, Settings } from 'lucide-react';
 import { t } from '../../lib/i18n';
 import { AboutSettings, useProbedCodecSupport } from './AboutSettings';
 import { DisplaySettings } from './DisplaySettings';
 import { GeneralSettings } from './GeneralSettings';
-import { InputSettings } from './InputSettings';
 import { NetworkSettings } from './NetworkSettings';
 import type { SettingsSection, SettingsViewProps } from './types';
 
@@ -43,7 +42,6 @@ export function SettingsView(props: SettingsViewProps) {
     { id: 'general', label: t(locale, 'settingsGeneral'), icon: <Settings size={17} className="shrink-0" /> },
     { id: 'network', label: t(locale, 'settingsNetwork'), icon: <Link2 size={17} className="shrink-0" /> },
     { id: 'display', label: t(locale, 'settingsDisplay'), icon: <Monitor size={17} className="shrink-0" /> },
-    { id: 'input', label: t(locale, 'settingsInput'), icon: <Keyboard size={17} className="shrink-0" /> },
     { id: 'about', label: t(locale, 'settingsAbout'), icon: <Info size={17} className="shrink-0" /> },
   ];
 
@@ -97,9 +95,13 @@ export function SettingsView(props: SettingsViewProps) {
               locale={props.locale}
               localePreference={props.localePreference}
               theme={props.theme}
+              displayPrefs={props.displayPrefs}
+              touchMode={props.touchMode}
               savedPasswordCount={props.savedPasswordCount}
               onChangeTheme={props.onChangeTheme}
               onChangeLocale={props.onChangeLocale}
+              onUpdateDisplayPrefs={props.onUpdateDisplayPrefs}
+              onToggleTouchMode={props.onToggleTouchMode}
               onClearAllSavedPasswords={props.onClearAllSavedPasswords}
               onResetDefaults={props.onResetDefaults}
             />
@@ -133,16 +135,6 @@ export function SettingsView(props: SettingsViewProps) {
               onUpdateDisplayPrefs={props.onUpdateDisplayPrefs}
               onToggleTouchMode={props.onToggleTouchMode}
               onToggleDiagnostics={props.onToggleDiagnostics}
-            />
-          )}
-
-          {section === 'input' && (
-            <InputSettings
-              locale={props.locale}
-              displayPrefs={props.displayPrefs}
-              touchMode={props.touchMode}
-              onUpdateDisplayPrefs={props.onUpdateDisplayPrefs}
-              onToggleTouchMode={props.onToggleTouchMode}
             />
           )}
 

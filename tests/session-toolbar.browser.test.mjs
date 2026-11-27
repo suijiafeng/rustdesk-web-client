@@ -187,11 +187,11 @@ try {
   assert.equal(await evaluate(connectionDetails + ' === null'), true);
   await tapElement(select('dock-collapse'));
   await until(select('mobile-dock-expand'));
-  await tapElement(select('live-connection-badge'));
-  await until(select('diagnostic-overlay'));
-  await tapElement(select('diag-close'));
+  await until(select('mobile-connection-info'));
+  assert.ok(await evaluate(`Boolean(${select('mobile-conn-bitrate')})`));
+  assert.ok(await evaluate(`Boolean(${select('mobile-conn-rtt')})`));
   await tapElement(select('mobile-dock-expand'));
-  console.log('Tools: top-right connection badge verified, with no More, Screen details row, or gesture guide.');
+  console.log('Tools: top-right mobile connection info box verified (bandwidth + round-trip).');
   await tapElement(select('dock-display'));
   assert.equal(await evaluate(hasPrivacySwitch), true);
   const fps = select('fps-select');
