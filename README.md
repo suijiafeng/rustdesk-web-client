@@ -1,6 +1,6 @@
 # RustDesk Web Client
 
-[中文](README.zh-CN.md) · [Architecture](docs/architecture.md) · [Changelog](CHANGELOG.md)
+[中文](README.zh-CN.md) · [Changelog](CHANGELOG.md)
 
 An unofficial RustDesk client for the browser, built with React and a Node.js gateway.
 
@@ -191,12 +191,10 @@ The host operating system may capture multi-finger gestures before the browser r
 | `server.ts` | HTTP, health, static frontend, WebSocket upgrade, and server startup |
 | `server/` | RustDesk protocol, sessions, media, input, and signaling forwarding |
 | `shared/` | Protocol and WebRTC message definitions shared across layers |
-| `docs/` | Architecture notes and screenshots |
+| `docs/` | Screenshots |
 | `Dockerfile` | Node.js build and runtime image |
 | `docker-compose.yml` | Local container deployment |
 | `deploy.sh` | One-click Docker deployment |
-
-Architecture boundaries and trust considerations are documented in [docs/architecture.md](docs/architecture.md).
 
 ## Validation
 

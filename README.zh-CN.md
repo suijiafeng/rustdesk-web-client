@@ -1,6 +1,6 @@
 # RustDesk 网页客户端
 
-[English](README.md) · [架构](docs/architecture.md) · [更新记录](CHANGELOG.md)
+[English](README.md) · [更新记录](CHANGELOG.md)
 
 这是 [RustDesk](https://github.com/rustdesk/rustdesk) 的非官方浏览器客户端，与 RustDesk 作者没有隶属、背书或维护关系。
 
@@ -189,12 +189,10 @@ curl http://127.0.0.1:21120/api/health
 | `server.ts` | HTTP、健康检查、静态页面、WebSocket 升级和服务启动 |
 | `server/` | RustDesk 协议、会话、音视频、输入和信令转发 |
 | `shared/` | 各层共享的协议和 WebRTC 消息定义 |
-| `docs/` | 架构说明和截图 |
+| `docs/` | 截图 |
 | `Dockerfile` | Node.js 构建与运行镜像 |
 | `docker-compose.yml` | 本地容器部署 |
 | `deploy.sh` | Docker 一键部署脚本 |
-
-架构边界和信任考虑见 [docs/architecture.md](docs/architecture.md)。
 
 ## 验证
 
