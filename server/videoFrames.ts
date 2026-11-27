@@ -10,6 +10,8 @@ import {
   HEADER_LEN, encodeRdv1Frame, vp8KeyframeSize,
 } from '../shared/video.ts';
 
+const EMPTY_FRAME_DATA = new Uint8Array(0);
+
 export interface VideoFrameHandler {
   handleFrame: (conn: ConnectedHost, vf: EncodedVideo) => void;
   dispose: () => void;
@@ -55,7 +57,7 @@ export function createVideoFrameHandler(context: SessionContext): VideoFrameHand
       const queuedBefore = ws.bufferedAmount;
       let forwarded = 0;
       for (const f of extracted.frames) {
-        const payload = f.data ? new Uint8Array(f.data) : new Uint8Array(0);
+        const payload = f.data ?? EMPTY_FRAME_DATA;
         const isKey = encodedFrameIsKey(extracted.codec, payload, f.key);
         if (extracted.codec === CODEC_VP8 && isKey) {
           const parsedSize = vp8KeyframeSize(payload);

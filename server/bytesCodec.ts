@@ -39,23 +39,21 @@ export function encodeBytesFrame(data: Uint8Array): Buffer {
   if (len > MAX_FRAME_LENGTH) {
     throw new Error(`frame length ${len} exceeds MAX_FRAME_LENGTH`);
   }
-  let head: Buffer;
-  if (len <= 0x3f) {
-    head = Buffer.allocUnsafe(1);
-    head[0] = (len << 2) & 0xff;
-  } else if (len <= 0x3fff) {
-    head = Buffer.allocUnsafe(2);
-    head.writeUInt16LE(((len << 2) | 0x1) & 0xffff, 0);
-  } else if (len <= 0x3fffff) {
-    head = Buffer.allocUnsafe(3);
+  const headLen = len <= 0x3f ? 1 : len <= 0x3fff ? 2 : len <= 0x3fffff ? 3 : 4;
+  const out = Buffer.allocUnsafe(headLen + len);
+  if (headLen === 1) {
+    out[0] = (len << 2) & 0xff;
+  } else if (headLen === 2) {
+    out.writeUInt16LE(((len << 2) | 0x1) & 0xffff, 0);
+  } else if (headLen === 3) {
     const h = ((len << 2) | 0x2) >>> 0;
-    head.writeUInt16LE(h & 0xffff, 0);
-    head[2] = (h >>> 16) & 0xff;
+    out.writeUInt16LE(h & 0xffff, 0);
+    out[2] = (h >>> 16) & 0xff;
   } else {
-    head = Buffer.allocUnsafe(4);
-    head.writeUInt32LE(((len << 2) | 0x3) >>> 0, 0);
+    out.writeUInt32LE(((len << 2) | 0x3) >>> 0, 0);
   }
-  return Buffer.concat([head, Buffer.from(data.buffer, data.byteOffset, data.byteLength)]);
+  out.set(data, headLen);
+  return out;
 }
 
 /**
