@@ -1,6 +1,4 @@
-import { useId, useLayoutEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { X } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { t, type Locale } from '../../lib/i18n';
 import type { ThemePreference } from '../../lib/theme';
 import { AdaptiveSelect } from '../AdaptiveSelect';
@@ -55,20 +53,16 @@ export function GeneralSettings({
   const [confirmKind, setConfirmKind] = useState<ConfirmKind>(null);
   const [clearedNotice, setClearedNotice] = useState(false);
   const [resetNotice, setResetNotice] = useState(false);
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  const returnFocusRef = useRef<HTMLButtonElement | null>(null);
-  const clearBtnRef = useRef<HTMLButtonElement>(null);
-  const resetBtnRef = useRef<HTMLButtonElement>(null);
-  const dialogId = useId();
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (!confirmKind) return;
-    const el = dialogRef.current;
-    el?.showModal();
-    return () => {
-      el?.close();
-      returnFocusRef.current?.focus({ preventScroll: true });
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.isComposing) {
+        setConfirmKind(null);
+      }
     };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
   }, [confirmKind]);
 
   const showLocalDataSection = Boolean(onClearAllSavedPasswords || onResetDefaults);
@@ -247,19 +241,35 @@ export function GeneralSettings({
                     : formatSavedPasswordSummary(locale, savedPasswordCount)}
                 </div>
               </div>
-              <button
-                ref={clearBtnRef}
-                type="button"
-                className="rd-btn shrink-0"
-                data-testid="settings-clear-passwords"
-                disabled={savedPasswordCount === 0}
-                onClick={() => {
-                  returnFocusRef.current = clearBtnRef.current;
-                  setConfirmKind('passwords');
-                }}
-              >
-                {t(locale, 'clearAllAction')}
-              </button>
+              {confirmKind === 'passwords' ? (
+                <div className="flex items-center gap-2 shrink-0" data-testid="settings-confirm-passwords">
+                  <button type="button" className="rd-btn" onClick={() => setConfirmKind(null)}>
+                    {t(locale, 'cancel')}
+                  </button>
+                  <button
+                    type="button"
+                    className="rd-btn danger"
+                    data-testid="settings-confirm-accept"
+                    onClick={() => {
+                      setConfirmKind(null);
+                      onClearAllSavedPasswords();
+                      setClearedNotice(true);
+                    }}
+                  >
+                    {t(locale, 'clearAllAction')}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="rd-btn shrink-0"
+                  data-testid="settings-clear-passwords"
+                  disabled={savedPasswordCount === 0}
+                  onClick={() => setConfirmKind('passwords')}
+                >
+                  {t(locale, 'clearAllAction')}
+                </button>
+              )}
             </div>
           )}
 
@@ -271,108 +281,38 @@ export function GeneralSettings({
                   {resetNotice ? t(locale, 'defaultsResetNotice') : t(locale, 'resetDefaultsHint')}
                 </div>
               </div>
-              <button
-                ref={resetBtnRef}
-                type="button"
-                className="rd-btn shrink-0"
-                data-testid="settings-reset-prefs"
-                onClick={() => {
-                  returnFocusRef.current = resetBtnRef.current;
-                  setConfirmKind('defaults');
-                }}
-              >
-                {t(locale, 'resetDefaultsAction')}
-              </button>
+              {confirmKind === 'defaults' ? (
+                <div className="flex items-center gap-2 shrink-0" data-testid="settings-confirm-defaults">
+                  <button type="button" className="rd-btn" onClick={() => setConfirmKind(null)}>
+                    {t(locale, 'cancel')}
+                  </button>
+                  <button
+                    type="button"
+                    className="rd-btn primary"
+                    data-testid="settings-confirm-accept"
+                    onClick={() => {
+                      setConfirmKind(null);
+                      onResetDefaults();
+                      setResetNotice(true);
+                    }}
+                  >
+                    {t(locale, 'resetDefaultsAction')}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="rd-btn shrink-0"
+                  data-testid="settings-reset-prefs"
+                  onClick={() => setConfirmKind('defaults')}
+                >
+                  {t(locale, 'resetDefaultsAction')}
+                </button>
+              )}
             </div>
           )}
         </section>
       )}
-
-      {confirmKind &&
-        createPortal(
-          <dialog
-            ref={dialogRef}
-            className="session-confirm"
-            data-session-confirm
-            data-testid={`settings-confirm-${confirmKind}`}
-            aria-labelledby={`${dialogId}-title`}
-            aria-describedby={`${dialogId}-desc`}
-            onCancel={(event) => {
-              event.preventDefault();
-              setConfirmKind(null);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Escape' && !event.nativeEvent.isComposing) {
-                event.preventDefault();
-                event.stopPropagation();
-                setConfirmKind(null);
-              }
-            }}
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-              event.stopPropagation();
-              if (event.target === event.currentTarget) setConfirmKind(null);
-            }}
-          >
-            <div className="session-confirm-content">
-              <header>
-                <h2 id={`${dialogId}-title`}>
-                  {t(
-                    locale,
-                    confirmKind === 'passwords'
-                      ? 'confirmClearPasswordsTitle'
-                      : 'confirmResetDefaultsTitle',
-                  )}
-                </h2>
-                <button
-                  type="button"
-                  className="dialog-close"
-                  aria-label={t(locale, 'close')}
-                  onClick={() => setConfirmKind(null)}
-                >
-                  <X size={18} />
-                </button>
-              </header>
-              <p id={`${dialogId}-desc`}>
-                {t(
-                  locale,
-                  confirmKind === 'passwords'
-                    ? 'confirmClearPasswordsBody'
-                    : 'confirmResetDefaultsBody',
-                )}
-              </p>
-              <footer>
-                <button
-                  type="button"
-                  className="rd-btn"
-                  autoFocus
-                  onClick={() => setConfirmKind(null)}
-                >
-                  {t(locale, 'cancel')}
-                </button>
-                <button
-                  type="button"
-                  className={`rd-btn ${confirmKind === 'passwords' ? 'danger' : 'primary'}`}
-                  data-testid="settings-confirm-accept"
-                  onClick={() => {
-                    const kind = confirmKind;
-                    setConfirmKind(null);
-                    if (kind === 'passwords') {
-                      onClearAllSavedPasswords?.();
-                      setClearedNotice(true);
-                    } else {
-                      onResetDefaults?.();
-                      setResetNotice(true);
-                    }
-                  }}
-                >
-                  {t(locale, confirmKind === 'passwords' ? 'clearAllAction' : 'resetDefaultsAction')}
-                </button>
-              </footer>
-            </div>
-          </dialog>,
-          document.body,
-        )}
     </div>
   );
 }

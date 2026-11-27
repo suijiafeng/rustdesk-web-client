@@ -1,5 +1,5 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { Lock, Signal, SignalLow, SignalMedium, SignalZero, X } from 'lucide-react';
+import { Activity, Lock, Signal, SignalLow, SignalMedium, X } from 'lucide-react';
 import { classifyLinkHealth, type DiagnosticsSummary } from '../lib/diagnostics';
 import { t, type Locale } from '../lib/i18n';
 import { formatBitrate, type GatewayVideoStats } from '../lib/protocol';
@@ -101,7 +101,7 @@ export function DiagnosticOverlay({
   } as const;
   const activity = t(locale, statusLabels[state]);
   const statusIcons = {
-    waiting: SignalZero, good: Signal, fair: SignalMedium, poor: SignalLow, recovering: SignalLow,
+    waiting: Activity, good: Signal, fair: SignalMedium, poor: SignalLow, recovering: SignalLow,
   };
   const StatusIcon = statusIcons[state];
 
