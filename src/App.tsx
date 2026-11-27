@@ -406,46 +406,44 @@ export default function App() {
 
   const handleUpdateDisplayPrefs = useCallback(
     (patch: Partial<DisplayPrefs>) => {
-      setDisplayPrefs((prev) => {
-        const next: DisplayPrefs = { ...prev, ...patch };
-        persistDisplayPrefs(next);
+      const next: DisplayPrefs = { ...displayPrefsRef.current, ...patch };
+      displayPrefsRef.current = next;
+      setDisplayPrefs(next);
+      persistDisplayPrefs(next);
 
-        if (patch.viewStyle) {
-          setViewMode(patch.viewStyle);
-          if (patch.viewStyle === 'fit') {
-            setZoom(1);
-            setPan({ panX: 0, panY: 0 });
-          } else {
-            setPan({
-              panX: (box.w - remoteW) / 2,
-              panY: (box.h - remoteH) / 2,
-            });
-          }
+      if (patch.viewStyle) {
+        setViewMode(patch.viewStyle);
+        if (patch.viewStyle === 'fit') {
+          setZoom(1);
+          setPan({ panX: 0, panY: 0 });
+        } else {
+          setPan({
+            panX: (box.w - remoteW) / 2,
+            panY: (box.h - remoteH) / 2,
+          });
         }
+      }
 
-        if (
-          patch.qualityPreset !== undefined ||
-          patch.customBitrate !== undefined ||
-          patch.targetFps !== undefined ||
-          patch.codec !== undefined
-        ) {
-          const nextQ = next.qualityPreset;
-          const nextFps = next.targetFps;
-          setQuality(nextQ);
-          setTargetFps(nextFps);
-          send({ type: 'quality', quality: nextQ,
-            customQuality: nextQ === 'custom' ? next.customBitrate : undefined,
-            fps: nextFps, codec: next.codec });
-        }
+      if (
+        patch.qualityPreset !== undefined ||
+        patch.customBitrate !== undefined ||
+        patch.targetFps !== undefined ||
+        patch.codec !== undefined
+      ) {
+        const nextQ = next.qualityPreset;
+        const nextFps = next.targetFps;
+        setQuality(nextQ);
+        setTargetFps(nextFps);
+        send({ type: 'quality', quality: nextQ,
+          customQuality: nextQ === 'custom' ? next.customBitrate : undefined,
+          fps: nextFps, codec: next.codec });
+      }
 
-        if (patch.lockAfterSessionEnd !== undefined) {
-          send({ type: 'lockAfterSessionEnd', enabled: next.lockAfterSessionEnd });
-        }
-
-        return next;
-      });
+      if (patch.lockAfterSessionEnd !== undefined) {
+        send({ type: 'lockAfterSessionEnd', enabled: next.lockAfterSessionEnd });
+      }
     },
-    [box.w, box.h, remoteW, remoteH, send],
+    [box.w, box.h, remoteW, remoteH, send, displayPrefsRef, setDisplayPrefs, setViewMode, setZoom, setPan],
   );
 
   const handleResetDefaults = useCallback(() => {

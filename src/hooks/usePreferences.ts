@@ -90,14 +90,12 @@ export function usePreferences(isCoarseDevice: boolean) {
   }, [mode, directIpEnabled, host, port, peerId, idServer, relayServer, serverKey, forceRelay, webRtcOptIn, touchMode]);
 
   const handleToggleDirectIp = useCallback(() => {
-    setDirectIpEnabled((prev) => {
-      const next = !prev;
-      if (!next) {
-        setMode('id');
-      }
-      return next;
-    });
-  }, []);
+    const next = !directIpEnabled;
+    setDirectIpEnabled(next);
+    if (!next) {
+      setMode('id');
+    }
+  }, [directIpEnabled]);
 
   // Bilingual UI locale preference ('default' follows browser language, or explicit 'zh'/'en')
   const [localePreference, setLocalePreference] = useState<LocalePreference>(() => {

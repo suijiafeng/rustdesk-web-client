@@ -425,11 +425,10 @@ export function SessionPanels({
               setTargetFps(fps);
               const activeCodec = nextCodec ?? displayPrefsRef.current.codec;
               const ratio = customQuality ?? displayPrefsRef.current.customBitrate;
-              setDisplayPrefs(prev => {
-                const updated = { ...prev, qualityPreset: q, targetFps: fps, codec: activeCodec, customBitrate: ratio };
-                persistDisplayPrefs(updated);
-                return updated;
-              });
+              const updated = { ...displayPrefsRef.current, qualityPreset: q, targetFps: fps, codec: activeCodec, customBitrate: ratio };
+              displayPrefsRef.current = updated;
+              setDisplayPrefs(updated);
+              persistDisplayPrefs(updated);
               send({ type: 'quality', quality: q, customQuality: q === 'custom' ? ratio : undefined, fps, codec: activeCodec });
             }}
           />
