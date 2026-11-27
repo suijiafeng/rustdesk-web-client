@@ -70,9 +70,6 @@ export function MobileSessionPanel(p: MobileSessionPanelProps) {
           <button key={d.index} aria-pressed={d.index === p.display} disabled={d.online === false}
             onClick={() => { p.onSwitchDisplay(d.index); notify(label('requestSent')+' · '+(d.name || label('screens')+' '+(d.index+1))); }}><Monitor />{d.name || label('screens')+' '+(d.index+1)}</button>)}</div>}
         <div className="tool-group">
-          <button type="button" className="tool-row" data-testid="screen-connection-details" onClick={p.onToggleDiagnostics}>
-            <Activity />{label('diagTitle')}
-          </button>
           {p.peer?.privacyAllowed && toggle(Shield, 'privacyMode', p.privacyEnabled, p.onTogglePrivacy, p.privacyPending || p.viewOnly)}
           {p.sizes.length > 0 && <label className="tool-row"><Monitor /><span>{label('remoteResolution')}</span>
             <AdaptiveSelect tone="remote" label={label('remoteResolution')} testId="resolution-select" disabled={p.viewOnly}

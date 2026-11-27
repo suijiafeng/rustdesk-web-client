@@ -235,10 +235,6 @@ function DesktopSessionMenu({
                   <Monitor size={18} />{d.name || t(locale, 'screens')+' '+(d.index+1)}</button>)}
               </div>}
               <div className="session-group">
-                <button type="button" className={`session-setting-row${diagnosticsOpen ? ' active' : ''}`}
-                  data-testid="screen-connection-details" onClick={onToggleDiagnostics}>
-                  <Activity size={16} /><span>{t(locale, 'diagTitle')}</span>
-                </button>
                 {peer?.privacyAllowed && <label className="session-setting-row"><Shield /><span>{t(locale, 'privacyMode')}</span>
                   <input className="ui-switch" type="checkbox" role="switch" checked={privacyEnabled} disabled={privacyPending || viewOnly} onChange={onTogglePrivacy} />
                 </label>}

@@ -1,5 +1,5 @@
 import type { ErrorPayload } from '../../shared/errors';
-import { useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import {
   Clock,
   LayoutGrid,
@@ -18,8 +18,14 @@ import type { ConnectionField, ConnectionMode, ConnectionPhase, ConnectRequest }
 import { ConnectForm, ConnectPasswordPrompt, useConnectForm } from './ConnectForm';
 
 import { PeerList } from './PeerList';
-import { SettingsView, type SettingsSection } from './settings/SettingsView';
-import { IdServerModal } from './settings/IdServerModal';
+import type { SettingsSection } from './settings/SettingsView';
+
+const SettingsView = lazy(() =>
+  import('./settings/SettingsView').then((m) => ({ default: m.SettingsView }))
+);
+const IdServerModal = lazy(() =>
+  import('./settings/IdServerModal').then((m) => ({ default: m.IdServerModal }))
+);
 
 export type { ConnectionField, ConnectionMode, ConnectionPhase, ConnectRequest } from '../types';
 
@@ -208,62 +214,66 @@ export function RustDeskShell({
     connectForm.cancelServerSetup();
   };
   const serverDialog = serverDialogOpen && (
-    <IdServerModal
-      locale={locale}
-      idServer={idServer}
-      relayServer={relayServer}
-      serverKey={serverKey}
-      forceRelay={forceRelay}
-      connectionSetup={connectAfterServerSetup}
-      onChangeField={onChangeField}
-      onChangeForceRelay={onChangeForceRelay}
-      onClose={closeServerDialog}
-      onSave={settings => {
-        setServerDialogOpen(false);
-        setConnectAfterServerSetup(false);
-        if (connectAfterServerSetup) connectForm.continueAfterServerSetup(settings);
-      }}
-    />
+    <Suspense fallback={null}>
+      <IdServerModal
+        locale={locale}
+        idServer={idServer}
+        relayServer={relayServer}
+        serverKey={serverKey}
+        forceRelay={forceRelay}
+        connectionSetup={connectAfterServerSetup}
+        onChangeField={onChangeField}
+        onChangeForceRelay={onChangeForceRelay}
+        onClose={closeServerDialog}
+        onSave={settings => {
+          setServerDialogOpen(false);
+          setConnectAfterServerSetup(false);
+          if (connectAfterServerSetup) connectForm.continueAfterServerSetup(settings);
+        }}
+      />
+    </Suspense>
   );
 
   if (settingsOpen) {
     return (
       <>
-      <SettingsView
-        locale={locale}
-        localePreference={localePreference}
-        theme={theme}
-        displayPrefs={displayPrefs}
-        section={settingsSection}
-        directIpEnabled={directIpEnabled}
-        webRtcOptIn={webRtcOptIn}
-        idServer={idServer}
-        relayServer={relayServer}
-        serverKey={serverKey}
-        forceRelay={forceRelay}
-        gatewayToken={savedGatewayToken}
-        gatewayTokenReadFailed={gatewayTokenReadFailed}
-        onSaveGatewayToken={onSaveGatewayToken}
-        touchMode={touchMode}
-        diagnosticsOpen={diagnosticsOpen}
-        savedPasswordCount={Object.keys(savedPasswords).length}
-        modalOpen={serverDialogOpen}
-        onChangeSection={setSettingsSection}
-        onChangeLocale={onChangeLocale}
-        onChangeTheme={onChangeTheme}
-        onUpdateDisplayPrefs={onUpdateDisplayPrefs}
-        onToggleDirectIp={onToggleDirectIp}
-        onChangeWebRtcOptIn={onChangeWebRtcOptIn}
-        onToggleTouchMode={onToggleTouchMode}
-        onToggleDiagnostics={onToggleDiagnostics}
-        onOpenServerDialog={() => openNetworkServerSetup()}
-        onClearAllSavedPasswords={onClearAllSavedPasswords}
-        onResetDefaults={onResetDefaults}
-        onBack={() => {
-          closeServerDialog();
-          setSettingsOpen(false);
-        }}
-      />
+      <Suspense fallback={null}>
+        <SettingsView
+          locale={locale}
+          localePreference={localePreference}
+          theme={theme}
+          displayPrefs={displayPrefs}
+          section={settingsSection}
+          directIpEnabled={directIpEnabled}
+          webRtcOptIn={webRtcOptIn}
+          idServer={idServer}
+          relayServer={relayServer}
+          serverKey={serverKey}
+          forceRelay={forceRelay}
+          gatewayToken={savedGatewayToken}
+          gatewayTokenReadFailed={gatewayTokenReadFailed}
+          onSaveGatewayToken={onSaveGatewayToken}
+          touchMode={touchMode}
+          diagnosticsOpen={diagnosticsOpen}
+          savedPasswordCount={Object.keys(savedPasswords).length}
+          modalOpen={serverDialogOpen}
+          onChangeSection={setSettingsSection}
+          onChangeLocale={onChangeLocale}
+          onChangeTheme={onChangeTheme}
+          onUpdateDisplayPrefs={onUpdateDisplayPrefs}
+          onToggleDirectIp={onToggleDirectIp}
+          onChangeWebRtcOptIn={onChangeWebRtcOptIn}
+          onToggleTouchMode={onToggleTouchMode}
+          onToggleDiagnostics={onToggleDiagnostics}
+          onOpenServerDialog={() => openNetworkServerSetup()}
+          onClearAllSavedPasswords={onClearAllSavedPasswords}
+          onResetDefaults={onResetDefaults}
+          onBack={() => {
+            closeServerDialog();
+            setSettingsOpen(false);
+          }}
+        />
+      </Suspense>
       {serverDialog}
       </>
     );

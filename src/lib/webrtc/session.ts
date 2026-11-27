@@ -1,9 +1,17 @@
-import { encodeAudioFrame } from '../../../shared/audio.ts';
-import { type PeerInfo, canRestart, permissions, peerToJson, initialDisplaySize, HostPermission, PrivacyState, privacyResult, supportsModernDisplayControls, supportedResolutions } from '../../../shared/peer.ts';
+import { type PeerInfo, peerToJson, initialDisplaySize } from '../../../shared/peer.ts';
 import { errorPayload } from '../../../shared/errors';
-import { decodeClipboard } from '../../../shared/clipboard.ts';
 import { Buffer } from 'buffer';
-import { type ClientMessage, type CodecCaps, buildRefreshVideoMessage, buildVideoReceivedMessage, decodingPreferenceChanged, humanizeError, toHostMessage } from '../../../shared/control.ts';
+import { type ClientMessage, type CodecCaps, buildRefreshVideoMessage, buildVideoReceivedMessage, toHostMessage } from '../../../shared/control.ts';
+import {
+  buildQualityControlMessage,
+  buildResolutionControlMessage,
+  dispatchCommonHostMessage,
+  handleAudioControl,
+  publishResolutions,
+  sendPrivacyControl,
+  sendRestartControl,
+  type HostSessionState,
+} from '../../../shared/hostSession.ts';
 import { decodeMessage, encodeMessage } from '../../../shared/protos.ts';
 import { CODEC_VP8, HEADER_LEN, encodeRdv1Frame, vp8KeyframeSize, encodedFrameIsKey, extractEncodedFrames } from '../../../shared/video.ts';
 import { GatewayVideoBuffer, VIDEO_RESUME_BYTES } from '../../../shared/videoBuffer.ts';
@@ -36,14 +44,18 @@ export function createNativeSession(
   const videoBuffer = new GatewayVideoBuffer();
   let recoveryTimer: ReturnType<typeof setTimeout> | undefined;
   const hostConn = conn;
-  let resolutionDisplay = 0;
-  let sizes: { width: number; height: number }[] = [];
-  let privacyImpl = '';
-  let audioRequested = false;
-  let audioAllowed = conn.audioAllowed !== false;
-  let audioFormat: { sampleRate: number; channels: number } | null = null;
+  const hostState: HostSessionState = {
+    resolutionDisplay: 0,
+    sizes: [],
+    sessionCodecs,
+    preferredCodec,
+    privacyImpl: '',
+    audioRequested: false,
+    audioAllowed: conn.audioAllowed !== false,
+    audioFormat: null,
+    currentSize: { width: 0, height: 0 },
+  };
   let warnedRawVideo = false;
-  let currentSize = { width: 0, height: 0 };
   const sendJson = (value: object) => { if (state === 'live') onData(JSON.stringify(value)); };
   const sendBinary = (value: Uint8Array) => { if (state === 'live') onData(new Uint8Array(value).buffer); };
   const cleanup = (_sendClosedStatus = false) => {
@@ -71,14 +83,9 @@ export function createNativeSession(
     cleanup();
   };
   const startHostPump = async (conn: NativeConnection) => {
-    const publishResolutions = (display: number, supported?: PeerInfo['resolutions']) => {
-      resolutionDisplay = display;
-      sizes = supportedResolutions(supported);
-      sendJson({ type: 'resolutions', display, sizes });
-    };
-    currentSize = initialDisplaySize(conn.peerInfo);
+    hostState.currentSize = initialDisplaySize(conn.peerInfo);
     sendJson(peerToJson(conn.peerInfo, conn));
-    publishResolutions(Number(conn.peerInfo.current_display ?? 0), conn.peerInfo.resolutions);
+    publishResolutions(hostState, Number(conn.peerInfo.current_display ?? 0), conn.peerInfo.resolutions, sendJson);
     sendJson({
       type: 'status',
       state: 'live',
@@ -109,111 +116,20 @@ export function createNativeSession(
           }
         }
 
-        // 2. Misc control events
-        if (msg.misc) {
-          if (Number.isInteger(msg.misc.follow_current_display)) {
-            sendJson({ type: 'focusedDisplay', display: msg.misc.follow_current_display });
-          }
-          if (msg.misc.switch_display) {
-            const sd = msg.misc.switch_display;
-            const w = Number(sd.width ?? 0);
-            const h = Number(sd.height ?? 0);
-            if (w > 0 && h > 0) {
-              currentSize = { width: w, height: h };
-            }
-            sendJson({
-              type: 'display',
-              display: Number(sd.display ?? 0),
-              width: w,
-              height: h,
-              x: Number(sd.x ?? 0),
-              y: Number(sd.y ?? 0),
-              cursorEmbedded: Boolean(sd.cursor_embedded),
-              name: '',
-            });
-            publishResolutions(Number(sd.display ?? 0), sd.resolutions);
-          }
-          if (msg.misc.close_reason) {
-            const reason = String(msg.misc.close_reason);
+        // 2-4b. Misc control events, permissions, audio, clipboard, cursor, and PeerInfo
+        const closed = dispatchCommonHostMessage(msg, conn, hostState, {
+          sendJson,
+          cursorPublisher,
+          audioBinary: media?.audioBinary === true,
+          onAudioFrame: sendBinary,
+          onAudioBase64: (packet) => sendJson({ type: 'audioFrame', packet: Buffer.from(packet).toString('base64') }),
+          onCloseReason: (reason) => {
             sendJson({ type: 'status', state: 'error', ...errorPayload(reason) });
             // Appendix B fix #8: actively close the stream on close_reason
             cleanup(false);
-            return;
-          }
-        }
-
-        const permission = msg.misc?.permission_info;
-        if (permission?.permission === HostPermission.PrivacyMode || permission?.permission === HostPermission.Clipboard) {
-          if (permission.permission === HostPermission.PrivacyMode) conn.privacyAllowed = permission.enabled === true;
-          else conn.clipboardAllowed = permission.enabled === true;
-          sendJson({ type: 'permissions', ...permissions(conn) });
-        }
-        const notice = msg.misc?.back_notification;
-        if (typeof notice?.privacy_mode_state === 'number') {
-          const code = notice.privacy_mode_state;
-          if (code === PrivacyState.Enabled) privacyImpl = notice.impl_key || '';
-          if (code === PrivacyState.Unsupported) {
-            conn.privacyAllowed = false;
-            sendJson({ type: 'permissions', ...permissions(conn) });
-          }
-          sendJson({ type: 'privacyResult', ...privacyResult(code) });
-        }
-        if (permission?.permission === HostPermission.Restart) {
-          conn.restartAllowed = permission.enabled === true;
-          sendJson({ type: 'restartPermission', allowed: canRestart(conn) });
-        }
-        if (permission?.permission === HostPermission.Audio) {
-          audioAllowed = permission.enabled === true;
-          if (!audioAllowed && audioRequested) {
-            audioRequested = false;
-            sendJson({ type: 'audioDenied' });
-          }
-        }
-        if (msg.misc?.audio_format) {
-          const { sample_rate: sampleRate, channels } = msg.misc.audio_format;
-          audioFormat = typeof sampleRate === 'number' && typeof channels === 'number' ? { sampleRate, channels } : null;
-          if (audioRequested && audioAllowed && audioFormat) sendJson({ type: 'audioFormat', ...audioFormat });
-        }
-        const packet = msg.audio_frame?.data;
-        if (audioAllowed && audioRequested && packet && packet.length > 0 && packet.length <= 8192) {
-          if (media?.audioBinary === true) sendBinary(encodeAudioFrame(packet));
-          else sendJson({ type: 'audioFrame', packet: Buffer.from(packet).toString('base64') });
-        }
-
-        // 3. Clipboard (single or RustDesk 1.4/1.5 MultiClipboards, bounded UTF-8)
-        if (conn.clipboardAllowed) {
-          const clips = msg.clipboard ? [msg.clipboard] : msg.multi_clipboards?.clipboards ?? [];
-          for (const clip of clips) {
-            const text = decodeClipboard(clip);
-            if (text !== null) {
-              sendJson({ type: 'clipboard', text });
-              break;
-            }
-          }
-        }
-
-        // 4. Cursor shape and position
-        if (msg.cursor_data) {
-          sendJson(cursorPublisher.update(msg.cursor_data));
-        } else if (msg.cursor_id !== undefined) {
-          sendJson(cursorPublisher.select(msg.cursor_id));
-        } else if (msg.cursor_position) {
-          sendJson({
-            type: 'cursor',
-            x: Number(msg.cursor_position.x ?? 0),
-            y: Number(msg.cursor_position.y ?? 0),
-          });
-        }
-
-        // 4b. Mid-session PeerInfo update (e.g. display hotplug or RustDesk 1.5 refreshed peer_info)
-        if (msg.peer_info) {
-          const updatedSize = initialDisplaySize(msg.peer_info);
-          if (updatedSize.width > 0 && updatedSize.height > 0) {
-            currentSize = updatedSize;
-          }
-          sendJson(peerToJson(msg.peer_info, conn));
-          publishResolutions(Number(msg.peer_info.current_display ?? 0), msg.peer_info.resolutions);
-        }
+          },
+        });
+        if (closed) return;
 
         // 5. VideoFrame
         if (msg.video_frame) {
@@ -239,7 +155,7 @@ export function createNativeSession(
               if (extracted.codec === CODEC_VP8 && isKey) {
                 const parsedSize = vp8KeyframeSize(payload);
                 if (parsedSize) {
-                  currentSize = parsedSize;
+                  hostState.currentSize = parsedSize;
                 }
               }
               if (!videoBuffer.shouldForward(display, isKey, payload.byteLength + HEADER_LEN, conn.stream.queuedBytes)) {
@@ -251,8 +167,8 @@ export function createNativeSession(
                 codec: extracted.codec,
                 key: isKey,
                 display,
-                width: currentSize.width,
-                height: currentSize.height,
+                width: hostState.currentSize.width,
+                height: hostState.currentSize.height,
                 pts,
                 gatewayUnixMs: nowMs,
                 data: payload,
@@ -293,65 +209,26 @@ export function createNativeSession(
       }
       if (parsed.type === 'clipboard' && (!hostConn.clipboardAllowed || typeof parsed.text !== 'string')) return;
       if (parsed.type === 'privacy') {
-        if (!permissions(hostConn).privacyAllowed || typeof parsed.enabled !== 'boolean') {
-          sendJson({ type: 'privacyResult', failed: true });
-          return;
-        }
-        const modern = supportsModernDisplayControls(hostConn.peerInfo.version);
-        const misc = modern ? { toggle_privacy_mode: { on: parsed.enabled, impl_key: privacyImpl } }
-          : { option: { privacy_mode: parsed.enabled ? 2 : 1 } };
-        try {
-          await hostConn.stream.sendRaw(encodeMessage({ misc }));
-        } catch {
-          sendJson({ type: 'privacyResult', failed: true });
-        }
+        await sendPrivacyControl(hostConn, hostState, parsed.enabled, sendJson);
         return;
       }
       if (parsed.type === 'restart') {
-        const conn = hostConn;
-        if (!canRestart(conn)) {
-          sendJson({ type: 'restartResult', sent: false });
-          return;
-        }
-        try {
-          await conn.stream.sendRaw(encodeMessage({ misc: { restart_remote_device: true } }));
-          sendJson({ type: 'restartResult', sent: true });
-        } catch {
-          sendJson({ type: 'restartResult', sent: false });
-        }
+        await sendRestartControl(hostConn, sendJson);
         return;
       }
       if (parsed.type === 'audio') {
-        if (typeof parsed.enabled !== 'boolean') return;
-        if (parsed.enabled && !audioAllowed) {
-          sendJson({ type: 'audioDenied' });
-          return;
-        }
-        audioRequested = parsed.enabled;
-        if (audioRequested && audioFormat) sendJson({ type: 'audioFormat', ...audioFormat });
+        if (!handleAudioControl(hostState, parsed.enabled, sendJson)) return;
       }
       let hostMsg;
       let refreshVideo = false;
       if (parsed.type === 'resolution') {
-        const { display, width, height } = parsed;
-        if (display !== resolutionDisplay || !sizes.some(size => size.width === width && size.height === height)) {
-          sendJson({ type: 'error', message: 'The active display does not offer that resolution.' });
-          return;
-        }
-        const modern = supportsModernDisplayControls(hostConn.peerInfo.version ?? '');
-        const resolution = { width, height };
-        hostMsg = { misc: modern
-          ? { change_display_resolution: { display, resolution } }
-          : { change_resolution: resolution } };
+        hostMsg = buildResolutionControlMessage(hostConn, hostState, parsed.display, parsed.width, parsed.height, sendJson);
+        if (!hostMsg) return;
       } else if (parsed.type === 'quality') {
-        try {
-          refreshVideo = Boolean(sessionCodecs && decodingPreferenceChanged(sessionCodecs, preferredCodec, parsed.codec));
-          hostMsg = toHostMessage(refreshVideo ? parsed : { ...parsed, codec: undefined }, sessionCodecs);
-          if (refreshVideo) preferredCodec = parsed.codec;
-        } catch (error) {
-          sendJson({ type: 'error', message: humanizeError(error), ...errorPayload(error) });
-          return;
-        }
+        const built = buildQualityControlMessage(hostState, parsed, sendJson);
+        if (!built) return;
+        hostMsg = built.hostMsg;
+        refreshVideo = built.refreshVideo;
       } else {
         hostMsg = toHostMessage(parsed, sessionCodecs);
       }

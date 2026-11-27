@@ -183,11 +183,14 @@ try {
   assert.equal(await evaluate(select('gesture-guide') + ' === null'), true);
   await until(select('session-reverse-scroll'));
   await tapElement(select('dock-display'));
-  await tapElement(connectionDetails);
+  assert.equal(await evaluate(connectionDetails + ' === null'), true);
+  await tapElement(select('dock-collapse'));
+  await until(select('mobile-dock-expand'));
+  await tapElement(select('live-connection-badge'));
   await until(select('diagnostic-overlay'));
   await tapElement(select('diag-close'));
   await tapElement(select('mobile-dock-expand'));
-  console.log('Tools: connection details under Screen verified, with no More or gesture guide.');
+  console.log('Tools: top-right connection badge verified, with no More, Screen details row, or gesture guide.');
   await tapElement(select('dock-display'));
   assert.equal(await evaluate(hasPrivacySwitch), true);
   const fps = select('fps-select');
@@ -512,7 +515,7 @@ try {
   assert.equal(await evaluate(connectionDetails + ' === null'), true);
   await evaluate(select('menu-tab-display') + '.click()');
   assert.equal(await evaluate(hasPrivacySwitch), true);
-  assert.ok(await evaluate('Boolean(' + connectionDetails + ')'));
+  assert.equal(await evaluate(connectionDetails + ' === null'), true);
   await evaluate(select('menu-tab-control') + '.click()');
   assert.equal(await evaluate(reverseScroll + '.textContent'), otherPreference);
   await evaluate(reverseScroll + '.click()');
@@ -523,6 +526,7 @@ try {
   assert.equal(await evaluate(select('stage') + '.dataset.remoteActive'), 'false');
   await evaluate(select('session-close') + '.click()');
   await until(select('stage') + '.dataset.remoteActive === "true"');
+  await until(select('live-connection-badge'));
   console.log('Windows: Win and Alt labels, Ctrl+Alt+Del, and desktop menu input isolation verified.');
 
   await connect('Mac OS', true);
@@ -536,6 +540,16 @@ try {
   await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: '\r', unmodifiedText: '\r' });
   await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
   await until(select('diagnostic-overlay') + ' === null');
+  // Reopen via desktop toolbar's live-connection-badge and close again
+  await evaluate(select('session-handle') + '?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }))');
+  await evaluate(select('session-handle') + '?.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }))');
+  await until(select('live-connection-badge'));
+  await evaluate(select('live-connection-badge') + '.click()');
+  await until(select('diagnostic-overlay'));
+  await evaluate(select('diag-close') + '.click()');
+  await until(select('diagnostic-overlay') + ' === null');
+  await evaluate(select('toolbar-collapse') + '.click()');
+  await until(select('session-handle'));
   assert.equal(await evaluate("window.sent.filter(event => event.type === 'key' || event.type === 'mouse').length"), controlsBeforeClosingDiagnostics);
   await openDesktopToolbar();
   assert.equal(await evaluate(select('toolbar-cad') + ' === null'), true);

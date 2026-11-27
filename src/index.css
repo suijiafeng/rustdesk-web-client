@@ -312,13 +312,34 @@ button:focus-visible {
 }
 
 .rd-toolbar-rtt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 62px;
+  height: 24px;
+  text-align: center;
+  flex-shrink: 0;
   font-size: 11px;
   font-weight: 600;
   color: var(--ok);
-  padding: 1px 6px;
+  padding: 0 8px;
   border-radius: 999px;
+  border: 1px solid transparent;
   background: var(--ok-bg);
   white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.rd-toolbar-rtt:hover {
+  border-color: var(--ok);
+}
+
+.rd-toolbar-rtt.active {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  color: var(--accent);
 }
 
 .rd-toolbar-sep {
@@ -381,6 +402,52 @@ button:focus-visible {
 .rd-toolbar-menu-btn {
   padding: 0 9px;
   color: var(--ink);
+}
+
+.stage > .rd-live-conn-badge {
+  position: fixed;
+  left: auto;
+  top: max(10px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  z-index: 42;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(15, 23, 42, 0.76);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.rd-live-conn-badge:hover {
+  background: rgba(30, 41, 59, 0.88);
+}
+
+.rd-live-conn-badge.active {
+  border-color: #3b82f6;
+  background: rgba(30, 58, 138, 0.85);
+  color: #ffffff;
+}
+
+.rd-live-conn-icon {
+  display: inline-flex;
+  align-items: center;
+  color: #4ade80;
+}
+
+.rd-live-conn-rtt {
+  min-width: 38px;
+  text-align: center;
 }
 
 .scrim {
@@ -2191,7 +2258,7 @@ button:focus-visible {
   padding:6px 0; color:inherit; background:none; border:0; font-weight:500; line-height:1.4;
   font-family:inherit; font-size:15px; text-align:start;
 }
-.tool-group > * + * { border-top:1px solid var(--remote-line) !important; }
+.tool-group:not(.tool-options) > * + * { border-top:1px solid var(--remote-line) !important; }
 .remote-menu-panel svg { width:18px; height:18px; flex-shrink:0; color:var(--remote-muted); }
 .tool-row span { flex:1; }
 .tool-row select,.tool-options input { color:inherit; background:var(--remote-control-surface); min-width:0; max-width:55%; border:0; border-radius:4px; padding:5px; }
@@ -2209,6 +2276,7 @@ button:focus-visible {
 .remote-menu-panel :disabled { opacity:.5; }
 .tool-options { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding-block:9px; }
 .tool-options button { display:inline-flex; align-items:center; gap:5px; color:inherit; background:transparent; border:0; min-height:44px; border-radius:5px; padding:8px; }
+[data-testid="mobile-quick-keys"] button { border:1px solid var(--remote-line); background:var(--remote-control-surface); min-height:36px; padding:6px 12px; border-radius:8px; font-size:13px; font-weight:500; }
 .tool-options button[aria-pressed=true] { color:var(--remote-accent); background:var(--remote-selected); }
 .adaptive-select-trigger { display:inline-flex; align-items:center; justify-content:flex-end; gap:7px; min-height:40px; width:128px; min-width:0; max-width:60%; flex:0 1 128px; padding:5px 2px; border:0; background:transparent; color:inherit; font:inherit; cursor:pointer; }
 .adaptive-select-trigger span { flex:initial; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -2342,7 +2410,7 @@ input.ui-switch:disabled { cursor:default; opacity:.5; }
 .session-mode-switch button { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:44px; padding:6px 10px; border:0; background:transparent; color:var(--ink-soft); font:inherit; }
 .session-mode-switch button[aria-pressed=true] { color:var(--select-accent); box-shadow:inset 0 -2px currentColor; }
 .session-mode-switch button:disabled { opacity:.5; }
-.rd-toolbar-monitor.active { background:transparent; border-color:transparent; color:var(--select-accent); box-shadow:inset 0 -2px currentColor; }
+.rd-toolbar-monitor.active { background:var(--accent-tint); border-color:var(--accent); color:var(--accent); box-shadow:none; }
 .session-menu-footer { border-top:1px solid var(--rd-divider); }
 .session-menu-footer .session-setting-row { color:var(--ink-soft); font-size:14px; }
 .tool-group+ .tool-group { border-top:1px solid var(--remote-line); padding-top:8px; margin-top:4px; }

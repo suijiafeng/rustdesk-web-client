@@ -1,5 +1,6 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import {
+  Activity,
   ChevronDown,
   ChevronUp,
   GripVertical,
@@ -29,6 +30,7 @@ interface SessionHandleProps {
   pinned: boolean;
   hostTitle: string;
   rtt?: number;
+  diagnosticsOpen?: boolean;
   displays: DisplayInfo[];
   activeDisplay: number;
   viewMode: ViewMode;
@@ -38,6 +40,7 @@ interface SessionHandleProps {
   onMoveHandle: (nextX: number) => void;
   onSetExpanded: (expanded: boolean) => void;
   onTogglePinned: () => void;
+  onToggleDiagnostics?: () => void;
   onSwitchDisplay: (index: number) => void;
   onToggleViewMode: () => void;
   onToggleFullscreen?: () => void;
@@ -56,6 +59,7 @@ export function SessionHandle({
   pinned,
   hostTitle,
   rtt = 0,
+  diagnosticsOpen = false,
   displays,
   activeDisplay,
   viewMode,
@@ -65,6 +69,7 @@ export function SessionHandle({
   onMoveHandle,
   onSetExpanded,
   onTogglePinned,
+  onToggleDiagnostics,
   onSwitchDisplay,
   onToggleViewMode,
   onToggleFullscreen,
@@ -166,7 +171,7 @@ export function SessionHandle({
       style={leftPx !== undefined ? { left: `${leftPx}px` } : { left: '50%' }}
       onPointerDown={(e) => e.stopPropagation()}
     >
-      {/* Drag grip + remote host title + RTT */}
+      {/* Drag grip + remote host title */}
       <div
         className="rd-toolbar-drag"
         data-tooltip={t(locale, 'toolbarDragHint')}
@@ -178,12 +183,22 @@ export function SessionHandle({
       >
         <GripVertical size={14} className="shrink-0 opacity-60" />
         <span className="rd-toolbar-host">{hostTitle}</span>
-        {rtt > 0 && (
-          <span className="rd-toolbar-rtt font-mono-tabular" data-testid="toolbar-rtt">
-            {Math.round(rtt)}ms
-          </span>
-        )}
       </div>
+
+      <button
+        type="button"
+        className={`rd-toolbar-rtt font-mono-tabular${diagnosticsOpen ? ' active' : ''}`}
+        data-testid="live-connection-badge"
+        aria-label={t(locale, 'diagTitle')}
+        aria-pressed={Boolean(diagnosticsOpen)}
+        data-tooltip={t(locale, 'diagTitle')}
+        data-tooltip-pos="bottom"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={onToggleDiagnostics}
+      >
+        <Activity size={12} className="shrink-0" />
+        <span data-testid="toolbar-rtt">{rtt > 0 ? `${Math.round(rtt)}ms` : '--'}</span>
+      </button>
 
       <span className="rd-toolbar-sep" aria-hidden="true" />
 

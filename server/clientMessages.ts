@@ -4,18 +4,22 @@ import { authenticateGateway } from './auth.ts';
 import {
   type ClientMessage,
   buildRefreshVideoMessage,
-  decodingPreferenceChanged,
   hasAnyCodec,
-  humanizeError,
   selectCodecs,
   toHostMessage,
 } from '../shared/control.ts';
+import {
+  buildQualityControlMessage,
+  buildResolutionControlMessage,
+  handleAudioControl,
+  sendPrivacyControl,
+  sendRestartControl,
+} from '../shared/hostSession.ts';
 import { encodeMessage } from '../shared/protos.ts';
 import type { HostMessage } from '../shared/protoTypes.ts';
 import { SEND_PRESSURE_BYTES } from './bytesCodec.ts';
 import { type ConnectedHost, connectDirect, connectViaId } from './rustdeskClient.ts';
 import type { GatewayConfig, SessionContext } from './sessionState.ts';
-import { canRestart, permissions, supportsModernDisplayControls } from '../shared/peer.ts';
 
 interface ClientMessageContext extends SessionContext {
   config: GatewayConfig;
@@ -169,67 +173,26 @@ export function createClientMessageHandler(context: ClientMessageContext) {
     privacy: async parsed => {
       const conn = state.hostConn;
       if (!conn) return;
-      if (!permissions(conn).privacyAllowed || typeof parsed.enabled !== 'boolean') {
-        sendJson({ type: 'privacyResult', failed: true });
-        return;
-      }
-      const modern = supportsModernDisplayControls(conn.peerInfo.version);
-      const misc = modern ? { toggle_privacy_mode: { on: parsed.enabled, impl_key: state.privacyImpl } }
-        : { option: { privacy_mode: parsed.enabled ? 2 : 1 } };
-      try {
-        await conn.stream.sendRaw(encodeMessage({ misc }));
-      } catch {
-        sendJson({ type: 'privacyResult', failed: true });
-      }
+      await sendPrivacyControl(conn, state, parsed.enabled, sendJson);
     },
     restart: async () => {
       const conn = state.hostConn;
       if (!conn) return;
-      if (!canRestart(conn)) {
-        sendJson({ type: 'restartResult', sent: false });
-        return;
-      }
-      try {
-        await conn.stream.sendRaw(encodeMessage({ misc: { restart_remote_device: true } }));
-        sendJson({ type: 'restartResult', sent: true });
-      } catch {
-        sendJson({ type: 'restartResult', sent: false });
-      }
+      await sendRestartControl(conn, sendJson);
     },
     audio: parsed => {
-      if (typeof parsed.enabled !== 'boolean') return;
-      if (parsed.enabled && !state.audioAllowed) {
-        sendJson({ type: 'audioDenied' });
-        return;
-      }
-      state.audioRequested = parsed.enabled;
-      if (state.audioRequested && state.audioFormat) sendJson({ type: 'audioFormat', ...state.audioFormat });
+      if (!handleAudioControl(state, parsed.enabled, sendJson)) return;
       forwardControl(parsed);
     },
     resolution: parsed => {
       const conn = state.hostConn;
       if (!conn) return;
-      const { display, width, height } = parsed;
-      if (display !== state.resolutionDisplay || !state.sizes.some(size => size.width === width && size.height === height)) {
-        sendJson({ type: 'error', message: 'The active display does not offer that resolution.' });
-        return;
-      }
-      const modern = supportsModernDisplayControls(conn.peerInfo.version ?? '');
-      const resolution = { width, height };
-      const hostMsg = { misc: modern
-        ? { change_display_resolution: { display, resolution } }
-        : { change_resolution: resolution } };
-      forwardToHost(hostMsg);
+      const hostMsg = buildResolutionControlMessage(conn, state, parsed.display, parsed.width, parsed.height, sendJson);
+      if (hostMsg) forwardToHost(hostMsg);
     },
     quality: parsed => {
-      try {
-        const refreshVideo = Boolean(state.sessionCodecs && decodingPreferenceChanged(state.sessionCodecs, state.preferredCodec, parsed.codec));
-        const hostMsg = toHostMessage(refreshVideo ? parsed : { ...parsed, codec: undefined }, state.sessionCodecs);
-        if (refreshVideo) state.preferredCodec = parsed.codec;
-        forwardToHost(hostMsg, refreshVideo);
-      } catch (error) {
-        sendJson({ type: 'error', message: humanizeError(error), ...errorPayload(error) });
-      }
+      const built = buildQualityControlMessage(state, parsed, sendJson);
+      if (built) forwardToHost(built.hostMsg, built.refreshVideo);
     },
     cursorRequest: parsed => {
       if (state.cursorIds && typeof parsed.id === 'string' && parsed.id.length <= 128) {
