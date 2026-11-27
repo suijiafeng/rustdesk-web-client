@@ -89,6 +89,8 @@ interface SessionPanelsProps {
     isCoarseDevice: boolean;
     isTouchLayout: boolean;
     remoteInput: boolean;
+    isFullscreen?: boolean;
+    toggleFullscreen?: () => void;
   };
   notices: {
     restartState: 'requested' | 'waiting' | null;
@@ -140,6 +142,7 @@ export function SessionPanels({
     mobilePanel, setMobilePanel, menuOpen, setMenuOpen, connectDialog, setConnectDialog,
     softKeys, softKeyboardMode, softKeyboardInputRef, closeChrome, toggleSoftKeyboard,
     switchSoftKeyboard, hideSoftKeyboard, isMobileViewport, isCoarseDevice, isTouchLayout, remoteInput,
+    isFullscreen, toggleFullscreen,
   } = chrome;
   const { restartState, setRestartState, sessionTip, showSessionTip, webRtcFallbackReason, setWebRtcFallbackReason } = notices;
   const { diagnosticsOpen, setDiagnosticsOpen, diagSummary, rtt, gatewayVideo } = diagnostics;
@@ -182,9 +185,12 @@ export function SessionPanels({
           expanded={toolbarExpanded}
           pinned={toolbarPinned}
           hostTitle={liveHostTitle}
+          rtt={rtt}
           displays={peer?.displays ?? []}
           activeDisplay={display}
           viewMode={viewMode}
+          audioEnabled={audioEnabled}
+          isFullscreen={isFullscreen}
           hasWarning={Boolean(decoderError)}
           onMoveHandle={setHandleX}
           onSetExpanded={setToolbarExpanded}
@@ -206,6 +212,8 @@ export function SessionPanels({
               setPan({ panX: 0, panY: 0 });
             }
           }}
+          onToggleFullscreen={toggleFullscreen}
+          onToggleAudio={() => { void toggleAudio(); }}
           onToggleKeyboard={toggleSoftKeyboard}
           onCtrlAltDel={showCtrlAltDel && !displayPrefs.viewOnly ? () => handleQuickKey('Ctrl+Alt+Del') : undefined}
           onOpenMenu={() => setMenuOpen(true)}

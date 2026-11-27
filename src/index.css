@@ -311,6 +311,16 @@ button:focus-visible {
   color: var(--ink);
 }
 
+.rd-toolbar-rtt {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ok);
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--ok-bg);
+  white-space: nowrap;
+}
+
 .rd-toolbar-sep {
   width: 1px;
   height: 18px;
@@ -1994,11 +2004,6 @@ button:focus-visible {
   .rd-hero-container {
     max-width: 960px;
     padding: 36px 24px 20px;
-  }
-
-  .rd-hero-container > div:first-child,
-  .rd-hero-container > form {
-    max-width: 600px;
   }
 
   .rd-home-content {

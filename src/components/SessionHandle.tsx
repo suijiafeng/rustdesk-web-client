@@ -4,6 +4,8 @@ import {
   ChevronUp,
   GripVertical,
   Keyboard,
+  Maximize2,
+  Minimize2,
   Monitor,
   Pin,
   PinOff,
@@ -11,6 +13,8 @@ import {
   Scan,
   ShieldAlert,
   SlidersHorizontal,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import { clampToolbarPixelX, clampToolbarX } from '../lib/floatingMenu';
 import { t, type Locale } from '../lib/i18n';
@@ -24,15 +28,20 @@ interface SessionHandleProps {
   expanded: boolean;
   pinned: boolean;
   hostTitle: string;
+  rtt?: number;
   displays: DisplayInfo[];
   activeDisplay: number;
   viewMode: ViewMode;
+  audioEnabled?: boolean;
+  isFullscreen?: boolean;
   hasWarning: boolean;
   onMoveHandle: (nextX: number) => void;
   onSetExpanded: (expanded: boolean) => void;
   onTogglePinned: () => void;
   onSwitchDisplay: (index: number) => void;
   onToggleViewMode: () => void;
+  onToggleFullscreen?: () => void;
+  onToggleAudio?: () => void;
   onToggleKeyboard: () => void;
   onCtrlAltDel?: () => void;
   onOpenMenu: () => void;
@@ -46,15 +55,20 @@ export function SessionHandle({
   expanded,
   pinned,
   hostTitle,
+  rtt = 0,
   displays,
   activeDisplay,
   viewMode,
+  audioEnabled = false,
+  isFullscreen = false,
   hasWarning,
   onMoveHandle,
   onSetExpanded,
   onTogglePinned,
   onSwitchDisplay,
   onToggleViewMode,
+  onToggleFullscreen,
+  onToggleAudio,
   onToggleKeyboard,
   onCtrlAltDel,
   onOpenMenu,
@@ -63,13 +77,13 @@ export function SessionHandle({
   const showCtrlAltDel = Boolean(onCtrlAltDel);
   const dragRef = useRef<{ startX: number; origin: number; moved: boolean } | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
-  const [barWidth, setBarWidth] = useState(520);
+  const [barWidth, setBarWidth] = useState(560);
 
   useLayoutEffect(() => {
     if (expanded && barRef.current) {
-      setBarWidth(barRef.current.offsetWidth || 520);
+      setBarWidth(barRef.current.offsetWidth || 560);
     }
-  }, [expanded, displays.length, hostTitle, locale, showCtrlAltDel]);
+  }, [expanded, displays.length, hostTitle, locale, showCtrlAltDel, rtt > 0, Boolean(onToggleAudio), Boolean(onToggleFullscreen)]);
 
   const startDrag = (e: React.PointerEvent<HTMLElement>) => {
     e.stopPropagation();
@@ -152,7 +166,7 @@ export function SessionHandle({
       style={leftPx !== undefined ? { left: `${leftPx}px` } : { left: '50%' }}
       onPointerDown={(e) => e.stopPropagation()}
     >
-      {/* Drag grip + remote host title */}
+      {/* Drag grip + remote host title + RTT */}
       <div
         className="rd-toolbar-drag"
         data-tooltip={t(locale, 'toolbarDragHint')}
@@ -164,6 +178,11 @@ export function SessionHandle({
       >
         <GripVertical size={14} className="shrink-0 opacity-60" />
         <span className="rd-toolbar-host">{hostTitle}</span>
+        {rtt > 0 && (
+          <span className="rd-toolbar-rtt font-mono-tabular" data-testid="toolbar-rtt">
+            {Math.round(rtt)}ms
+          </span>
+        )}
       </div>
 
       <span className="rd-toolbar-sep" aria-hidden="true" />
@@ -205,6 +224,36 @@ export function SessionHandle({
       >
         <Scan size={15} />
       </button>
+
+      {onToggleFullscreen && (
+        <button
+          type="button"
+          className={`rd-toolbar-btn${isFullscreen ? ' active' : ''}`}
+          data-testid="toolbar-fullscreen"
+          aria-pressed={isFullscreen}
+          aria-label={t(locale, 'fullscreen')}
+          data-tooltip={t(locale, 'fullscreen')}
+          data-tooltip-pos="bottom"
+          onClick={onToggleFullscreen}
+        >
+          {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+        </button>
+      )}
+
+      {onToggleAudio && (
+        <button
+          type="button"
+          className={`rd-toolbar-btn${audioEnabled ? ' active' : ''}`}
+          data-testid="toolbar-audio"
+          aria-pressed={audioEnabled}
+          aria-label={t(locale, 'remoteAudio')}
+          data-tooltip={t(locale, 'remoteAudio')}
+          data-tooltip-pos="bottom"
+          onClick={onToggleAudio}
+        >
+          {audioEnabled ? <Volume2 size={15} /> : <VolumeX size={15} />}
+        </button>
+      )}
 
       {showCtrlAltDel && (
         <button

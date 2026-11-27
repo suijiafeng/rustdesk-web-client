@@ -616,6 +616,25 @@ export default function App() {
     phase === 'live';
 
   const stageViewport = keyboardLayout.viewport ?? visibleViewport;
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const syncFullscreen = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+    document.addEventListener('fullscreenchange', syncFullscreen);
+    return () => document.removeEventListener('fullscreenchange', syncFullscreen);
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) {
+      void document.exitFullscreen?.().catch(() => {});
+    } else {
+      void el.requestFullscreen?.().catch(() => {});
+    }
+  }, []);
 
   return (
     <RemoteStage
@@ -645,7 +664,8 @@ export default function App() {
         chrome={{ handleX, setHandleX, toolbarExpanded, setToolbarExpanded, toolbarPinned, setToolbarPinned,
           mobilePanel, setMobilePanel, menuOpen, setMenuOpen, connectDialog, setConnectDialog,
           softKeys, softKeyboardMode, softKeyboardInputRef, closeChrome, toggleSoftKeyboard, switchSoftKeyboard,
-          hideSoftKeyboard, isMobileViewport, isCoarseDevice, isTouchLayout, remoteInput }}
+          hideSoftKeyboard, isMobileViewport, isCoarseDevice, isTouchLayout, remoteInput,
+          isFullscreen, toggleFullscreen }}
         notices={{ restartState, setRestartState, sessionTip, showSessionTip, webRtcFallbackReason, setWebRtcFallbackReason }}
         diagnostics={{ diagnosticsOpen, setDiagnosticsOpen, diagSummary, rtt, gatewayVideo }}
       />

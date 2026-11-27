@@ -40,6 +40,17 @@ export function MobileSessionPanel(p: MobileSessionPanelProps) {
     <section className="remote-menu-panel" role="dialog" aria-label={label(panelName[p.mobilePanel])} data-testid="session-menu"
       onPointerDown={e => e.stopPropagation()}>
       {p.mobilePanel === 'actions' && <>
+        {!p.viewOnly && (
+          <div className="tool-group tool-options" data-testid="mobile-quick-keys">
+            <button type="button" onClick={() => p.onQuickKey('Esc')}>Esc</button>
+            <button type="button" onClick={() => p.onQuickKey('Ctrl+C')}>
+              {/mac/i.test(p.peer?.platform ?? '') ? 'Cmd+C' : 'Ctrl+C'}
+            </button>
+            <button type="button" onClick={() => p.onQuickKey('Ctrl+V')}>
+              {/mac/i.test(p.peer?.platform ?? '') ? 'Cmd+V' : 'Ctrl+V'}
+            </button>
+          </div>
+        )}
         <div className="tool-group">
           {toggle(Volume2, 'remoteAudio', p.audioEnabled, p.onToggleAudio)}
           {toggle(Clipboard, 'clipSync', p.clipboardSync, p.onToggleClipboardSync, !p.clipboardAllowed)}
