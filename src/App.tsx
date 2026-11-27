@@ -8,9 +8,11 @@ import { useViewTransform } from './hooks/useViewTransform';
 import { useRemoteKeyboard } from './hooks/useRemoteKeyboard';
 import { useRemotePointer } from './hooks/useRemotePointer';
 import { useGatewaySession } from './hooks/useGatewaySession';
+import { useWakeLock } from './hooks/useWakeLock';
 import type { RemoteSocket } from './lib/remoteSocket';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
+import { PwaUpdateToast } from './components/PwaUpdateToast';
 import { RemoteStage } from './components/RemoteStage';
 import { SessionPanels } from './components/SessionPanels';
 import { RemoteAudio, type AudioFailureStage } from './lib/remoteAudio';
@@ -636,6 +638,8 @@ export default function App() {
     }
   }, []);
 
+  useWakeLock(phase === 'live');
+
   return (
     <RemoteStage
       stageRef={stageRef}
@@ -669,6 +673,7 @@ export default function App() {
         notices={{ restartState, setRestartState, sessionTip, showSessionTip, webRtcFallbackReason, setWebRtcFallbackReason }}
         diagnostics={{ diagnosticsOpen, setDiagnosticsOpen, diagSummary, rtt, gatewayVideo }}
       />
+      <PwaUpdateToast locale={locale} hidden={phase === 'live'} />
     </RemoteStage>
   );
 }

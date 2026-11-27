@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ExternalLink } from 'lucide-react';
+import { Download, ExternalLink, RefreshCw } from 'lucide-react';
 import { probeCodecs } from '../../lib/decoder';
 import { t, type Locale } from '../../lib/i18n';
 import type { CodecSupport } from '../../lib/protocol';
+import { applyPwaUpdate, promptPwaInstall, usePwaState } from '../../lib/pwa';
 
 // Called by SettingsView to retain probing when settings opens, shared by Display and About tabs.
 export function useProbedCodecSupport(): CodecSupport | null {
@@ -45,6 +46,7 @@ export function AboutSettings({
   locale: Locale;
   codecSupport: CodecSupport | null;
 }) {
+  const pwa = usePwaState();
   const detectedCodecs = listSupportedCodecs(codecSupport);
   const secureContext = typeof window !== 'undefined' && window.isSecureContext;
   const audioSupported =
@@ -53,6 +55,10 @@ export function AboutSettings({
     typeof AudioWorkletNode !== 'undefined';
   const webRtcSupported = typeof RTCPeerConnection !== 'undefined';
 
+  const handleInstallClick = () => {
+    void promptPwaInstall();
+  };
+
   return (
     <div className="flex flex-col gap-5">
       <section className="rd-settings-card" data-testid="about-rustdesk-card">
@@ -60,7 +66,52 @@ export function AboutSettings({
 
         <div className="rd-info-row">
           <span className="text-[var(--ink-soft)]">{t(locale, 'aboutVersion')}</span>
-          <span className="font-mono-tabular text-[var(--ink)]">{__APP_VERSION__}</span>
+          <div className="flex items-center gap-2">
+            <span className="font-mono-tabular text-[var(--ink)]">{__APP_VERSION__}</span>
+            {pwa.updateAvailable && (
+              <button
+                type="button"
+                className="rd-btn primary !h-7 !px-2.5 !text-xs inline-flex items-center gap-1"
+                data-testid="about-pwa-update-btn"
+                onClick={applyPwaUpdate}
+              >
+                <RefreshCw size={12} aria-hidden="true" />
+                <span>{t(locale, 'pwaUpdateNow')}</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="rd-info-row">
+          <span className="text-[var(--ink-soft)]">{t(locale, 'pwaAppLabel')}</span>
+          {pwa.isStandalone && (
+            <span className="rd-env-status ok" data-testid="about-pwa-status">
+              <span className="rd-env-dot" aria-hidden="true" />
+              {t(locale, 'pwaInstalled')}
+            </span>
+          )}
+          {!pwa.isStandalone && pwa.canInstall && (
+            <button
+              type="button"
+              className="rd-btn primary !h-7 !px-2.5 !text-xs inline-flex items-center gap-1"
+              data-testid="pwa-install-btn"
+              onClick={handleInstallClick}
+            >
+              <Download size={13} aria-hidden="true" />
+              <span>{t(locale, 'pwaInstallAction')}</span>
+            </button>
+          )}
+          {!pwa.isStandalone && !pwa.canInstall && pwa.isIosInstallable && (
+            <span className="text-xs text-[var(--ink-soft)]" data-testid="about-pwa-ios-hint">
+              {t(locale, 'pwaIosHint')}
+            </span>
+          )}
+          {!pwa.isStandalone && !pwa.canInstall && !pwa.isIosInstallable && (
+            <span className="rd-env-status muted" data-testid="about-pwa-status">
+              <span className="rd-env-dot" aria-hidden="true" />
+              {t(locale, 'pwaBrowserTab')}
+            </span>
+          )}
         </div>
 
         <div className="rd-info-row">
