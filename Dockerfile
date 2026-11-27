@@ -1,17 +1,22 @@
-FROM node:24-bookworm-slim AS build
+FROM node:24-bookworm-slim AS base
 WORKDIR /app
 RUN npm install --global --force yarn@1.22.22
+
+FROM base AS build
 COPY package.json yarn.lock ./
 RUN yarn install --frozen-lockfile --non-interactive
 COPY . .
 RUN yarn build
 
+FROM base AS prod-deps
+COPY package.json yarn.lock ./
+RUN yarn install --frozen-lockfile --production=true --non-interactive && yarn cache clean
+
 FROM node:24-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=3000
-RUN npm install --global --force yarn@1.22.22
-COPY package.json yarn.lock ./
-RUN yarn install --frozen-lockfile --production=true --non-interactive && yarn cache clean
+COPY package.json ./
+COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 USER node
 EXPOSE 3000
