@@ -1,5 +1,22 @@
-const CACHE_NAME = 'rd-web-shell-v3';
-const SHELL_ASSETS = ['/', '/manifest.webmanifest', '/icon.svg', '/favicon.svg'];
+const CACHE_NAME = 'rd-web-shell-v4';
+const MAX_ASSET_CACHE_ENTRIES = 64;
+const SHELL_ASSETS = [
+  '/',
+  '/manifest.webmanifest',
+  '/icon.svg',
+  '/favicon.svg',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/apple-touch-icon.png',
+];
+
+async function trimAssetCache(cache) {
+  const keys = await cache.keys();
+  const assetKeys = keys.filter((req) => new URL(req.url).pathname.startsWith('/assets/'));
+  if (assetKeys.length <= MAX_ASSET_CACHE_ENTRIES) return;
+  const excess = assetKeys.length - MAX_ASSET_CACHE_ENTRIES;
+  await Promise.all(assetKeys.slice(0, excess).map((req) => cache.delete(req)));
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -43,21 +60,33 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         })
-        .catch(() => caches.match('/')),
+        .catch(() =>
+          caches.match('/').then(
+            (cached) =>
+              cached ||
+              new Response('Offline', {
+                status: 503,
+                headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+              }),
+          ),
+        ),
     );
     return;
   }
 
-  // Immutable hashed assets: cache-first.
+  // Immutable hashed assets: cache-first with bounded cache size.
   if (url.pathname.startsWith('/assets/')) {
     event.respondWith(
       caches.match(request).then(
         (cached) =>
           cached ||
           fetch(request).then((response) => {
-            if (response.ok) {
+            if (response.ok && response.type === 'basic') {
               const copy = response.clone();
-              caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => undefined);
+              caches
+                .open(CACHE_NAME)
+                .then((cache) => cache.put(request, copy).then(() => trimAssetCache(cache)))
+                .catch(() => undefined);
             }
             return response;
           }),
