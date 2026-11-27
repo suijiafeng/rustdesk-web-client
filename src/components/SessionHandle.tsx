@@ -21,6 +21,7 @@ import { clampToolbarPixelX, clampToolbarX } from '../lib/floatingMenu';
 import { t, type Locale } from '../lib/i18n';
 import type { ViewMode } from '../lib/mapping';
 import type { DisplayInfo } from '../lib/protocol';
+import { ConfirmDialog } from './RestartAction';
 
 interface SessionHandleProps {
   locale: Locale;
@@ -83,6 +84,7 @@ export function SessionHandle({
   const dragRef = useRef<{ startX: number; origin: number; moved: boolean } | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const [barWidth, setBarWidth] = useState(560);
+  const [pendingConfirm, setPendingConfirm] = useState<'cad' | 'disconnect' | null>(null);
 
   useLayoutEffect(() => {
     if (expanded && barRef.current) {
@@ -278,7 +280,7 @@ export function SessionHandle({
           aria-label="Ctrl+Alt+Del"
           data-tooltip="Ctrl+Alt+Del"
           data-tooltip-pos="bottom"
-          onClick={onCtrlAltDel}
+          onClick={() => setPendingConfirm('cad')}
         >
           <ShieldAlert size={15} />
         </button>
@@ -334,7 +336,7 @@ export function SessionHandle({
         aria-label={t(locale, 'disconnect')}
         data-tooltip={t(locale, 'disconnect')}
         data-tooltip-pos="bottom-end"
-        onClick={onDisconnect}
+        onClick={() => setPendingConfirm('disconnect')}
       >
         <Power size={15} />
       </button>
@@ -351,6 +353,19 @@ export function SessionHandle({
       >
         <ChevronUp size={15} />
       </button>
+
+      <ConfirmDialog
+        open={pendingConfirm !== null}
+        locale={locale}
+        title={pendingConfirm === 'cad' ? 'Ctrl+Alt+Del' : t(locale, 'disconnectRemote')}
+        description={t(locale, pendingConfirm === 'cad' ? 'confirmCtrlAltDel' : 'confirmDisconnect')}
+        confirmLabel={pendingConfirm === 'cad' ? 'Ctrl+Alt+Del' : t(locale, 'disconnect')}
+        onClose={() => setPendingConfirm(null)}
+        onConfirm={() => {
+          if (pendingConfirm === 'cad') onCtrlAltDel?.();
+          else if (pendingConfirm === 'disconnect') onDisconnect();
+        }}
+      />
     </div>
   );
 }

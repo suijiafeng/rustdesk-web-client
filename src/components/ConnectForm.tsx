@@ -8,6 +8,7 @@ import type { ConnectionField, ConnectionMode, ConnectionPhase, ConnectRequest }
 import { ErrorBanner } from './ErrorBanner';
 import { PasswordModal } from './PasswordModal';
 import { PlatformIcon } from './PeerList';
+import { ConfirmDialog } from './RestartAction';
 import type { ServerSettings } from './settings/IdServerModal';
 
 interface ConnectFormProps {
@@ -312,6 +313,7 @@ export function ConnectForm({ model }: { model: ConnectFormModel }) {
 
   const [acOpen, setAcOpen] = useState(false);
   const [acIndex, setAcIndex] = useState(-1);
+  const [confirmDisconnectOpen, setConfirmDisconnectOpen] = useState(false);
   const acContainerRef = useRef<HTMLDivElement>(null);
 
   const acMatches = useMemo(() => {
@@ -670,12 +672,21 @@ export function ConnectForm({ model }: { model: ConnectFormModel }) {
               className={isLive ? 'rd-btn danger' : 'rd-btn'}
               style={{ minHeight: 32, padding: '4px 10px', fontSize: 12 }}
               data-testid={isLive ? 'disconnect' : 'cancel-connect'}
-              onClick={onDisconnect}
+              onClick={isLive ? () => setConfirmDisconnectOpen(true) : onDisconnect}
             >
               {isLive ? t(locale, 'disconnect') : t(locale, 'cancel')}
             </button>
           </div>
         )}
+        <ConfirmDialog
+          open={confirmDisconnectOpen}
+          locale={locale}
+          title={t(locale, 'disconnectRemote')}
+          description={t(locale, 'confirmDisconnect')}
+          confirmLabel={t(locale, 'disconnect')}
+          onClose={() => setConfirmDisconnectOpen(false)}
+          onConfirm={onDisconnect}
+        />
 
         {!isLive && !isConnecting && (phase === 'error' || decoderError) && (
           <ErrorBanner

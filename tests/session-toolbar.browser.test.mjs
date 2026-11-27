@@ -181,7 +181,8 @@ try {
   assert.equal(await evaluate(select('dock-more') + ' === null'), true);
   assert.equal(await evaluate(select('action-gestures') + ' === null'), true);
   assert.equal(await evaluate(select('gesture-guide') + ' === null'), true);
-  await until(select('session-reverse-scroll'));
+  assert.equal(await evaluate(select('mobile-quick-keys') + ' === null'), true);
+  assert.equal(await evaluate(select('session-reverse-scroll') + ' === null'), true);
   await tapElement(select('dock-display'));
   assert.equal(await evaluate(connectionDetails + ' === null'), true);
   await tapElement(select('dock-collapse'));
@@ -257,25 +258,6 @@ try {
   assert.deepEqual((await sent()).slice(-3).map(e => e.action), ['move', 'down', 'up']);
   console.log('Collapsed toolbar: remote tap still works.');
 
-  const reverseScroll = select('session-reverse-scroll');
-  await tapElement(select('mobile-dock-expand'));
-  await tapElement(select('dock-menu'));
-  const originalPreference = await evaluate(reverseScroll + '.textContent');
-  await tapElement(reverseScroll);
-  await until(list);
-  const alternatives = await evaluate(`Array.from(${list}.children, option => option.textContent)`);
-  assert.ok(
-    JSON.stringify(alternatives) === JSON.stringify(['自然', '反转']) ||
-    JSON.stringify(alternatives) === JSON.stringify(['Natural', 'Reverse']),
-  );
-  const otherDirection = `${list}.querySelector('[aria-selected="false"]')`;
-  const otherPreference = await evaluate(otherDirection + '.textContent');
-  await tapElement(otherDirection);
-  assert.equal(await evaluate(reverseScroll + '.textContent'), otherPreference);
-  await tapElement(select('dock-menu'));
-  const reversedScroll = await threeFingerScroll();
-  assert.equal(reversedScroll?.y, -originalScroll.y);
-
   const softbar = select('softbar');
   const keyboardSwitch = select('soft-keyboard-switch');
   const switchLabel = () => evaluate(keyboardSwitch + '.textContent.trim()');
@@ -298,6 +280,7 @@ try {
       { key: 'a', modifiers: ['Control'] },
     ]));
   })()`);
+  await tapElement(select('mobile-dock-expand'));
   await tapElement(select('dock-keyboard'));
   await until(`${softbar}?.dataset.keyboardMode === 'system'`);
   assert.equal(await evaluate('document.activeElement === ' + select('soft-input')), true);
@@ -517,12 +500,19 @@ try {
   assert.equal(await evaluate(hasPrivacySwitch), true);
   assert.equal(await evaluate(connectionDetails + ' === null'), true);
   await evaluate(select('menu-tab-control') + '.click()');
+  const reverseScroll = select('session-reverse-scroll');
+  const originalPreference = await evaluate(reverseScroll + '.textContent');
+  await evaluate(reverseScroll + '.click()');
+  await until(list);
+  const otherDirection = `${list}.querySelector('[aria-selected="false"]')`;
+  const otherPreference = await evaluate(otherDirection + '.textContent');
+  await evaluate(otherDirection + '.click()');
   assert.equal(await evaluate(reverseScroll + '.textContent'), otherPreference);
   await evaluate(reverseScroll + '.click()');
   await until(list);
   await evaluate(otherDirection + '.click()');
   assert.equal(await evaluate(reverseScroll + '.textContent'), originalPreference);
-  console.log('Scroll direction: three-finger wheel output reverses, and the preference survives reconnecting.');
+  console.log('Scroll direction: desktop menu direction toggle verified.');
   assert.equal(await evaluate(select('stage') + '.dataset.remoteActive'), 'false');
   await evaluate(select('session-close') + '.click()');
   await until(select('stage') + '.dataset.remoteActive === "true"');
@@ -935,6 +925,8 @@ try {
   await until("window.__rd?.state === 'live'");
   await openDesktopToolbar();
   await evaluate(select('toolbar-disconnect') + '.click()');
+  await until(select('confirm-action-submit'));
+  await evaluate(select('confirm-action-submit') + '.click()');
   await until("window.__rd?.state === 'idle'");
   assert.equal(await evaluate(select('error-banner')), null);
   assert.equal(await evaluate("window.sent.at(-1).type"), 'disconnect');

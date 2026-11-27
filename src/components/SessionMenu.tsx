@@ -1,4 +1,4 @@
-import { RestartAction } from './RestartAction';
+import { ConfirmDialog, RestartAction } from './RestartAction';
 import { AdaptiveSelect } from './AdaptiveSelect';
 import { ScrollDirectionSelect } from './ScrollDirectionSelect';
 import { MobileSessionPanel, type MobileSessionPanelProps } from './MobileSessionPanel';
@@ -106,6 +106,7 @@ function DesktopSessionMenu({
   onChangeQuality,
 }: SessionMenuProps) {
   const [activeTab, setActiveTab] = useState<MenuTab>('control');
+  const [pendingConfirm, setPendingConfirm] = useState<'lock' | 'disconnect' | null>(null);
 
   const displays = peer?.displays ?? [];
   const hasMultipleDisplays = displays.length > 1;
@@ -222,9 +223,21 @@ function DesktopSessionMenu({
               </div>
               <div className="session-group">
                 {peer?.restartAllowed && <RestartAction locale={locale} className="session-setting-row" onConfirm={onRestart} />}
-                <button type="button" className="session-setting-row" onClick={() => onQuickKey('Lock')}><LockKeyhole /><span>{t(locale, 'lockScreen')}</span></button>
-                <button type="button" className="session-setting-row destructive" data-testid="disconnect" onClick={onDisconnect}><Power /><span>{t(locale, 'disconnectRemote')}</span></button>
+                <button type="button" className="session-setting-row" onClick={() => setPendingConfirm('lock')}><LockKeyhole /><span>{t(locale, 'lockScreen')}</span></button>
+                <button type="button" className="session-setting-row destructive" data-testid="disconnect" onClick={() => setPendingConfirm('disconnect')}><Power /><span>{t(locale, 'disconnectRemote')}</span></button>
               </div>
+              <ConfirmDialog
+                open={pendingConfirm !== null}
+                locale={locale}
+                title={t(locale, pendingConfirm === 'lock' ? 'lockScreen' : 'disconnectRemote')}
+                description={t(locale, pendingConfirm === 'lock' ? 'confirmLock' : 'confirmDisconnect')}
+                confirmLabel={t(locale, pendingConfirm === 'lock' ? 'lockScreen' : 'disconnectRemote')}
+                onClose={() => setPendingConfirm(null)}
+                onConfirm={() => {
+                  if (pendingConfirm === 'lock') onQuickKey('Lock');
+                  else if (pendingConfirm === 'disconnect') onDisconnect();
+                }}
+              />
             </div>
           )}
           {activeTab === 'display' && (

@@ -1,8 +1,7 @@
-import React from 'react';
-import { RestartAction } from './RestartAction';
+import React, { useState } from 'react';
+import { ConfirmDialog, RestartAction } from './RestartAction';
 import { AdaptiveSelect } from './AdaptiveSelect';
-import { ScrollDirectionSelect } from './ScrollDirectionSelect';
-import { ArrowDownUp, Clipboard, Shield, Activity, Eye, Focus, LockKeyhole, LogOut, Monitor, SlidersHorizontal, Volume2, Gauge, Film } from 'lucide-react';
+import { Clipboard, Shield, Eye, Focus, LockKeyhole, LogOut, Monitor, SlidersHorizontal, Volume2, Gauge, Film } from 'lucide-react';
 import { t, type I18nKey } from '../lib/i18n';
 import { formatConnectionError } from '../lib/errors';
 import type { SessionMenuProps } from './SessionMenu';
@@ -17,6 +16,7 @@ export interface MobileSessionPanelProps extends SessionMenuProps {
 }
 
 export function MobileSessionPanel(p: MobileSessionPanelProps) {
+  const [pendingConfirm, setPendingConfirm] = useState<'lock' | 'disconnect' | null>(null);
   const label = (key: I18nKey) => t(p.locale, key);
   React.useEffect(() => {
     if (p.decoderError) p.onNotify(formatConnectionError(p.locale, p.decoderError).message, true);
@@ -40,30 +40,27 @@ export function MobileSessionPanel(p: MobileSessionPanelProps) {
     <section className="remote-menu-panel" role="dialog" aria-label={label(panelName[p.mobilePanel])} data-testid="session-menu"
       onPointerDown={e => e.stopPropagation()}>
       {p.mobilePanel === 'actions' && <>
-        {!p.viewOnly && (
-          <div className="tool-group tool-options" data-testid="mobile-quick-keys">
-            <button type="button" onClick={() => p.onQuickKey('Esc')}>Esc</button>
-            <button type="button" onClick={() => p.onQuickKey('Ctrl+C')}>
-              {/mac/i.test(p.peer?.platform ?? '') ? 'Cmd+C' : 'Ctrl+C'}
-            </button>
-            <button type="button" onClick={() => p.onQuickKey('Ctrl+V')}>
-              {/mac/i.test(p.peer?.platform ?? '') ? 'Cmd+V' : 'Ctrl+V'}
-            </button>
-          </div>
-        )}
         <div className="tool-group">
           {toggle(Volume2, 'remoteAudio', p.audioEnabled, p.onToggleAudio)}
           {toggle(Clipboard, 'clipSync', p.clipboardSync, p.onToggleClipboardSync, !p.clipboardAllowed)}
-          <label className="tool-row"><ArrowDownUp /><span>{label('scrollDirection')}</span>
-            <ScrollDirectionSelect locale={p.locale} tone="remote" testId="session-reverse-scroll"
-              reverse={p.reverseScroll} onChange={p.onReverseScrollChange} />
-          </label>
         </div>
         <div className="tool-group">
           {p.peer?.restartAllowed && <RestartAction locale={p.locale} className="tool-row" onConfirm={p.onRestart} />}
-          {action(LockKeyhole, 'lockScreen', () => p.onQuickKey('Lock'))}
-          {action(LogOut, 'disconnectRemote', p.onDisconnect, true)}
+          {action(LockKeyhole, 'lockScreen', () => setPendingConfirm('lock'))}
+          {action(LogOut, 'disconnectRemote', () => setPendingConfirm('disconnect'), true)}
         </div>
+        <ConfirmDialog
+          open={pendingConfirm !== null}
+          locale={p.locale}
+          title={label(pendingConfirm === 'lock' ? 'lockScreen' : 'disconnectRemote')}
+          description={label(pendingConfirm === 'lock' ? 'confirmLock' : 'confirmDisconnect')}
+          confirmLabel={label(pendingConfirm === 'lock' ? 'lockScreen' : 'disconnectRemote')}
+          onClose={() => setPendingConfirm(null)}
+          onConfirm={() => {
+            if (pendingConfirm === 'lock') p.onQuickKey('Lock');
+            else if (pendingConfirm === 'disconnect') p.onDisconnect();
+          }}
+        />
       </>}
       {p.mobilePanel === 'display' && <>
         {monitors.length > 1 && <div className="tool-group tool-options">{monitors.map(d =>
