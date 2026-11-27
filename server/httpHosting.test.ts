@@ -263,13 +263,27 @@ test('precompressed assets negotiate encodings, preserve content types and suppo
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'rd-encoding-'));
   const source = Buffer.from('export const desktop = "remote";'.repeat(200));
   await fs.mkdir(path.join(dir, 'assets'));
+  const html = Buffer.from('<!doctype html><title>rustdesk</title>' + ' '.repeat(1200));
+  const indexFile = path.join(dir, 'index.html');
   const file = path.join(dir, 'assets/app-ABcd1234.js');
-  await Promise.all([fs.writeFile(file, source), fs.writeFile(file + '.br', brotliCompressSync(source)), fs.writeFile(file + '.gz', gzipSync(source))]);
+  await Promise.all([
+    fs.writeFile(indexFile, html),
+    fs.writeFile(indexFile + '.br', brotliCompressSync(html)),
+    fs.writeFile(file, source),
+    fs.writeFile(file + '.br', brotliCompressSync(source)),
+    fs.writeFile(file + '.gz', gzipSync(source)),
+  ]);
   const app = express();
   serveProductionFiles(app, dir);
   const server = http.createServer(app).listen(0, '127.0.0.1');
   await once(server, 'listening');
   t.after(async () => { await closeServer(server); await fs.rm(dir, { recursive: true, force: true }); });
+  const rootRes = await request(server, '/', 'GET', { 'Accept-Encoding': 'br, gzip' });
+  assert.equal(rootRes.status, 200);
+  assert.equal(rootRes.headers['content-encoding'], 'br');
+  assert.match(rootRes.headers['content-type']!, /text\/html/);
+  assert.equal(rootRes.headers['cache-control'], 'no-cache');
+  assert.deepEqual(brotliDecompressSync(rootRes.bytes), html);
   for (const [accepted, expected] of [['br, gzip', 'br'], ['br;q=0.1, gzip;q=0.9', 'gzip'], ['gzip;q=0, br;q=0', undefined], ['br;q=0.5, identity;q=1', undefined]] as const) {
     const result = await request(server, '/assets/app-ABcd1234.js', 'GET', { 'Accept-Encoding': accepted });
     assert.equal(result.status, 200);

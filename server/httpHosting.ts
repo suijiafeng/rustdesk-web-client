@@ -1,9 +1,31 @@
 import express, { type Express } from 'express';
+import { readdirSync } from 'node:fs';
 import type { Server } from 'node:http';
 import type { Socket } from 'node:net';
 import path from 'node:path';
-import { stat } from 'node:fs/promises';
 import type { WebSocket, WebSocketServer } from 'ws';
+
+function indexPrecompressedFiles(distDir: string): Set<string> {
+  const index = new Set<string>();
+  const walk = (dir: string) => {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(fullPath);
+      } else if (entry.isFile() && (entry.name.endsWith('.br') || entry.name.endsWith('.gz'))) {
+        index.add(fullPath);
+      }
+    }
+  };
+  walk(path.resolve(distDir));
+  return index;
+}
 
 // Keep API misses out of both the production SPA and Vite's development fallback.
 export function installApiNotFound(app: Express): void {
@@ -14,8 +36,11 @@ export function installApiNotFound(app: Express): void {
 }
 
 export function serveProductionFiles(app: Express, distDir: string): void {
+  const resolvedDistDir = path.resolve(distDir);
+  const distPrefix = resolvedDistDir + path.sep;
+  const precompressed = indexPrecompressedFiles(resolvedDistDir);
   const cacheControl = (filename: string) => {
-    const relative = path.relative(distDir, filename);
+    const relative = path.relative(resolvedDistDir, filename);
     const versionedAsset = relative.startsWith(`assets${path.sep}`)
       && /-[A-Za-z0-9_-]{8,}\.[^.]+$/.test(path.basename(filename));
     return versionedAsset ? 'public, max-age=31536000, immutable' : 'no-cache';
@@ -24,9 +49,10 @@ export function serveProductionFiles(app: Express, distDir: string): void {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();
     let pathname: string;
     try { pathname = decodeURIComponent(req.path); } catch { return next(); }
+    if (pathname === '/') pathname = '/index.html';
     if (!/\.(?:js|css|html|svg|json|webmanifest)$/.test(pathname)) return next();
-    const filename = path.resolve(distDir, `.${pathname}`);
-    if (!filename.startsWith(path.resolve(distDir) + path.sep)) return next();
+    const filename = path.resolve(resolvedDistDir, `.${pathname}`);
+    if (!filename.startsWith(distPrefix)) return next();
     res.vary('Accept-Encoding');
     const weights = new Map<string, number>();
     for (const item of (req.headers['accept-encoding'] ?? '').toLowerCase().split(',')) {
@@ -39,23 +65,17 @@ export function serveProductionFiles(app: Express, distDir: string): void {
       encoding, quality: weights.get(encoding) ?? weights.get('*') ?? 0,
     })).filter(variant => variant.quality > 0 && variant.quality >= (weights.get('identity') ?? 0))
       .sort((a, b) => b.quality - a.quality);
-    void (async () => {
-      for (const { encoding } of variants) {
-        const compressed = `${filename}.${encoding === 'br' ? 'br' : 'gz'}`;
-        try { if (!(await stat(compressed)).isFile()) continue; }
-        catch (error) {
-          if (['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) continue;
-          throw error;
-        }
-        res.type(path.extname(filename));
-        res.setHeader('Content-Encoding', encoding);
-        res.sendFile(compressed, { headers: { 'Cache-Control': cacheControl(filename) } }, error => {
-          if (error) next(error);
-        });
-        return;
-      }
-      next();
-    })().catch(next);
+    for (const { encoding } of variants) {
+      const compressed = `${filename}.${encoding === 'br' ? 'br' : 'gz'}`;
+      if (!precompressed.has(compressed)) continue;
+      res.type(path.extname(filename));
+      res.setHeader('Content-Encoding', encoding);
+      res.sendFile(compressed, { headers: { 'Cache-Control': cacheControl(filename) } }, error => {
+        if (error) next(error);
+      });
+      return;
+    }
+    next();
   });
   app.use(express.static(distDir, {
     setHeaders: (res, filename) => {
