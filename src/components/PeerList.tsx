@@ -1,5 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useRef, useState } from 'react';
 import {
   Check,
   Copy,
@@ -12,11 +11,11 @@ import {
   Smartphone,
   Star,
   Trash2,
-  X,
 } from 'lucide-react';
 import { formatPeerId, type SavedDevice } from '../lib/devices';
 import { t, type Locale } from '../lib/i18n';
 import type { SavedPasswordMap } from '../lib/passwords';
+import { RemoveDeviceDialog, RenameDeviceDialog } from './PeerDialogs';
 
 interface PeerListProps {
   locale: Locale;
@@ -67,14 +66,9 @@ export function PeerList({
   const [menuKey, setMenuKey] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [renameTarget, setRenameTarget] = useState<SavedDevice | null>(null);
-  const [renameDraft, setRenameDraft] = useState('');
   const [removeTarget, setRemoveTarget] = useState<SavedDevice | null>(null);
 
   const menuRef = useRef<HTMLDivElement>(null);
-  const renameDialogRef = useRef<HTMLDialogElement>(null);
-  const renameInputRef = useRef<HTMLInputElement>(null);
-  const removeDialogRef = useRef<HTMLDialogElement>(null);
-  const dialogId = useId();
 
   useEffect(() => {
     if (!menuKey) return;
@@ -103,21 +97,6 @@ export function PeerList({
     return () => window.clearTimeout(timer);
   }, [copiedKey]);
 
-  useLayoutEffect(() => {
-    if (!renameTarget) return;
-    const el = renameDialogRef.current;
-    el?.showModal();
-    renameInputRef.current?.select();
-    return () => el?.close();
-  }, [renameTarget]);
-
-  useLayoutEffect(() => {
-    if (!removeTarget) return;
-    const el = removeDialogRef.current;
-    el?.showModal();
-    return () => el?.close();
-  }, [removeTarget]);
-
   const handleCopyId = async (device: SavedDevice) => {
     const text = formatCopyTarget(device);
     try {
@@ -131,7 +110,6 @@ export function PeerList({
 
   const openRename = (device: SavedDevice) => {
     setMenuKey(null);
-    setRenameDraft(device.alias || '');
     setRenameTarget(device);
   };
 
@@ -403,130 +381,23 @@ export function PeerList({
         </ul>
       )}
 
-      {renameTarget &&
-        createPortal(
-          <dialog
-            ref={renameDialogRef}
-            className="session-confirm"
-            data-session-confirm
-            data-testid="device-rename-dialog"
-            aria-labelledby={`${dialogId}-rename-title`}
-            onCancel={(event) => {
-              event.preventDefault();
-              setRenameTarget(null);
-            }}
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-              event.stopPropagation();
-              if (event.target === event.currentTarget) setRenameTarget(null);
-            }}
-          >
-            <form
-              className="session-confirm-content"
-              onSubmit={(event) => {
-                event.preventDefault();
-                onRename?.(renameTarget.key, renameDraft);
-                setRenameTarget(null);
-              }}
-            >
-              <header>
-                <h2 id={`${dialogId}-rename-title`}>{t(locale, 'editAliasAction')}</h2>
-                <button
-                  type="button"
-                  className="dialog-close"
-                  aria-label={t(locale, 'close')}
-                  onClick={() => setRenameTarget(null)}
-                >
-                  <X size={18} />
-                </button>
-              </header>
-              <div className="mt-3 mb-5">
-                <div className="text-xs text-[var(--ink-soft)] mb-2 font-mono-tabular">
-                  {renameTarget.hostname || formatPrimaryId(renameTarget)}
-                </div>
-                <input
-                  ref={renameInputRef}
-                  type="text"
-                  className="rd-input"
-                  data-testid="device-rename-input"
-                  value={renameDraft}
-                  placeholder={t(locale, 'editAliasPlaceholder')}
-                  maxLength={64}
-                  onChange={(e) => setRenameDraft(e.target.value)}
-                />
-              </div>
-              <footer>
-                <button type="button" className="rd-btn" onClick={() => setRenameTarget(null)}>
-                  {t(locale, 'cancel')}
-                </button>
-                <button type="submit" className="rd-btn primary" data-testid="device-rename-save">
-                  {t(locale, 'saveAction')}
-                </button>
-              </footer>
-            </form>
-          </dialog>,
-          document.body,
-        )}
+      {renameTarget && (
+        <RenameDeviceDialog
+          locale={locale}
+          device={renameTarget}
+          onSave={(key, alias) => onRename?.(key, alias)}
+          onClose={() => setRenameTarget(null)}
+        />
+      )}
 
-      {removeTarget &&
-        createPortal(
-          <dialog
-            ref={removeDialogRef}
-            className="session-confirm"
-            data-session-confirm
-            data-testid="device-remove-dialog"
-            aria-labelledby={`${dialogId}-remove-title`}
-            aria-describedby={`${dialogId}-remove-desc`}
-            onCancel={(event) => {
-              event.preventDefault();
-              setRemoveTarget(null);
-            }}
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-              event.stopPropagation();
-              if (event.target === event.currentTarget) setRemoveTarget(null);
-            }}
-          >
-            <div className="session-confirm-content">
-              <header>
-                <h2 id={`${dialogId}-remove-title`}>{t(locale, 'confirmRemoveDeviceTitle')}</h2>
-                <button
-                  type="button"
-                  className="dialog-close"
-                  aria-label={t(locale, 'close')}
-                  onClick={() => setRemoveTarget(null)}
-                >
-                  <X size={18} />
-                </button>
-              </header>
-              <p id={`${dialogId}-remove-desc`}>
-                {t(locale, 'confirmRemoveDeviceBody')}
-              </p>
-              <footer>
-                <button
-                  type="button"
-                  className="rd-btn"
-                  autoFocus
-                  onClick={() => setRemoveTarget(null)}
-                >
-                  {t(locale, 'cancel')}
-                </button>
-                <button
-                  type="button"
-                  className="rd-btn danger"
-                  data-testid="device-remove-confirm"
-                  onClick={() => {
-                    onRemove(removeTarget.key);
-                    setRemoveTarget(null);
-                  }}
-                >
-                  {t(locale, 'removeDevice')}
-                </button>
-              </footer>
-            </div>
-          </dialog>,
-          document.body,
-        )}
+      {removeTarget && (
+        <RemoveDeviceDialog
+          locale={locale}
+          device={removeTarget}
+          onConfirm={onRemove}
+          onClose={() => setRemoveTarget(null)}
+        />
+      )}
     </>
   );
 }

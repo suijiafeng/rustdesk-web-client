@@ -60,6 +60,17 @@ export function ErrorBanner({
     };
   }, [detailsOpen]);
 
+  const autoReconnectText = autoReconnect
+    ? (locale === 'zh'
+      ? `${autoReconnect.secondsLeft} 秒后自动重连 (${autoReconnect.attempt}/${autoReconnect.maxAttempts})`
+      : `Reconnecting in ${autoReconnect.secondsLeft}s (${autoReconnect.attempt}/${autoReconnect.maxAttempts})`)
+    : null;
+
+  const handleRetryClick = () => {
+    onCancelAutoReconnect?.();
+    onRetry?.();
+  };
+
   return (
     <div className="rd-err-banner" data-testid="error-banner" role="alert">
       {hasDetails ? (
@@ -97,10 +108,7 @@ export function ErrorBanner({
               type="button"
               className="rd-err-action-btn shrink-0"
               data-testid="error-action-retry"
-              onClick={() => {
-                onCancelAutoReconnect?.();
-                onRetry();
-              }}
+              onClick={handleRetryClick}
             >
               <RotateCw size={13} />
               <span>{t(locale, 'actionRetryConnection')}</span>
@@ -118,13 +126,9 @@ export function ErrorBanner({
             </button>
           )}
         </div>
-        {autoReconnect && (
+        {autoReconnectText && (
           <div className="mt-0.5 flex items-center gap-2 text-xs text-[var(--ink-soft)]" data-testid="auto-reconnect-status">
-            <span className="font-mono-tabular">
-              {locale === 'zh'
-                ? `${autoReconnect.secondsLeft} 秒后自动重连 (${autoReconnect.attempt}/${autoReconnect.maxAttempts})`
-                : `Reconnecting in ${autoReconnect.secondsLeft}s (${autoReconnect.attempt}/${autoReconnect.maxAttempts})`}
-            </span>
+            <span className="font-mono-tabular">{autoReconnectText}</span>
             {onCancelAutoReconnect && (
               <button
                 type="button"

@@ -1,0 +1,152 @@
+:root {
+  color: #1c2430;
+  background: #101418;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --accent: #1d8ef5;
+  --accent-press: #1574cc;
+  --accent-tint: #eef5fc;
+  --line: #d5dde6;
+  --surface: #ffffff;
+  --surface-subtle: #f4f5f7;
+  --ink: #1c2430;
+  --ink-soft: #5c6b7a;
+  --ok: #0f7b4c;
+  --ok-bg: #e8f6ef;
+  --warn: #9a6700;
+  --warn-bg: #fff6e0;
+  --bad: #b42318;
+  --bad-bg: #fdecea;
+  --kb: 0px;
+
+  /* Unified RustDesk Shell tokens (shared identically on Mobile & PC) */
+  --rd-bg: #ffffff;
+  --rd-sidebar-bg: #f1f3f6;
+  --rd-card-bg: #f4f5f7;
+  --rd-card-border: #e5e7eb;
+  --rd-hero-bg: #eff1f4;
+  --rd-hero-focus-bg: #f4f7fb;
+  --rd-input-bg: #ffffff;
+  --rd-divider: #e5e7eb;
+  --rd-subtab-active: #111827;
+  --rd-icon-tile-bg: #e8f4fe;
+  --rd-hover-bg: rgba(15, 23, 42, 0.05);
+  --rd-switch-off: #cbd5e1;
+  --rd-radio-bg: transparent;
+  --rd-radio-active-bg: rgba(29, 142, 245, 0.08);
+  --rd-topbar-bg: #1d8ef5;
+  --rd-topbar-border: transparent;
+  --rd-topbar-ink: #ffffff;
+  --rd-topbar-icon: rgba(255, 255, 255, 0.94);
+  --rd-topbar-hover: rgba(255, 255, 255, 0.16);
+  --rd-id-ink: #0ea5e9;
+  --rd-err-border: #f5c2c0;
+  --rd-tip-bg: #1e293b;
+  --rd-tip-ink: #f8fafc;
+
+  /* In-session frosted translucent overlay tokens */
+  --overlay-surface: rgba(255, 255, 255, 0.74);
+  --overlay-surface-strong: rgba(255, 255, 255, 0.84);
+  --overlay-surface-subtle: rgba(241, 245, 249, 0.64);
+  --overlay-input-bg: rgba(255, 255, 255, 0.72);
+  --overlay-border: rgba(15, 23, 42, 0.14);
+  --overlay-scrim: rgba(15, 23, 42, 0.14);
+}
+
+:root[data-theme="dark"] {
+  --accent: #2196f3;
+  --accent-press: #1976d2;
+  --accent-tint: rgba(33, 150, 243, 0.16);
+  --line: #2e3640;
+  --surface: #1b1f24;
+  --surface-subtle: #232830;
+  --ink: #f1f5f9;
+  --ink-soft: #94a3b8;
+  --ok: #34d399;
+  --ok-bg: rgba(16, 185, 129, 0.16);
+  --warn: #fbbf24;
+  --warn-bg: rgba(245, 158, 11, 0.16);
+  --bad: #f87171;
+  --bad-bg: rgba(239, 68, 68, 0.16);
+
+  --rd-bg: #121519;
+  --rd-sidebar-bg: #181c22;
+  --rd-card-bg: #1c2128;
+  --rd-card-border: #2a313b;
+  --rd-hero-bg: #1e242c;
+  --rd-hero-focus-bg: #232a34;
+  --rd-input-bg: #14181e;
+  --rd-divider: #262d37;
+  --rd-subtab-active: #f8fafc;
+  --rd-icon-tile-bg: rgba(33, 150, 243, 0.16);
+  --rd-hover-bg: rgba(248, 250, 252, 0.06);
+  --rd-switch-off: #3d4654;
+  --rd-radio-bg: transparent;
+  --rd-radio-active-bg: rgba(33, 150, 243, 0.14);
+  --rd-topbar-bg: #181c22;
+  --rd-topbar-border: #262d37;
+  --rd-topbar-ink: #f1f5f9;
+  --rd-topbar-icon: #cbd5e1;
+  --rd-topbar-hover: rgba(248, 250, 252, 0.09);
+  --rd-id-ink: #38bdf8;
+  --rd-err-border: rgba(248, 113, 113, 0.34);
+  --rd-tip-bg: #f1f5f9;
+  --rd-tip-ink: #0f172a;
+
+  /* In-session frosted translucent overlay tokens (dark) */
+  --overlay-surface: rgba(20, 24, 30, 0.74);
+  --overlay-surface-strong: rgba(22, 27, 34, 0.84);
+  --overlay-surface-subtle: rgba(34, 40, 50, 0.62);
+  --overlay-input-bg: rgba(14, 18, 24, 0.66);
+  --overlay-border: rgba(241, 245, 249, 0.16);
+  --overlay-scrim: rgba(0, 0, 0, 0.24);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  position: fixed;
+  inset: 0;
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: var(--rd-bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+input,
+select,
+textarea {
+  font-size: 16px;
+  font-family: inherit;
+  color: var(--ink);
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible {
+  outline: 2px solid #b9d4f3;
+  outline-offset: 1px;
+}
+
+.font-mono-tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}

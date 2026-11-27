@@ -66,6 +66,10 @@ export function SessionDisplayControls({
   const rowClass = isMobile ? 'tool-row' : 'session-setting-row';
   const selectTone = isMobile ? 'remote' : undefined;
 
+  const showCodecActualHint = Boolean(
+    stats.codec && stats.codec !== '—' && preferredCodec !== 'auto' && normalizeCodecName(stats.codec) !== preferredCodec,
+  );
+
   const qualityAndFpsControls = (
     <>
       <label className={rowClass}>
@@ -150,7 +154,7 @@ export function SessionDisplayControls({
           }}
         />
       </label>
-      {stats.codec && stats.codec !== '—' && preferredCodec !== 'auto' && normalizeCodecName(stats.codec) !== preferredCodec && (
+      {showCodecActualHint && (
         <p className="m-0 pb-1 text-xs text-[var(--ink-soft)]" data-testid="codec-actual-hint">
           {t(locale, 'codecActualPrefix')}: {stats.codec}
         </p>

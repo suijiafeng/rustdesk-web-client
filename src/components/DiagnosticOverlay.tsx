@@ -107,6 +107,15 @@ export function DiagnosticOverlay({
   };
   const StatusIcon = statusIcons[state];
 
+  const actualCodec = stats.codec && stats.codec !== '—' ? stats.codec : null;
+  const requestedCodec = preferredCodec && preferredCodec !== 'auto' ? preferredCodec : null;
+  const actualCodecNorm = actualCodec ? normalizeCodecName(actualCodec) : null;
+  const codecText = !actualCodec
+    ? (requestedCodec ? `${formatCodecLabel(requestedCodec, '')}…` : '—')
+    : (requestedCodec && actualCodecNorm && actualCodecNorm !== requestedCodec
+      ? `${actualCodec} (${t(locale, 'diagCodecReq')} ${formatCodecLabel(requestedCodec, '')})`
+      : actualCodec);
+
   return (
     <aside
       ref={overlayRef}
@@ -165,18 +174,7 @@ export function DiagnosticOverlay({
         </div>
         <div>
           <dt>{t(locale, 'diagCodec')}</dt>
-          <dd data-testid="diag-codec">
-            {(() => {
-              const actual = stats.codec && stats.codec !== '—' ? stats.codec : null;
-              const requested = preferredCodec && preferredCodec !== 'auto' ? preferredCodec : null;
-              if (!actual) return requested ? `${formatCodecLabel(requested, '')}…` : '—';
-              const actualNorm = normalizeCodecName(actual);
-              if (requested && actualNorm && actualNorm !== requested) {
-                return `${actual} (${t(locale, 'diagCodecReq')} ${formatCodecLabel(requested, '')})`;
-              }
-              return actual;
-            })()}
-          </dd>
+          <dd data-testid="diag-codec">{codecText}</dd>
         </div>
         <div>
           <dt>{t(locale, 'diagDecodeLatency')}</dt>

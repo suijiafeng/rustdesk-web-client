@@ -10,14 +10,9 @@ import { decodeFrame, wsUrl, type CodecSupport, type PeerMessage, type QualityLe
 import { RemoteSocket } from '../lib/remoteSocket';
 import { createSessionMessageHandler, type SessionMessageContext } from '../lib/sessionMessages';
 import { createFrameStats, type FrameStatsState } from '../lib/stats';
+import { useAutoReconnect, type AutoReconnectState } from './useAutoReconnect';
 
-export interface AutoReconnectState {
-  attempt: number;
-  maxAttempts: number;
-  secondsLeft: number;
-}
-
-const AUTO_RECONNECT_DELAYS_SEC = [2, 4, 8] as const;
+export type { AutoReconnectState };
 
 interface GatewaySessionContext extends Omit<SessionMessageContext, 'connection' | 'onTerminalError'> {
   mode: ConnectionMode;
@@ -115,33 +110,18 @@ export function useGatewaySession(context: GatewaySessionContext) {
   } = context;
 
   const [codecSupport, setCodecSupport] = useState<CodecSupport | null>(null);
-  const [autoReconnect, setAutoReconnect] = useState<AutoReconnectState | null>(null);
-  const autoReconnectAttemptRef = useRef(0);
-  const restartStateRef = useRef(restartState);
-  restartStateRef.current = restartState;
-
-  const cancelAutoReconnect = useCallback(() => {
-    autoReconnectAttemptRef.current = 0;
-    setAutoReconnect(null);
-  }, []);
-
-  const scheduleAutoReconnect = useCallback((wasLive: boolean) => {
-    if (restartStateRef.current || !reconnectRequest.current) return;
-    const nextAttempt = wasLive ? 1 : autoReconnectAttemptRef.current + 1;
-    if (!wasLive && autoReconnectAttemptRef.current === 0) return;
-    if (nextAttempt > AUTO_RECONNECT_DELAYS_SEC.length) {
-      autoReconnectAttemptRef.current = 0;
-      setAutoReconnect(null);
-      reconnectRequest.current = null;
-      return;
-    }
-    autoReconnectAttemptRef.current = nextAttempt;
-    setAutoReconnect({
-      attempt: nextAttempt,
-      maxAttempts: AUTO_RECONNECT_DELAYS_SEC.length,
-      secondsLeft: AUTO_RECONNECT_DELAYS_SEC[nextAttempt - 1],
-    });
-  }, [reconnectRequest]);
+  const connectRetryRef = useRef<(req: ConnectRequest) => void>(() => {});
+  const {
+    autoReconnect,
+    autoReconnectAttemptRef,
+    scheduleAutoReconnect,
+    cancelAutoReconnect,
+  } = useAutoReconnect({
+    phase,
+    restartState,
+    reconnectRequest,
+    onRetry: useCallback((req: ConnectRequest) => connectRetryRef.current(req), []),
+  });
 
   const messageDisposer = useRef<(() => void) | null>(null);
   const clearSessionMessages = useCallback(() => {
@@ -443,36 +423,9 @@ export function useGatewaySession(context: GatewaySessionContext) {
     ],
   );
 
-  // Clear auto-reconnect once session recovers to live
-  useEffect(() => {
-    if (phase === 'live' && autoReconnectAttemptRef.current > 0) {
-      cancelAutoReconnect();
-    }
-  }, [phase, cancelAutoReconnect]);
-
-  // Countdown timer & browser online fast-retry for auto-reconnect
-  useEffect(() => {
-    if (!autoReconnect || phase !== 'error') return;
-    const triggerRetry = () => {
-      const req = reconnectRequest.current;
-      setAutoReconnect(null);
-      if (req) void connectSession(req, true);
-    };
-    if (autoReconnect.secondsLeft <= 0) {
-      triggerRetry();
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      setAutoReconnect((prev) =>
-        prev ? { ...prev, secondsLeft: Math.max(0, prev.secondsLeft - 1) } : null,
-      );
-    }, 1000);
-    window.addEventListener('online', triggerRetry, { once: true });
-    return () => {
-      window.clearTimeout(timer);
-      window.removeEventListener('online', triggerRetry);
-    };
-  }, [autoReconnect, phase, connectSession, reconnectRequest]);
+  connectRetryRef.current = (req) => {
+    void connectSession(req, true);
+  };
 
   useEffect(() => {
     if (!restartState) {
