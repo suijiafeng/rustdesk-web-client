@@ -3,6 +3,7 @@ import {
   loadSavedDevices,
   persistSavedDevices,
   removeDevice,
+  renameDeviceAlias,
   toggleFavoriteDevice,
   type SavedDevice,
 } from '../lib/devices';
@@ -165,6 +166,10 @@ export function useSavedDevices() {
     setDevices((prev) => toggleFavoriteDevice(prev, key));
   }, []);
 
+  const handleRenameDevice = useCallback((key: string, alias: string) => {
+    setDevices((prev) => renameDeviceAlias(prev, key, alias));
+  }, []);
+
   const handleRemoveDevice = useCallback((key: string) => {
     setDevices((prev) => removeDevice(prev, key));
     handleClearSavedPassword(key);
@@ -182,6 +187,7 @@ export function useSavedDevices() {
     handleClearAllSavedPasswords,
     rememberDevicePassword,
     handleToggleFavorite,
+    handleRenameDevice,
     handleRemoveDevice,
   };
 }

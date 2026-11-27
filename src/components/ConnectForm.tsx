@@ -1,12 +1,13 @@
 import type { ErrorPayload } from '../../shared/errors';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, HelpCircle, Loader2, X } from 'lucide-react';
+import { ArrowRight, HelpCircle, KeyRound, Loader2, X } from 'lucide-react';
 import { deviceKeyFor, formatPeerId, type SavedDevice } from '../lib/devices';
 import { statusLabel, t, type Locale } from '../lib/i18n';
 import { getSavedPassword, type SavedPasswordMap } from '../lib/passwords';
 import type { ConnectionField, ConnectionMode, ConnectionPhase, ConnectRequest } from '../types';
 import { ErrorBanner } from './ErrorBanner';
 import { PasswordModal } from './PasswordModal';
+import { PlatformIcon } from './PeerList';
 import type { ServerSettings } from './settings/IdServerModal';
 
 interface ConnectFormProps {
@@ -27,6 +28,7 @@ interface ConnectFormProps {
   detail: string;
   connectionError?: ErrorPayload;
   decoderError: string;
+  devices?: SavedDevice[];
   savedPasswords: SavedPasswordMap;
   onChangeMode: (mode: ConnectionMode) => void;
   onChangeField: (field: ConnectionField, value: string) => void;
@@ -280,6 +282,8 @@ export function ConnectForm({ model }: { model: ConnectFormModel }) {
     host,
     port,
     directIpEnabled,
+    devices = [],
+    savedPasswords,
     onChangeMode,
     onChangeField,
     onDisconnect,
@@ -303,7 +307,44 @@ export function ConnectForm({ model }: { model: ConnectFormModel }) {
     handleIdInputChange,
     handleHeroSubmit,
     retryConnection,
+    handleDeviceRowTap,
   } = model;
+
+  const [acOpen, setAcOpen] = useState(false);
+  const [acIndex, setAcIndex] = useState(-1);
+  const acContainerRef = useRef<HTMLDivElement>(null);
+
+  const acMatches = useMemo(() => {
+    const clean = peerId.replace(/\s+/g, '').toLowerCase();
+    if (!clean || activeMode !== 'id' || isConnecting || isLive) return [];
+    return devices
+      .filter((d) => {
+        if (d.mode !== 'id') return false;
+        const id = (d.peerId ?? '').replace(/\s+/g, '').toLowerCase();
+        if (id === clean) return false;
+        return (
+          id.includes(clean) ||
+          (d.alias ?? '').toLowerCase().includes(clean) ||
+          (d.hostname ?? '').toLowerCase().includes(clean)
+        );
+      })
+      .slice(0, 5);
+  }, [devices, peerId, activeMode, isConnecting, isLive]);
+
+  const showAutocomplete = acOpen && acMatches.length > 0;
+
+  useEffect(() => {
+    if (!showAutocomplete) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (acContainerRef.current && !acContainerRef.current.contains(event.target as Node)) {
+        setAcOpen(false);
+        setAcIndex(-1);
+      }
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [showAutocomplete]);
+
   return (
     <>
       {/* Hero Remote ID / Direct IP Input Block */}
@@ -374,6 +415,7 @@ export function ConnectForm({ model }: { model: ConnectFormModel }) {
                 className={`rd-mode-switcher-btn${activeMode === 'id' ? ' active' : ''}`}
                 onClick={() => {
                   setHeroInputError(false);
+                  setAcOpen(false);
                   onChangeMode('id');
                 }}
               >
@@ -387,6 +429,7 @@ export function ConnectForm({ model }: { model: ConnectFormModel }) {
                 className={`rd-mode-switcher-btn${activeMode === 'direct' ? ' active' : ''}`}
                 onClick={() => {
                   setHeroInputError(false);
+                  setAcOpen(false);
                   onChangeMode('direct');
                 }}
               >
@@ -396,68 +439,156 @@ export function ConnectForm({ model }: { model: ConnectFormModel }) {
           )}
         </div>
 
-        <form onSubmit={handleHeroSubmit} noValidate>
+        <form
+          onSubmit={(e) => {
+            if (showAutocomplete && acIndex >= 0 && acMatches[acIndex]) {
+              e.preventDefault();
+              const chosen = acMatches[acIndex];
+              setAcOpen(false);
+              setAcIndex(-1);
+              handleDeviceRowTap(chosen);
+              return;
+            }
+            setAcOpen(false);
+            handleHeroSubmit(e);
+          }}
+          noValidate
+        >
           {activeMode === 'id' ? (
-            <div
-              className={`rd-hero-box${heroInputError ? ' has-error' : ''}${
-                heroErrorShake ? ' rd-shake' : ''
-              }`}
-              data-testid="hero-input-box"
-              onAnimationEnd={() => setHeroErrorShake(false)}
-            >
-              <div className="flex-1 min-w-0 flex flex-col justify-center">
-                <label
-                  htmlFor="rustdesk-peer-id"
-                  className={`transition-all leading-none ${
-                    peerId ? 'text-[11px] font-medium text-[var(--ink-soft)] mb-1' : 'sr-only'
-                  }`}
+            <div ref={acContainerRef} className="relative">
+              <div
+                className={`rd-hero-box${heroInputError ? ' has-error' : ''}${
+                  heroErrorShake ? ' rd-shake' : ''
+                }`}
+                data-testid="hero-input-box"
+                onAnimationEnd={() => setHeroErrorShake(false)}
+              >
+                <div className="flex-1 min-w-0 flex flex-col justify-center">
+                  <label
+                    htmlFor="rustdesk-peer-id"
+                    className={`transition-all leading-none ${
+                      peerId ? 'text-[11px] font-medium text-[var(--ink-soft)] mb-1' : 'sr-only'
+                    }`}
+                  >
+                    {t(locale, 'remoteIdLabel')}
+                  </label>
+                  <input
+                    ref={peerInputRef}
+                    id="rustdesk-peer-id"
+                    type="text"
+                    inputMode="numeric"
+                    data-testid="peer-id"
+                    aria-invalid={heroInputError || undefined}
+                    aria-describedby={heroInputError ? 'rustdesk-hero-error' : undefined}
+                    aria-expanded={showAutocomplete || undefined}
+                    aria-autocomplete="list"
+                    className={`rd-hero-input font-mono-tabular${peerId ? ' has-value' : ''}`}
+                    value={formattedIdValue}
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder={t(locale, 'remoteIdLabel')}
+                    onFocus={(e) => {
+                      e.currentTarget.select();
+                      setAcOpen(true);
+                    }}
+                    onKeyDown={(e) => {
+                      if (!showAutocomplete) return;
+                      if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        setAcIndex((prev) => (prev + 1) % acMatches.length);
+                      } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        setAcIndex((prev) => (prev <= 0 ? acMatches.length - 1 : prev - 1));
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        setAcOpen(false);
+                        setAcIndex(-1);
+                      }
+                    }}
+                    onChange={(e) => {
+                      setAcOpen(true);
+                      setAcIndex(-1);
+                      handleIdInputChange(e.target.value);
+                    }}
+                  />
+                </div>
+
+                {peerId && (
+                  <button
+                    type="button"
+                    className="rd-hero-action-btn"
+                    aria-label={t(locale, 'clearInput')}
+                    data-tooltip={t(locale, 'clearInput')}
+                    data-tooltip-pos="top"
+                    onClick={() => {
+                      setHeroInputError(false);
+                      setAcOpen(false);
+                      onChangeField('peerId', '');
+                    }}
+                  >
+                    <X size={20} />
+                  </button>
+                )}
+
+                <button
+                  type="submit"
+                  className="rd-hero-action-btn primary-arrow"
+                  data-testid="connect"
+                  aria-label={t(locale, 'connect')}
+                  data-tooltip={t(locale, 'connect')}
+                  data-tooltip-pos="top-end"
+                  disabled={isConnecting}
                 >
-                  {t(locale, 'remoteIdLabel')}
-                </label>
-                <input
-                  ref={peerInputRef}
-                  id="rustdesk-peer-id"
-                  type="text"
-                  inputMode="numeric"
-                  data-testid="peer-id"
-                  aria-invalid={heroInputError || undefined}
-                  aria-describedby={heroInputError ? 'rustdesk-hero-error' : undefined}
-                  className={`rd-hero-input font-mono-tabular${peerId ? ' has-value' : ''}`}
-                  value={formattedIdValue}
-                  autoComplete="off"
-                  spellCheck={false}
-                  placeholder={t(locale, 'remoteIdLabel')}
-                  onChange={(e) => handleIdInputChange(e.target.value)}
-                />
+                  <ArrowRight size={24} />
+                </button>
               </div>
 
-              {peerId && (
-                <button
-                  type="button"
-                  className="rd-hero-action-btn"
-                  aria-label={t(locale, 'clearInput')}
-                  data-tooltip={t(locale, 'clearInput')}
-                  data-tooltip-pos="top"
-                  onClick={() => {
-                    setHeroInputError(false);
-                    onChangeField('peerId', '');
-                  }}
+              {showAutocomplete && (
+                <ul
+                  className="rd-autocomplete"
+                  role="listbox"
+                  data-testid="peer-autocomplete"
                 >
-                  <X size={20} />
-                </button>
+                  {acMatches.map((device, index) => {
+                    const idText = formatPeerId(device.peerId ?? '');
+                    const label = device.alias || device.hostname || idText;
+                    const hasPw = Boolean(savedPasswords[device.key]);
+                    return (
+                      <li key={device.key} role="option" aria-selected={index === acIndex}>
+                        <button
+                          type="button"
+                          className={`rd-autocomplete-item${index === acIndex ? ' active' : ''}`}
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            setAcOpen(false);
+                            setAcIndex(-1);
+                            handleDeviceRowTap(device);
+                          }}
+                        >
+                          <span className="w-7 h-7 rounded-lg bg-[var(--rd-icon-tile-bg)] text-[var(--accent)] inline-flex items-center justify-center shrink-0">
+                            <PlatformIcon platform={device.platform} size={15} />
+                          </span>
+                          <span className="min-w-0 flex-1 text-left">
+                            <span className="block text-[13px] font-medium text-[var(--ink)] truncate">
+                              {label}
+                            </span>
+                            <span className="block text-xs font-mono-tabular text-[var(--rd-id-ink)] truncate">
+                              {idText}
+                            </span>
+                          </span>
+                          {hasPw && (
+                            <KeyRound
+                              size={13}
+                              className="text-[var(--ok)] shrink-0"
+                              aria-label={t(locale, 'savedPasswordIndicator')}
+                            />
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
-
-              <button
-                type="submit"
-                className="rd-hero-action-btn primary-arrow"
-                data-testid="connect"
-                aria-label={t(locale, 'connect')}
-                data-tooltip={t(locale, 'connect')}
-                data-tooltip-pos="top-end"
-                disabled={isConnecting}
-              >
-                <ArrowRight size={24} />
-              </button>
             </div>
           ) : (
             <div
@@ -479,6 +610,7 @@ export function ConnectForm({ model }: { model: ConnectFormModel }) {
                   autoComplete="off"
                   spellCheck={false}
                   placeholder={t(locale, 'directTargetPlaceholder')}
+                  onFocus={(e) => e.currentTarget.select()}
                   onChange={(e) => {
                     setHeroInputError(false);
                     onChangeField('host', e.target.value);

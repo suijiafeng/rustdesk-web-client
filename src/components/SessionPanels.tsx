@@ -122,7 +122,7 @@ export function SessionPanels({
     savedGatewayToken, gatewayToken, gatewayTokenReady, gatewayTokenRejected,
     gatewayTokenReadFailed, saveGatewayToken, devices, savedPasswords, passwordsReady,
     passwordStorageFailed, setPasswordStorageFailed, handleClearSavedPassword,
-    handleClearAllSavedPasswords, handleToggleFavorite, handleRemoveDevice,
+    handleClearAllSavedPasswords, handleToggleFavorite, handleRenameDevice, handleRemoveDevice,
   } = savedDevices;
   const { pageZoomed, resetPageZoom, box, viewMode, setViewMode, setPan, setZoom, remoteW, remoteH, keyboardLayout, visibleViewport } = viewport;
   const { statsStore, decoderError } = video;
@@ -324,6 +324,7 @@ export function SessionPanels({
           onResetDefaults={handleResetDefaults}
           onSelectDevice={handleSelectDevice}
           onToggleFavorite={handleToggleFavorite}
+          onRenameDevice={handleRenameDevice}
           onRemoveDevice={handleRemoveDevice}
           onToggleTouchMode={handleToggleTouchMode}
           onToggleDiagnostics={() => setDiagnosticsOpen((prev) => !prev)}

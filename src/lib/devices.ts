@@ -14,6 +14,7 @@ export interface SavedDevice {
   host?: string;
   port?: string;
   hostname: string;
+  alias?: string;
   platform: string;
   favorite: boolean;
   lastConnectedAt: number;
@@ -55,6 +56,7 @@ export function upsertRecentDevice(
     ...entry,
     peerId: entry.peerId ? entry.peerId.replace(/\s+/g, '') : undefined,
     key,
+    alias: existing?.alias,
     favorite: existing?.favorite ?? false,
     lastConnectedAt: nowMs,
   };
@@ -74,6 +76,18 @@ export function toggleFavoriteDevice(list: SavedDevice[], key: string): SavedDev
   return list.map((item) =>
     item.key === key ? { ...item, favorite: !item.favorite } : item,
   );
+}
+
+export function renameDeviceAlias(list: SavedDevice[], key: string, alias: string): SavedDevice[] {
+  const trimmed = alias.trim();
+  return list.map((item) => {
+    if (item.key !== key) return item;
+    if (!trimmed) {
+      const { alias: _removed, ...rest } = item;
+      return rest;
+    }
+    return { ...item, alias: trimmed };
+  });
 }
 
 export function removeDevice(list: SavedDevice[], key: string): SavedDevice[] {

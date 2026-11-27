@@ -1,5 +1,5 @@
-import React, { useId } from 'react';
-import { X } from 'lucide-react';
+import React, { useId, useState } from 'react';
+import { Eye, EyeOff, X } from 'lucide-react';
 import { t, type Locale } from '../lib/i18n';
 import { useDialogFocus } from '../hooks/useDialogFocus';
 
@@ -38,6 +38,8 @@ export function PasswordModal({
 }: PasswordModalProps) {
   const titleId = useId();
   const dialogRef = useDialogFocus(onClose);
+  const [showPassword, setShowPassword] = useState(false);
+
   return (
     <div
       className="rd-password-scrim"
@@ -93,16 +95,28 @@ export function PasswordModal({
                 </button>
               )}
             </span>
-            <input
-              type="password"
-              className="rd-input"
-              data-testid="password"
-              value={password}
-              autoFocus
-              autoComplete="current-password"
-              placeholder={t(locale, 'passwordPlaceholder')}
-              onChange={(e) => onChangePassword(e.target.value)}
-            />
+            <div className="rd-password-input-wrap">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                className="rd-input rd-password-input"
+                data-testid="password"
+                value={password}
+                autoFocus
+                autoComplete="current-password"
+                placeholder={t(locale, 'passwordPlaceholder')}
+                onChange={(e) => onChangePassword(e.target.value)}
+              />
+              <button
+                type="button"
+                className="rd-password-eye-btn"
+                data-testid="password-toggle-visibility"
+                aria-label={t(locale, showPassword ? 'hidePasswordAria' : 'showPasswordAria')}
+                aria-pressed={showPassword}
+                onClick={() => setShowPassword((prev) => !prev)}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
           </label>
 
           <label className="rd-check-row !py-0.5 text-xs">

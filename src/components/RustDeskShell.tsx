@@ -68,6 +68,7 @@ interface RustDeskShellProps {
   onResetDefaults?: () => void;
   onSelectDevice: (device: SavedDevice) => void;
   onToggleFavorite: (key: string) => void;
+  onRenameDevice?: (key: string, alias: string) => void;
   onRemoveDevice: (key: string) => void;
   onToggleTouchMode: () => void;
   onToggleDiagnostics: () => void;
@@ -120,6 +121,7 @@ export function RustDeskShell({
   onResetDefaults,
   onSelectDevice,
   onToggleFavorite,
+  onRenameDevice,
   onRemoveDevice,
   onToggleTouchMode,
   onToggleDiagnostics,
@@ -134,11 +136,20 @@ export function RustDeskShell({
   const [connectAfterServerSetup, setConnectAfterServerSetup] = useState(false);
 
   const [listTab, setListTab] = useState<ListTab>('recent');
-  const [viewLayout, setViewLayout] = useState<'grid' | 'list'>(isDesktop ? 'grid' : 'list');
+  const [viewLayout, setViewLayout] = useState<'grid' | 'list'>(() => {
+    try {
+      const saved = window.localStorage.getItem('rd_web_home_layout');
+      if (saved === 'grid' || saved === 'list') return saved;
+    } catch {
+      // Ignore storage access errors
+    }
+    return isDesktop ? 'grid' : 'list';
+  });
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const isLive = phase === 'live';
   const effectiveLayout = isDesktop ? viewLayout : 'list';
+  const favoriteCount = useMemo(() => devices.filter((d) => d.favorite).length, [devices]);
 
   const filteredDevices = useMemo(() => {
     const base = listTab === 'favorites' ? devices.filter((d) => d.favorite) : devices;
@@ -149,6 +160,7 @@ export function RustDeskShell({
       return (
         (d.peerId ?? '').toLowerCase().includes(compactQ) ||
         (d.host ?? '').toLowerCase().includes(q) ||
+        (d.alias ?? '').toLowerCase().includes(q) ||
         (d.hostname ?? '').toLowerCase().includes(q) ||
         (d.platform ?? '').toLowerCase().includes(q)
       );
@@ -176,8 +188,9 @@ export function RustDeskShell({
     gatewayToken,
     gatewayTokenNeedsInput,
     detail,
-  connectionError,
+    connectionError,
     decoderError,
+    devices,
     savedPasswords,
     onChangeMode,
     onChangeField,
@@ -256,8 +269,6 @@ export function RustDeskShell({
     );
   }
 
-  const trimmedIdServer = idServer.trim();
-
   return (
     <div
       className="rd-mobile-shell"
@@ -265,7 +276,7 @@ export function RustDeskShell({
       onPointerDown={(e) => e.stopPropagation()}
     >
         <header className="rd-mobile-topbar" data-testid="main-topbar">
-          <div className="flex items-center gap-1.5 min-w-0">
+          <div className="w-16 flex items-center justify-start">
             {isLive && (
               <button
                 type="button"
@@ -278,12 +289,13 @@ export function RustDeskShell({
                 <X size={20} />
               </button>
             )}
-            <h1 className="text-[17px] font-semibold text-[var(--rd-topbar-ink)] m-0 tracking-[0.01em] truncate pl-1.5">
-              RustDesk Web
-            </h1>
           </div>
 
-          <div className="flex items-center justify-end gap-1.5 shrink-0">
+          <h1 className="text-[18px] font-semibold text-[var(--rd-topbar-ink)] m-0 tracking-[0.01em] truncate">
+            RustDesk Web
+          </h1>
+
+          <div className="w-16 flex items-center justify-end gap-0.5">
             <button
               type="button"
               className="rd-mobile-icon-btn"
@@ -316,8 +328,11 @@ export function RustDeskShell({
                 className={`rd-subtab-btn${listTab === 'recent' ? ' active' : ''}`}
                 onClick={() => setListTab('recent')}
               >
-                <Clock size={18} />
-                <span className="hidden sm:inline">{t(locale, 'recentSessions')}</span>
+                <Clock size={17} />
+                <span>{t(locale, 'recentSessions')}</span>
+                {devices.length > 0 && (
+                  <span className="text-[11px] font-mono-tabular opacity-75">({devices.length})</span>
+                )}
               </button>
               <button
                 type="button"
@@ -330,8 +345,11 @@ export function RustDeskShell({
                 className={`rd-subtab-btn${listTab === 'favorites' ? ' active' : ''}`}
                 onClick={() => setListTab('favorites')}
               >
-                <Star size={18} />
-                <span className="hidden sm:inline">{t(locale, 'tabFavorites')}</span>
+                <Star size={17} />
+                <span>{t(locale, 'tabFavorites')}</span>
+                {favoriteCount > 0 && (
+                  <span className="text-[11px] font-mono-tabular opacity-75">({favoriteCount})</span>
+                )}
               </button>
             </div>
 
@@ -366,7 +384,17 @@ export function RustDeskShell({
                     viewLayout === 'grid' ? t(locale, 'listViewAria') : t(locale, 'gridViewAria')
                   }
                   data-tooltip-pos="bottom-end"
-                  onClick={() => setViewLayout((prev) => (prev === 'grid' ? 'list' : 'grid'))}
+                  onClick={() =>
+                    setViewLayout((prev) => {
+                      const next = prev === 'grid' ? 'list' : 'grid';
+                      try {
+                        window.localStorage.setItem('rd_web_home_layout', next);
+                      } catch {
+                        // Ignore storage quota errors
+                      }
+                      return next;
+                    })
+                  }
                 >
                   {viewLayout === 'grid' ? <LayoutGrid size={18} /> : <List size={18} />}
                 </button>
@@ -408,11 +436,14 @@ export function RustDeskShell({
             <PeerList
               locale={locale}
               devices={filteredDevices}
+              savedPasswords={savedPasswords}
               listTab={listTab}
               searchQuery={searchQuery}
               layout={effectiveLayout}
               onSelect={connectForm.handleDeviceRowTap}
               onToggleFavorite={onToggleFavorite}
+              onRename={onRenameDevice}
+              onClearSavedPassword={onClearSavedPassword}
               onRemove={onRemoveDevice}
             />
           </section>
