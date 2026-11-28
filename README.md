@@ -32,15 +32,20 @@ See [CHANGELOG.md](CHANGELOG.md) for the release gate and known limits.
 
 ## Features
 
-- Browser remote session with WebCodecs video decoding
+- Browser remote session with WebCodecs video decoding (VP8, VP9, H.264, H.265, AV1)
 - Keyboard, pointer, touch, pinch, pan, and remote wheel input
-- Mobile toolbar with on-screen keyboard support
-- Audio playback and privacy-mode controls when reported by the host
+- Mobile toolbar, gesture support, and on-screen keyboard
+- Audio playback (Opus via WebCodecs + AudioWorklet) and privacy-mode controls when reported by the host
 - Multiple monitors and remote resolution selection when supported
-- Session diagnostics, RTT information, and quality/frame-rate controls
+- Session diagnostics, RTT information, and quality/frame-rate/codec controls
 - Bidirectional plain-text clipboard synchronization
-- Gateway token authentication and WebSocket origin filtering
+- Exponential-backoff auto-reconnect (paused while hidden to save mobile data)
+- Configurable screen wake lock during sessions (auto-releases after 15 minutes of inactivity)
+- Installable PWA with update prompts and Brotli/gzip precompressed static serving
+- Gateway token authentication, rate limiting, SSRF filtering, and WebSocket origin checks
 - Optional WebRTC transport with automatic fallback to the gateway path
+
+Not yet supported: file transfer, two-factor authentication (2FA), in-session chat, and simultaneous multi-session tabs.
 
 ## Requirements
 
@@ -138,7 +143,7 @@ You can also use the one-click script:
 ./deploy.sh --port 28080 --token "$(openssl rand -hex 32)"
 ```
 
-The script writes `HOST_PORT`, `HOST_BIND`, `CONTAINER_NAME`, and the gateway token to `.env.docker` with mode `600`. Both `.env` and `.env.docker` are ignored by Git.
+The script writes `HOST_PORT`, `HOST_BIND`, `CONTAINER_NAME`, and the gateway token to `.env.docker` with mode `600`. Both `.env` and `.env.docker` are ignored by Git. Because `./deploy.sh` defaults to `HOST_BIND=0.0.0.0`, pass `--bind 127.0.0.1` on public servers when terminating TLS in a local reverse proxy.
 
 For remote access, place the gateway behind HTTPS and forward WebSocket upgrades for `/ws` and, when enabled, `/ws/webrtc`. The container health check uses `/api/health`.
 

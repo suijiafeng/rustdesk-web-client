@@ -9,6 +9,8 @@ The web client and gateway are AGPL-3.0-only. The packages below are direct depe
 | lucide-react | 0.546.0 | ISC |
 | express | 4.22.3 | MIT |
 | ws | 8.23.0 | MIT |
+| dotenv | 17.2.3 | BSD-2-Clause |
+| buffer | 6.0.3 | MIT |
 | tweetnacl | 1.0.3 | Unlicense |
 | @noble/hashes | 2.4.0 | MIT |
 | fzstd | 0.1.1 | MIT |
@@ -19,6 +21,6 @@ The web client and gateway are AGPL-3.0-only. The packages below are direct depe
 | esbuild | 0.25.12 | MIT |
 | tsx | 4.23.15 | MIT |
 
-The container runtime also installs Debian packages `tini`, `ca-certificates`, and their dependencies, under their Debian licenses. The optional Compose profile uses the official `nginx:1.27-alpine` image, which is not built by this repository.
+The container image is based on the official `node:24-bookworm-slim` image under its Debian and Node.js licenses.
 
 RustDesk protocol names and message shapes follow the RustDesk project, which is AGPL-3.0. This repository does not copy that project's git history.
