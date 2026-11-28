@@ -157,6 +157,25 @@ async function loginHost(
   throw new Error('timed out waiting for LoginResponse');
 }
 
+async function withAbortClose<T>(
+  stream: EncryptedFramedStream,
+  signal: AbortSignal | undefined,
+  fn: () => Promise<T>,
+): Promise<T> {
+  if (!signal) return fn();
+  if (signal.aborted) {
+    stream.close();
+    throw new Error('connection canceled');
+  }
+  const onAbort = () => stream.close();
+  signal.addEventListener('abort', onAbort, { once: true });
+  try {
+    return await fn();
+  } finally {
+    signal.removeEventListener('abort', onAbort);
+  }
+}
+
 export async function connectDirect(
   target: DirectTarget,
   codecs: CodecCaps,
@@ -168,24 +187,26 @@ export async function connectDirect(
   const dial = checkPort(host, port);
   const stream = await EncryptedFramedStream.connect(dial.host, dial.port, 8_000, { signal, peerConnection: true });
   try {
-    const username = directUsername(host, dial.port, stream.remoteAddress);
-    const permissions: HandshakePermissions = { restart: true, privacy: true, clipboard: true, audio: true };
-    const { hash, encrypted } = await readUntilHash(stream, null, '', permissions);
-    return await loginHost(
-      stream,
-      hash,
-      username,
-      target.password,
-      codecs,
-      encrypted,
-      'direct',
-      permissions,
-      target.quality,
-      target.fps,
-      target.preferCodec,
-      target.customQuality,
-      target.lockAfterSessionEnd,
-    );
+    return await withAbortClose(stream, signal, async () => {
+      const username = directUsername(host, dial.port, stream.remoteAddress);
+      const permissions: HandshakePermissions = { restart: true, privacy: true, clipboard: true, audio: true };
+      const { hash, encrypted } = await readUntilHash(stream, null, '', permissions);
+      return await loginHost(
+        stream,
+        hash,
+        username,
+        target.password,
+        codecs,
+        encrypted,
+        'direct',
+        permissions,
+        target.quality,
+        target.fps,
+        target.preferCodec,
+        target.customQuality,
+        target.lockAfterSessionEnd,
+      );
+    });
   } catch (err) {
     stream.close();
     throw err;
@@ -454,8 +475,8 @@ export async function connectViaId(
           }
         }, prepareRelay, signal) : await prepareRelay(signal);
         peerStream = ready.stream;
-        return await loginHost(
-          peerStream,
+        return await withAbortClose(peerStream, signal, () => loginHost(
+          peerStream!,
           ready.hash,
           peerId,
           target.password,
@@ -468,7 +489,7 @@ export async function connectViaId(
           target.preferCodec,
           target.customQuality,
           target.lockAfterSessionEnd,
-        );
+        ));
       }
 
       if (msg.relay_response) {
@@ -496,26 +517,29 @@ export async function connectViaId(
           defaultRelayPort,
           signal,
         );
-        const pkBytes = rr.pk ? new Uint8Array(rr.pk) : undefined;
-        const signPk = peerSignKey(target.key, pkBytes, peerId);
-        const permissions: HandshakePermissions = { restart: true, privacy: true, clipboard: true, audio: true };
-        const { hash, encrypted } = await readUntilHash(peerStream, signPk, peerId, permissions);
-        idSocket.close();
-        return await loginHost(
-          peerStream,
-          hash,
-          peerId,
-          target.password,
-          codecs,
-          encrypted,
-          'relay',
-          permissions,
-          target.quality,
-          target.fps,
-          target.preferCodec,
-          target.customQuality,
-          target.lockAfterSessionEnd,
-        );
+        const activeRelay = peerStream;
+        return await withAbortClose(activeRelay, signal, async () => {
+          const pkBytes = rr.pk ? new Uint8Array(rr.pk) : undefined;
+          const signPk = peerSignKey(target.key, pkBytes, peerId);
+          const permissions: HandshakePermissions = { restart: true, privacy: true, clipboard: true, audio: true };
+          const { hash, encrypted } = await readUntilHash(activeRelay, signPk, peerId, permissions);
+          idSocket.close();
+          return await loginHost(
+            activeRelay,
+            hash,
+            peerId,
+            target.password,
+            codecs,
+            encrypted,
+            'relay',
+            permissions,
+            target.quality,
+            target.fps,
+            target.preferCodec,
+            target.customQuality,
+            target.lockAfterSessionEnd,
+          );
+        });
       }
     }
 

@@ -416,24 +416,27 @@ export class RemoteDecoder {
     this.pending = null;
     if (!frame) return;
 
-    const canvas = this.canvas;
-    if (canvas) {
-      const w = frame.displayWidth || frame.codedWidth;
-      const h = frame.displayHeight || frame.codedHeight;
-      if (w > 0 && h > 0) {
-        if (canvas.width !== w || canvas.height !== h) {
-          canvas.width = w;
-          canvas.height = h;
-        }
-        const ctx = this.getCanvasContext(canvas);
-        if (ctx) {
-          ctx.drawImage(frame, 0, 0, w, h);
-          this.renderedCount += 1;
-          this.cb.onOutput(w, h, this.renderedCount, performance.now());
+    try {
+      const canvas = this.canvas;
+      if (canvas) {
+        const w = frame.displayWidth || frame.codedWidth;
+        const h = frame.displayHeight || frame.codedHeight;
+        if (w > 0 && h > 0) {
+          if (canvas.width !== w || canvas.height !== h) {
+            canvas.width = w;
+            canvas.height = h;
+          }
+          const ctx = this.getCanvasContext(canvas);
+          if (ctx) {
+            ctx.drawImage(frame, 0, 0, w, h);
+            this.renderedCount += 1;
+            this.cb.onOutput(w, h, this.renderedCount, performance.now());
+          }
         }
       }
+    } finally {
+      frame.close();
     }
-    frame.close();
   }
 
   private fail(message: string): void {
