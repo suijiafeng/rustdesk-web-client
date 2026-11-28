@@ -285,8 +285,10 @@ export function SessionPanels({
               setDiagnosticsOpen((prev) => !prev);
             }}
             onToggleTouchMode={() => {
+              const nextTouch = !touchMode;
               handleToggleTouchMode();
               setMobilePanel('toolbar');
+              showSessionTip(t(locale, nextTouch ? 'switchedToTouch' : 'switchedToMouse'));
             }}
             onToggleKeyboard={toggleSoftKeyboard}
             onCollapse={closeChrome}

@@ -206,10 +206,10 @@ function DesktopSessionMenu({
             <div role="tabpanel">
               <div className="session-group session-mode-switch" role="group" aria-label={t(locale, 'input')}>
                 <button type="button" aria-pressed={touchMode} onClick={() => {
-                  if (!touchMode) { onToggleTouchMode(); onNotify(t(locale, 'touch')); }
+                  if (!touchMode) { onToggleTouchMode(); onNotify(t(locale, 'switchedToTouch')); }
                 }}><Hand size={18} />{t(locale, 'touch')}</button>
                 <button type="button" aria-pressed={!touchMode} onClick={() => {
-                  if (touchMode) { onToggleTouchMode(); onNotify(t(locale, 'mouse')); }
+                  if (touchMode) { onToggleTouchMode(); onNotify(t(locale, 'switchedToMouse')); }
                 }}><MousePointer2 size={18} />{t(locale, 'mouse')}</button>
               </div>
               <div className="session-group">
