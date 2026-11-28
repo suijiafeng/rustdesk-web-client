@@ -134,7 +134,7 @@ export function SessionPanels({
     passwordStorageFailed, setPasswordStorageFailed, handleClearSavedPassword,
     handleClearAllSavedPasswords, handleToggleFavorite, handleRenameDevice, handleRemoveDevice,
   } = savedDevices;
-  const { pageZoomed, resetPageZoom, box, viewMode, setViewMode, setPan, setZoom, remoteW, remoteH, keyboardLayout, visibleViewport } = viewport;
+  const { pageZoomed, pageZoomResetFailed, pageZoomDismissed, resetPageZoom, dismissPageZoomBanner, box, viewMode, setViewMode, setPan, setZoom, remoteW, remoteH, keyboardLayout, visibleViewport } = viewport;
   const { statsStore, decoderError } = video;
   const { sendText, sendChord, handleQuickKey } = keyboard;
   const { touchMode, handleToggleTouchMode } = pointer;
@@ -175,22 +175,30 @@ export function SessionPanels({
 
   return (
     <>
-      {pageZoomed && (
+      {pageZoomed && !pageZoomDismissed && (
         <div
           className="page-zoom-banner"
           data-testid="page-zoom-banner"
           role="status"
           onPointerDown={(e) => e.stopPropagation()}
         >
-          <span>{t(locale, 'pageZoomedBanner')}</span>
+          <span>{t(locale, pageZoomResetFailed ? 'pageZoomedBlocked' : 'pageZoomedBanner')}</span>
           <button
             type="button"
             className="rd-btn primary"
             style={{ minHeight: 32, padding: '4px 10px' }}
             data-testid="page-zoom-reset"
-            onClick={resetPageZoom}
+            onClick={pageZoomResetFailed ? () => window.location.reload() : () => resetPageZoom(true)}
           >
-            {t(locale, 'reset')}
+            {t(locale, pageZoomResetFailed ? 'reload' : 'reset')}
+          </button>
+          <button
+            type="button"
+            className="page-zoom-dismiss"
+            aria-label={t(locale, 'close')}
+            onClick={dismissPageZoomBanner}
+          >
+            ×
           </button>
         </div>
       )}

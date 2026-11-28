@@ -51,6 +51,9 @@ export function useViewTransform({
   const [box, setBox] = useState({ w: 0, h: 0 });
   const [visibleViewport, setVisibleViewport] = useState<{ width: number; height: number; left: number; top: number } | null>(null);
   const [pageZoomed, setPageZoomed] = useState(false);
+  const [pageZoomResetFailed, setPageZoomResetFailed] = useState(false);
+  const [pageZoomDismissed, setPageZoomDismissed] = useState(false);
+  const resetZoomTimersRef = useRef<number[]>([]);
 
   // Orientation change tracking
   const prevLandscapeRef = useRef<boolean | null>(null);
@@ -116,26 +119,59 @@ export function useViewTransform({
     return () => ro.disconnect();
   }, []);
 
-  const resetPageZoom = useCallback(() => {
+  const clearResetZoomTimers = useCallback(() => {
+    for (const id of resetZoomTimersRef.current) window.clearTimeout(id);
+    resetZoomTimersRef.current = [];
+  }, []);
+
+  useEffect(() => clearResetZoomTimers, [clearResetZoomTimers]);
+
+  const dismissPageZoomBanner = useCallback(() => {
+    setPageZoomDismissed(true);
+  }, []);
+
+  const resetPageZoom = useCallback((manual = false) => {
+    clearResetZoomTimers();
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
     window.scrollTo(0, 0);
+    const finalize = () => {
+      const vv = window.visualViewport;
+      const stillZoomed = vv ? isPageZoomed(vv.scale) : false;
+      setPageZoomed(stillZoomed);
+      if (!stillZoomed) {
+        setPageZoomResetFailed(false);
+        setPageZoomDismissed(false);
+      } else if (manual) {
+        setPageZoomResetFailed(true);
+      }
+    };
     const meta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
     if (meta) {
       const original =
         'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover';
-      meta.setAttribute(
-        'content',
-        'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover',
-      );
-      window.setTimeout(() => {
-        meta.setAttribute('content', original);
-        const vv = window.visualViewport;
-        setPageZoomed(vv ? isPageZoomed(vv.scale) : false);
-      }, 60);
+      const unlocked =
+        'width=device-width, initial-scale=1, maximum-scale=10, viewport-fit=cover';
+      const locked =
+        'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover';
+      // Widen maximum-scale briefly before locking back to 1 so WebKit/Blink sees
+      // a genuine viewport mutation and re-evaluates scale when allowed.
+      meta.setAttribute('content', unlocked);
+      const t1 = window.setTimeout(() => {
+        meta.setAttribute('content', locked);
+        window.scrollTo(0, 0);
+        const t2 = window.setTimeout(() => {
+          meta.setAttribute('content', original);
+          finalize();
+        }, 100);
+        resetZoomTimersRef.current.push(t2);
+      }, 40);
+      resetZoomTimersRef.current.push(t1);
     } else {
-      const vv = window.visualViewport;
-      setPageZoomed(vv ? isPageZoomed(vv.scale) : false);
+      finalize();
     }
-  }, []);
+  }, [clearResetZoomTimers]);
 
   // visualViewport keyboard inset (--kb) + Step-3 browser-zoom fallback detection
   useEffect(() => {
@@ -153,9 +189,11 @@ export function useViewTransform({
       }
       if (zoomed !== prevZoomed) {
         setPageZoomed(zoomed);
+        setPageZoomResetFailed(false);
+        setPageZoomDismissed(false);
         if (zoomed) {
           // Attempt automatic viewport scale restoration first; keep banner if browser retains zoom
-          resetPageZoom();
+          resetPageZoom(false);
         }
         prevZoomed = zoomed;
       }
@@ -283,12 +321,15 @@ export function useViewTransform({
     box,
     visibleViewport,
     pageZoomed,
+    pageZoomResetFailed,
+    pageZoomDismissed,
     remoteW,
     remoteH,
     viewRef,
     keyboardLayout,
     view,
     resetPageZoom,
+    dismissPageZoomBanner,
     setScaleAround,
     applyPinchStepRef,
     panBy,
