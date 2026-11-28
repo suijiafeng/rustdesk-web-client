@@ -249,6 +249,13 @@ export function createClientMessageHandler(context: ClientMessageContext) {
 
     // Runtime messages are untrusted; inherited property names are not message types.
     if (!Object.hasOwn(handlers, parsed.type)) return;
-    return dispatch(parsed.type, parsed);
+    try {
+      await dispatch(parsed.type, parsed);
+    } catch (err) {
+      if ((state.phase as string) !== 'closed') {
+        const failure = errorPayload(err, 'input');
+        sendJson({ type: 'error', message: failure.detail, ...failure });
+      }
+    }
   };
 }

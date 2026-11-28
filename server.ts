@@ -148,6 +148,14 @@ async function startServer() {
     serveProductionFiles(app, distDir);
   }
 
+  app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(redactLog(`HTTP error: ${message}`));
+    if (res.headersSent) return;
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(500).json({ error: 'Internal server error' });
+  });
+
   const stop = () => {
     void shutdown.close().then(() => process.exit(0));
   };

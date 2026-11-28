@@ -245,3 +245,16 @@ test('mouse moves are shed under host send-queue pressure while clicks still for
   assert.equal(f.writes.length, 1);
   assert.equal(f.writes[0].mouse_event?.x, 10);
 });
+
+test('unexpected handler errors are caught instead of rejecting the WebSocket listener', async t => {
+  const f = fixture(t);
+  f.state.cursorIds = true;
+  f.state.cursorPublisher = {
+    select: () => { throw new Error('unexpected cursor lookup failure'); },
+    clear: () => {},
+  } as unknown as CursorPublisher;
+  await assert.doesNotReject(() => f.send({ type: 'cursorRequest', id: 'abc' }));
+  assert.equal(f.replies.at(-1)?.type, 'error');
+  assert.equal(f.replies.at(-1)?.stage, 'input');
+  assert.match(String(f.replies.at(-1)?.message), /unexpected cursor lookup failure/);
+});
