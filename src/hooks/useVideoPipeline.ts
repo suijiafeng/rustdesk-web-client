@@ -3,7 +3,7 @@ import { createSessionStatsStore } from '../lib/sessionStats';
 import { advanceVideoPacing, createVideoPacing, type VideoPacingState } from '../lib/videoPacing';
 import type { ConnectionPhase } from '../types';
 import { RemoteDecoder, webCodecsStatus } from '../lib/decoder';
-import type { ClientMessage } from '../lib/protocol';
+import type { ClientMessage, QualityLevel } from '../lib/protocol';
 import {
   computeFrameRates, createFrameStats, recordRenderedFrame, recordRxFrame,
   type FrameStatsState,
@@ -15,11 +15,13 @@ interface Options {
   phase: ConnectionPhase;
   send: (message: ClientMessage) => void;
   targetFps?: number;
+  quality?: QualityLevel;
+  customBitrate?: number;
   /** Explicit quality/codec changes also restore the host's user-selected FPS cap. */
   settingsKey?: string;
 }
 
-export function useVideoPipeline({ phase, send, targetFps, settingsKey }: Options) {
+export function useVideoPipeline({ phase, send, targetFps, quality, customBitrate, settingsKey }: Options) {
   const initialWebCodecs = webCodecsStatus();
   const [statsStore] = useState(createSessionStatsStore);
   const { setStats } = statsStore;
@@ -154,8 +156,15 @@ export function useVideoPipeline({ phase, send, targetFps, settingsKey }: Option
       if (metrics && pacingRef.current) {
         const next = advanceVideoPacing(pacingRef.current, { ...metrics, nowMs, visible });
         pacingRef.current = next.state;
-        // FPS-only updates preserve host bitrate/codec choices and do not request a keyframe.
-        if (next.fps !== undefined) send({ type: 'quality', fps: next.fps });
+        // Dynamic quality/FPS adjustments omit codec so the host adjusts bitrate/rate without a keyframe stall.
+        if (next.fps !== undefined) {
+          send({
+            type: 'quality',
+            fps: next.fps,
+            ...(next.quality !== undefined && { quality: next.quality }),
+            ...(next.customQuality !== undefined && { customQuality: next.customQuality }),
+          });
+        }
       }
       publishStatsSnapshot(nowMs);
     }, 250);
@@ -163,8 +172,11 @@ export function useVideoPipeline({ phase, send, targetFps, settingsKey }: Option
   }, [phase, publishStatsSnapshot, send]);
 
   useEffect(() => {
-    pacingRef.current = phase === 'live' && targetFps !== undefined ? createVideoPacing(targetFps) : null;
-  }, [phase, targetFps, settingsKey]);
+    pacingRef.current =
+      phase === 'live' && targetFps !== undefined
+        ? createVideoPacing(targetFps, quality, customBitrate)
+        : null;
+  }, [phase, targetFps, quality, customBitrate, settingsKey]);
 
   return {
     statsStore, videoLayout, setStats, decoderError, setDecoderError,

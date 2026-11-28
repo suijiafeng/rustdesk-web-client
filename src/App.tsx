@@ -105,7 +105,7 @@ export default function App() {
 
   const [quality, setQuality] = useState<QualityLevel>(displayPrefs.qualityPreset);
   const [targetFps, setTargetFps] = useState(displayPrefs.targetFps);
-  const video = useVideoPipeline({ phase, send, targetFps,
+  const video = useVideoPipeline({ phase, send, targetFps, quality, customBitrate: displayPrefs.customBitrate,
     settingsKey: `${quality}:${displayPrefs.customBitrate}:${displayPrefs.codec}` });
   const { statsStore, videoLayout, decoderRef, sizeRef } = video;
   const [sessionTip, setSessionTip] = useState<{ text: string; error: boolean } | null>(null);

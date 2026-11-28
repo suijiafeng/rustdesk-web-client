@@ -124,3 +124,52 @@ test('background and expired recoveries do not combine with a later isolated rec
   f.sample(5500, { backlogRecoveryCount: 6 });
   assert.deepEqual(f.changes, [{ at: 5500, fps: 22 }]);
 });
+
+test('overload sacrifices preset quality before FPS and recovers FPS before restoring quality', () => {
+  let state = createVideoPacing(30, 'best');
+  const events: Array<{ at: number; fps?: number; quality?: string }> = [];
+  const step = (nowMs: number, overrides: Partial<VideoPacingSample> = {}) => {
+    const res = advanceVideoPacing(state, {
+      nowMs, visible: true, decodedCount: Math.floor(nowMs / 250) + 1,
+      inFlightFrames: 0, oldestFrameAgeMs: 0, decodeLatencyMs: 10,
+      backlogRecoveryCount: 0, ...overrides,
+    });
+    state = res.state;
+    if (res.fps !== undefined || res.quality !== undefined) {
+      events.push({ at: nowMs, ...(res.fps !== undefined && { fps: res.fps }), ...(res.quality !== undefined && { quality: res.quality }) });
+    }
+  };
+  for (let now = 0; now <= 5500; now += 250) step(now, loaded);
+  assert.deepEqual(events, [
+    { at: 750, fps: 30, quality: 'balanced' },
+    { at: 2750, fps: 30, quality: 'low' },
+    { at: 4750, fps: 22 },
+  ]);
+  events.length = 0;
+  for (let now = 5750; now <= 60000; now += 250) step(now);
+  assert.equal(state.effectiveFps, 30);
+  assert.equal(state.effectiveQuality, 'best');
+  const firstQualityRestore = events.findIndex(e => e.quality === 'balanced');
+  const lastFpsRestore = events.reduce((last, e, idx) => (e.quality === undefined ? idx : last), -1);
+  assert.ok(lastFpsRestore >= 0 && firstQualityRestore > lastFpsRestore, 'FPS should recover before quality restores');
+});
+
+test('overload steps down custom quality ratio before reducing FPS', () => {
+  let state = createVideoPacing(30, 'custom', 60);
+  const events: Array<{ quality?: string; customQuality?: number; fps?: number }> = [];
+  for (let now = 0; now <= 9000; now += 250) {
+    const res = advanceVideoPacing(state, {
+      nowMs: now, visible: true, decodedCount: Math.floor(now / 250) + 1,
+      ...loaded, backlogRecoveryCount: 0,
+    });
+    state = res.state;
+    if (res.fps !== undefined || res.quality !== undefined || res.customQuality !== undefined) {
+      events.push({ quality: res.quality, customQuality: res.customQuality, fps: res.fps });
+    }
+  }
+  assert.equal(events[0]?.quality, 'custom');
+  assert.equal(events[0]?.customQuality, 44);
+  assert.equal(events[0]?.fps, 30);
+  assert.ok(events.some(e => e.customQuality === 20 && e.fps === 30));
+  assert.ok(events.some(e => e.quality === undefined && e.fps === 22));
+});
