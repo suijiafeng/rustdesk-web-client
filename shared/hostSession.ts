@@ -1,6 +1,13 @@
 import { encodeAudioFrame } from './audio.ts';
 import { decodeClipboard } from './clipboard.ts';
-import { decodingPreferenceChanged, humanizeError, toHostMessage, type CodecCaps } from './control.ts';
+import {
+  buildRefreshVideoMessage,
+  buildVideoReceivedMessage,
+  decodingPreferenceChanged,
+  humanizeError,
+  toHostMessage,
+  type CodecCaps,
+} from './control.ts';
 import type { CursorPublisher } from './cursor.ts';
 import { errorPayload } from './errors.ts';
 import {
@@ -18,6 +25,18 @@ import {
 } from './peer.ts';
 import { encodeMessage } from './protos.ts';
 import type { HostMessage } from './protoTypes.ts';
+import {
+  CODEC_VP8,
+  encodedFrameIsKey,
+  encodeRdv1Frame,
+  extractEncodedFrames,
+  HEADER_LEN,
+  vp8KeyframeSize,
+  type EncodedVideo,
+} from './video.ts';
+import { VIDEO_RESUME_BYTES, type GatewayVideoBuffer } from './videoBuffer.ts';
+
+const EMPTY_FRAME_DATA = new Uint8Array(0);
 
 export interface HostSessionState {
   resolutionDisplay: number;
@@ -287,4 +306,112 @@ export function buildQualityControlMessage(
     sendJson({ type: 'error', message: humanizeError(error), ...errorPayload(error) });
     return null;
   }
+}
+
+export interface SharedVideoPipelineOptions<TConn extends Pick<HostSessionConnection, 'stream'>> {
+  state: Pick<HostSessionState, 'currentSize'>;
+  videoBuffer: GatewayVideoBuffer;
+  getQueuedBytes: () => number;
+  isLive: (conn: TConn) => boolean;
+  sendJson: (payload: Record<string, unknown>) => void;
+  sendBinary: (packet: Uint8Array) => void;
+  onSendError: (conn: TConn, err: unknown) => void;
+  ignoreAckErrors?: boolean;
+}
+
+export interface SharedVideoPipeline<TConn extends Pick<HostSessionConnection, 'stream'>> {
+  handleFrame: (conn: TConn, vf: EncodedVideo) => void;
+  dispose: () => void;
+}
+
+/**
+ * Shared video frame extraction, RDV1 framing, congestion shedding, keyframe recovery timer,
+ * and RustDesk 1.5 QoS `video_received` ACK logic used by both the Node.js gateway and WebRTC sessions.
+ */
+export function createSharedVideoPipeline<TConn extends Pick<HostSessionConnection, 'stream'>>(
+  options: SharedVideoPipelineOptions<TConn>,
+): SharedVideoPipeline<TConn> {
+  const { state, videoBuffer, getQueuedBytes, isLive, sendJson, sendBinary, onSendError, ignoreAckErrors = false } = options;
+  let recoveryTimer: ReturnType<typeof setTimeout> | undefined;
+  let warnedRawVideo = false;
+
+  const scheduleVideoRecovery = (conn: TConn) => {
+    if (recoveryTimer || !videoBuffer.needsRefresh) return;
+    recoveryTimer = setTimeout(() => {
+      recoveryTimer = undefined;
+      if (!isLive(conn) || !videoBuffer.needsRefresh) return;
+      if (videoBuffer.shouldRequestRefresh(getQueuedBytes(), performance.now())) {
+        void conn.stream.sendRaw(encodeMessage(buildRefreshVideoMessage())).catch((err) => {
+          onSendError(conn, err);
+        });
+      }
+      scheduleVideoRecovery(conn);
+    }, 250);
+    recoveryTimer.unref?.();
+  };
+
+  const handleFrame = (conn: TConn, vf: EncodedVideo) => {
+    if ((vf.rgb || vf.yuv) && !warnedRawVideo) {
+      warnedRawVideo = true;
+      sendJson({
+        type: 'error',
+        message:
+          'the host sent uncompressed video; this client only decodes vp8, vp9, h264, h265, and av1',
+      });
+    }
+
+    const extracted = extractEncodedFrames(vf);
+    if (!extracted) return;
+
+    const display = Math.max(0, Number(vf.display ?? 0));
+    const nowMs = BigInt(Date.now());
+    const queuedBefore = getQueuedBytes();
+    let forwarded = 0;
+
+    for (const f of extracted.frames) {
+      const payload = f.data ?? EMPTY_FRAME_DATA;
+      const isKey = encodedFrameIsKey(extracted.codec, payload, f.key);
+      if (extracted.codec === CODEC_VP8 && isKey) {
+        const parsedSize = vp8KeyframeSize(payload);
+        if (parsedSize) {
+          state.currentSize = parsedSize;
+        }
+      }
+      if (!videoBuffer.shouldForward(display, isKey, payload.byteLength + HEADER_LEN, getQueuedBytes())) {
+        scheduleVideoRecovery(conn);
+        continue;
+      }
+      const pts = BigInt(f.pts ?? 0);
+      const packet = encodeRdv1Frame({
+        codec: extracted.codec,
+        key: isKey,
+        display,
+        width: state.currentSize.width,
+        height: state.currentSize.height,
+        pts,
+        gatewayUnixMs: nowMs,
+        data: payload,
+      });
+      sendBinary(packet);
+      forwarded++;
+    }
+
+    // RustDesk 1.5 QoS ACK once per message containing video frames (non-blocking).
+    // Suppress ACKs when frames were shed or the downlink is already backed up.
+    if (forwarded > 0 && !videoBuffer.recovering && queuedBefore <= VIDEO_RESUME_BYTES) {
+      void conn.stream
+        .sendRaw(encodeMessage(buildVideoReceivedMessage()))
+        .catch((err) => {
+          if (!ignoreAckErrors) onSendError(conn, err);
+        });
+    }
+  };
+
+  return {
+    handleFrame,
+    dispose: () => {
+      clearTimeout(recoveryTimer);
+      recoveryTimer = undefined;
+    },
+  };
 }

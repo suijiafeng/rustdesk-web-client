@@ -1,10 +1,11 @@
 import { type PeerInfo, peerToJson, initialDisplaySize } from '../../../shared/peer.ts';
 import { errorPayload } from '../../../shared/errors';
 import { Buffer } from 'buffer';
-import { type ClientMessage, type CodecCaps, buildRefreshVideoMessage, buildVideoReceivedMessage, toHostMessage } from '../../../shared/control.ts';
+import { type ClientMessage, type CodecCaps, buildRefreshVideoMessage, toHostMessage } from '../../../shared/control.ts';
 import {
   buildQualityControlMessage,
   buildResolutionControlMessage,
+  createSharedVideoPipeline,
   dispatchCommonHostMessage,
   handleAudioControl,
   publishResolutions,
@@ -13,8 +14,7 @@ import {
   type HostSessionState,
 } from '../../../shared/hostSession.ts';
 import { decodeMessage, encodeMessage } from '../../../shared/protos.ts';
-import { CODEC_VP8, HEADER_LEN, encodeRdv1Frame, vp8KeyframeSize, encodedFrameIsKey, extractEncodedFrames } from '../../../shared/video.ts';
-import { GatewayVideoBuffer, VIDEO_RESUME_BYTES } from '../../../shared/videoBuffer.ts';
+import { GatewayVideoBuffer } from '../../../shared/videoBuffer.ts';
 import { CursorShapes, CursorPublisher } from '../../../shared/cursor.ts';
 import type { DataChannelStream } from './stream';
 
@@ -42,7 +42,6 @@ export function createNativeSession(
   let state: 'live' | 'closed' = 'live';
   const cursorPublisher = new CursorPublisher(new CursorShapes(), media?.cursorIds === true);
   const videoBuffer = new GatewayVideoBuffer();
-  let recoveryTimer: ReturnType<typeof setTimeout> | undefined;
   const hostConn = conn;
   const hostState: HostSessionState = {
     resolutionDisplay: 0,
@@ -55,32 +54,28 @@ export function createNativeSession(
     audioFormat: null,
     currentSize: { width: 0, height: 0 },
   };
-  let warnedRawVideo = false;
   const sendJson = (value: object) => { if (state === 'live') onData(JSON.stringify(value)); };
   const sendBinary = (value: Uint8Array) => { if (state === 'live') onData(new Uint8Array(value).buffer); };
-  const cleanup = (_sendClosedStatus = false) => {
-    if (state === 'closed') return;
-    state = 'closed';
-    clearTimeout(recoveryTimer);
-    recoveryTimer = undefined;
-    cursorPublisher.clear();
-    conn.stream.close();
-    onClose();
-  };
-  const scheduleVideoRecovery = () => {
-    if (recoveryTimer || !videoBuffer.needsRefresh) return;
-    recoveryTimer = setTimeout(() => {
-      recoveryTimer = undefined;
-      if (state !== 'live' || !videoBuffer.needsRefresh) return;
-      if (videoBuffer.shouldRequestRefresh(conn.stream.queuedBytes, performance.now())) {
-        void conn.stream.sendRaw(encodeMessage(buildRefreshVideoMessage())).catch(fail);
-      }
-      scheduleVideoRecovery();
-    }, 250);
-  };
   const fail = (error: unknown) => {
     sendJson({ type: 'status', state: 'error', ...errorPayload(error) });
     cleanup();
+  };
+  const video = createSharedVideoPipeline<NativeConnection>({
+    state: hostState,
+    videoBuffer,
+    getQueuedBytes: () => conn.stream.queuedBytes,
+    isLive: () => state === 'live',
+    sendJson,
+    sendBinary,
+    onSendError: (_conn, error) => fail(error),
+  });
+  const cleanup = (_sendClosedStatus = false) => {
+    if (state === 'closed') return;
+    state = 'closed';
+    video.dispose();
+    cursorPublisher.clear();
+    conn.stream.close();
+    onClose();
   };
   const startHostPump = async (conn: NativeConnection) => {
     hostState.currentSize = initialDisplaySize(conn.peerInfo);
@@ -133,56 +128,7 @@ export function createNativeSession(
 
         // 5. VideoFrame
         if (msg.video_frame) {
-          const vf = msg.video_frame;
-          if ((vf.rgb || vf.yuv) && !warnedRawVideo) {
-            warnedRawVideo = true;
-            sendJson({
-              type: 'error',
-              message:
-                'the host sent uncompressed video; this client only decodes vp8, vp9, h264, h265, and av1',
-            });
-          }
-
-          const extracted = extractEncodedFrames(vf);
-          if (extracted) {
-            const display = Math.max(0, Number(vf.display ?? 0));
-            const nowMs = BigInt(Date.now());
-            const queuedBefore = conn.stream.queuedBytes;
-            let forwarded = 0;
-            for (const f of extracted.frames) {
-              const payload = f.data ? new Uint8Array(f.data) : new Uint8Array(0);
-              const isKey = encodedFrameIsKey(extracted.codec, payload, f.key);
-              if (extracted.codec === CODEC_VP8 && isKey) {
-                const parsedSize = vp8KeyframeSize(payload);
-                if (parsedSize) {
-                  hostState.currentSize = parsedSize;
-                }
-              }
-              if (!videoBuffer.shouldForward(display, isKey, payload.byteLength + HEADER_LEN, conn.stream.queuedBytes)) {
-                scheduleVideoRecovery();
-                continue;
-              }
-              const pts = BigInt(f.pts ?? 0);
-              const packet = encodeRdv1Frame({
-                codec: extracted.codec,
-                key: isKey,
-                display,
-                width: hostState.currentSize.width,
-                height: hostState.currentSize.height,
-                pts,
-                gatewayUnixMs: nowMs,
-                data: payload,
-              });
-              sendBinary(packet);
-              forwarded++;
-            }
-            // RustDesk 1.5 QoS ACK once per message containing video frames (non-blocking)
-            if (forwarded > 0 && !videoBuffer.recovering && queuedBefore <= VIDEO_RESUME_BYTES) {
-              void conn.stream
-                .sendRaw(encodeMessage(buildVideoReceivedMessage()))
-                .catch(fail);
-            }
-          }
+          video.handleFrame(conn, msg.video_frame);
         }
       }
     } catch (err) {
