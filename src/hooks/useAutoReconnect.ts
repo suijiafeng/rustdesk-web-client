@@ -51,6 +51,17 @@ export function useAutoReconnect({
     });
   }, [reconnectRequest]);
 
+  const [visible, setVisible] = useState(
+    () => typeof document === 'undefined' || document.visibilityState !== 'hidden',
+  );
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const syncVisibility = () => setVisible(document.visibilityState !== 'hidden');
+    document.addEventListener('visibilitychange', syncVisibility);
+    return () => document.removeEventListener('visibilitychange', syncVisibility);
+  }, []);
+
   // Clear auto-reconnect once session recovers to live
   useEffect(() => {
     if (phase === 'live' && attemptRef.current > 0) {
@@ -58,14 +69,15 @@ export function useAutoReconnect({
     }
   }, [phase, cancelAutoReconnect]);
 
-  // Countdown timer & browser online fast-retry
+  const triggerRetry = useCallback(() => {
+    const req = reconnectRequest.current;
+    setAutoReconnect(null);
+    if (req) onRetry(req);
+  }, [onRetry, reconnectRequest]);
+
+  // Countdown timer (paused while tab/screen is hidden to avoid background data usage)
   useEffect(() => {
-    if (!autoReconnect || phase !== 'error') return;
-    const triggerRetry = () => {
-      const req = reconnectRequest.current;
-      setAutoReconnect(null);
-      if (req) onRetry(req);
-    };
+    if (!autoReconnect || phase !== 'error' || !visible) return;
     if (autoReconnect.secondsLeft <= 0) {
       triggerRetry();
       return;
@@ -75,12 +87,20 @@ export function useAutoReconnect({
         prev ? { ...prev, secondsLeft: Math.max(0, prev.secondsLeft - 1) } : null,
       );
     }, 1000);
-    window.addEventListener('online', triggerRetry, { once: true });
     return () => {
       window.clearTimeout(timer);
+    };
+  }, [autoReconnect, phase, visible, triggerRetry]);
+
+  // Browser online fast-retry while visible
+  const hasPendingReconnect = Boolean(autoReconnect) && phase === 'error' && visible;
+  useEffect(() => {
+    if (!hasPendingReconnect) return;
+    window.addEventListener('online', triggerRetry, { once: true });
+    return () => {
       window.removeEventListener('online', triggerRetry);
     };
-  }, [autoReconnect, phase, onRetry, reconnectRequest]);
+  }, [hasPendingReconnect, triggerRetry]);
 
   return {
     autoReconnect,

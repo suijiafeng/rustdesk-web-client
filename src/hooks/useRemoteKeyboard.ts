@@ -75,7 +75,7 @@ export function useRemoteKeyboard({
   // Forward text efficiently: single ASCII chars as native keystrokes, CJK/multi-char as batched seq
   const sendText = useCallback(
     (text: string) => {
-      if (!text) return;
+      if (!text || displayPrefsRef.current.viewOnly) return;
       if (text === ' ') {
         send({ type: 'key', action: 'down', control: 'Space' });
         send({ type: 'key', action: 'up', control: 'Space' });
@@ -92,21 +92,21 @@ export function useRemoteKeyboard({
         send({ type: 'text', text: chars.slice(i, i + CHUNK).join('') });
       }
     },
-    [send],
+    [send, displayPrefsRef],
   );
 
   const tapControl = useCallback(
     (control: string) => {
-      if (chromeRef.current.menu || chromeRef.current.dialog) return;
+      if (chromeRef.current.menu || chromeRef.current.dialog || displayPrefsRef.current.viewOnly) return;
       send({ type: 'key', action: 'down', control });
       send({ type: 'key', action: 'up', control });
     },
-    [send],
+    [send, chromeRef, displayPrefsRef],
   );
 
   const sendChord = useCallback(
     (parts: Array<{ control?: string; chr?: string }>) => {
-      if (chromeRef.current.menu || chromeRef.current.dialog) return;
+      if (chromeRef.current.menu || chromeRef.current.dialog || displayPrefsRef.current.viewOnly) return;
       const modifiers = parts
         .map((p) => p.control)
         .filter((c): c is string => Boolean(c && isModifier(c)));
@@ -127,7 +127,7 @@ export function useRemoteKeyboard({
         }
       }
     },
-    [send],
+    [send, chromeRef, displayPrefsRef],
   );
 
   const handleQuickKey = useCallback(
