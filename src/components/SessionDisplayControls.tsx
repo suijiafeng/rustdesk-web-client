@@ -1,5 +1,5 @@
 import { Film, Focus, Gauge, Monitor, Shield, SlidersHorizontal } from 'lucide-react';
-import { formatCodecLabel, normalizeCodecName, PREFERRED_CODEC_OPTIONS, type PreferredCodec } from '../lib/displayPrefs';
+import { filterCommonResolutions, formatCodecLabel, normalizeCodecName, PREFERRED_CODEC_OPTIONS, type PreferredCodec } from '../lib/displayPrefs';
 import { t, type Locale } from '../lib/i18n';
 import type { CodecSupport, PeerMessage, QualityLevel } from '../lib/protocol';
 import { AdaptiveSelect } from './AdaptiveSelect';
@@ -60,7 +60,8 @@ export function SessionDisplayControls({
 }: SessionDisplayControlsProps) {
   const monitors = peer?.displays ?? [];
   const hasMultipleDisplays = monitors.length > 1;
-  const resolutionIndex = sizes.findIndex((s) => s.width === stats.width && s.height === stats.height);
+  const visibleSizes = filterCommonResolutions(sizes, stats.width, stats.height);
+  const resolutionIndex = visibleSizes.findIndex((s) => s.width === stats.width && s.height === stats.height);
   const isMobile = variant === 'mobile';
   const groupClass = isMobile ? 'tool-group' : 'session-group';
   const rowClass = isMobile ? 'tool-row' : 'session-setting-row';
@@ -204,7 +205,7 @@ export function SessionDisplayControls({
           </label>
         )}
 
-        {sizes.length > 0 && (
+        {visibleSizes.length > 0 && (
           <label className={rowClass}>
             <Monitor />
             <span>{t(locale, 'remoteResolution')}</span>
@@ -218,10 +219,10 @@ export function SessionDisplayControls({
                 ...(resolutionIndex < 0
                   ? [{ value: '-1', label: `${stats.width} × ${stats.height}`, disabled: true }]
                   : []),
-                ...sizes.map((s, i) => ({ value: String(i), label: `${s.width} × ${s.height}` })),
+                ...visibleSizes.map((s, i) => ({ value: String(i), label: `${s.width} × ${s.height}` })),
               ]}
               onChange={(value) => {
-                const size = sizes[Number(value)];
+                const size = visibleSizes[Number(value)];
                 if (size) {
                   onResolution(size.width, size.height);
                   onNotify(t(locale, 'requestSent') + ' · ' + size.width + ' × ' + size.height);

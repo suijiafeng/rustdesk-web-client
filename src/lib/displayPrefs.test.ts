@@ -5,6 +5,7 @@ import {
   applyMouseButtonSwap,
   applyWheelDirection,
   filterCodecSupport,
+  filterCommonResolutions,
   normalizeDisplayPrefs,
 } from './displayPrefs';
 
@@ -135,4 +136,25 @@ test('mouse button swap and wheel inversion behave deterministically', () => {
   assert.equal(applyWheelDirection(1, true), -1);
   assert.equal(applyWheelDirection(-1, true), 1);
   assert.equal(applyWheelDirection(0, true), 0);
+});
+
+test('filterCommonResolutions keeps common, native, and current sizes while dropping legacy clutter', () => {
+  const sizes = [
+    { width: 2880, height: 1800 }, // unusual native laptop panel
+    { width: 2560, height: 1440 },
+    { width: 1920, height: 1080 },
+    { width: 1768, height: 992 },  // uncommon
+    { width: 1360, height: 768 },  // uncommon, currently active
+    { width: 1280, height: 720 },
+    { width: 1024, height: 768 },  // legacy 4:3
+    { width: 800, height: 600 },   // legacy 4:3
+    { width: 640, height: 480 },   // legacy 4:3
+  ];
+  assert.deepEqual(filterCommonResolutions(sizes, 1360, 768), [
+    { width: 2880, height: 1800 },
+    { width: 2560, height: 1440 },
+    { width: 1920, height: 1080 },
+    { width: 1360, height: 768 },
+    { width: 1280, height: 720 },
+  ]);
 });

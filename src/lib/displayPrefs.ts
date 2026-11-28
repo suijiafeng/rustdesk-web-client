@@ -184,3 +184,45 @@ export function applyWheelDirection(delta: number, reverse: boolean): number {
   if (delta === 0) return 0;
   return reverse ? -delta : delta;
 }
+
+const COMMON_RESOLUTIONS = new Set([
+  // 16:9
+  '1280x720', '1366x768', '1600x900', '1920x1080', '2560x1440', '3840x2160',
+  // 16:10
+  '1280x800', '1440x900', '1680x1050', '1920x1200', '2560x1600',
+  // 3:2 & Mac Retina
+  '1512x982', '1728x1117', '2048x1152', '2160x1440', '2560x1700', '2880x1920', '3000x2000', '3024x1964', '3456x2234',
+  // 21:9 ultrawide
+  '2560x1080', '3440x1440', '3840x1600',
+]);
+
+/**
+ * Keeps commonly used resolutions plus the monitor's native (largest) and
+ * currently active resolution so cluttered legacy/odd modes stay hidden.
+ */
+export function filterCommonResolutions(
+  sizes: ReadonlyArray<{ width: number; height: number }>,
+  currentWidth = 0,
+  currentHeight = 0,
+): Array<{ width: number; height: number }> {
+  if (sizes.length === 0) return [];
+  let maxArea = 0;
+  for (const s of sizes) {
+    const area = s.width * s.height;
+    if (area > maxArea) maxArea = area;
+  }
+  const seen = new Set<string>();
+  const filtered: Array<{ width: number; height: number }> = [];
+  for (const s of sizes) {
+    const key = `${s.width}x${s.height}`;
+    if (seen.has(key)) continue;
+    const isCurrent = s.width === currentWidth && s.height === currentHeight;
+    const isNative = s.width * s.height === maxArea;
+    const landscapeKey = `${Math.max(s.width, s.height)}x${Math.min(s.width, s.height)}`;
+    if (isCurrent || isNative || COMMON_RESOLUTIONS.has(landscapeKey)) {
+      seen.add(key);
+      filtered.push(s);
+    }
+  }
+  return filtered.length > 0 ? filtered : [...sizes];
+}
