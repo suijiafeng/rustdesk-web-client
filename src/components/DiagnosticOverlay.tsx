@@ -21,6 +21,21 @@ interface DiagnosticOverlayProps {
 
 const finite = (value: number | null) => value !== null && Number.isFinite(value) && value >= 0 ? value : null;
 
+type MetricLevel = 'good' | 'normal' | 'warn' | 'bad';
+
+function metricLevel(
+  value: number | null,
+  goodMax: number,
+  normalMax: number,
+  warnMax: number,
+): MetricLevel | undefined {
+  if (value === null) return undefined;
+  if (value <= goodMax) return 'good';
+  if (value <= normalMax) return 'normal';
+  if (value <= warnMax) return 'warn';
+  return 'bad';
+}
+
 export function DiagnosticOverlay({
   locale, statsStore, telemetryStore, summary: propSummary, routeLabel, browserDirect, encrypted, preferredCodec, gatewayVideo: propGatewayVideo, onClose,
 }: DiagnosticOverlayProps) {
@@ -92,7 +107,8 @@ export function DiagnosticOverlay({
     ? `${stats.width}×${stats.height}` : null;
   const fps = stats.streamState === 'waiting' ? null : finite(stats.renderFps);
   const bitrate = stats.streamState === 'waiting' ? null : finite(stats.bitrate);
-  const packetLoss = summary.windowSent > 0 ? `${Math.round(summary.packetLossPct * 10) / 10}%` : null;
+  const packetLossPct = summary.windowSent > 0 ? Math.round(summary.packetLossPct * 10) / 10 : null;
+  const packetLoss = packetLossPct !== null ? `${packetLossPct}%` : null;
   const recovering = ((stats.inFlightFrames ?? 0) > 0 && (stats.oldestFrameAgeMs ?? 0) >= 200) || gatewayVideo?.recovering;
   const decodeLatency = stats.streamState === 'waiting' ? null : finite(stats.decodeLatencyMs ?? null);
   const networkHealth = classifyLinkHealth(finite(summary.avgRttMs), summary.packetLossPct, jitter);
@@ -110,6 +126,11 @@ export function DiagnosticOverlay({
     waiting: Activity, good: Signal, fair: SignalMedium, poor: SignalLow, recovering: SignalLow,
   };
   const StatusIcon = statusIcons[state];
+
+  const rttLevel = metricLevel(rtt, 80, 180, 350);
+  const lossLevel = metricLevel(packetLossPct, 0.5, 2, 8);
+  const jitterLevel = metricLevel(jitter, 20, 50, 100);
+  const decodeLevel = metricLevel(decodeLatency, 30, 60, 120);
 
   const actualCodec = stats.codec && stats.codec !== '—' ? stats.codec : null;
   const requestedCodec = preferredCodec && preferredCodec !== 'auto' ? preferredCodec : null;
@@ -166,15 +187,15 @@ export function DiagnosticOverlay({
         </div>
         <div data-testid="diag-rtt">
           <dt>{t(locale, browserDirect ? 'diagRemoteRoundTrip' : 'diagGatewayRoundTrip')}</dt>
-          <dd data-testid="diag-value-rtt">{rtt === null ? '—' : `${Math.round(rtt)} ms`}</dd>
+          <dd data-testid="diag-value-rtt" data-level={rttLevel}>{rtt === null ? '—' : `${Math.round(rtt)} ms`}</dd>
         </div>
         <div>
           <dt>{t(locale, 'diagPacketLoss')}</dt>
-          <dd data-testid="diag-value-loss">{packetLoss ?? '—'}</dd>
+          <dd data-testid="diag-value-loss" data-level={lossLevel}>{packetLoss ?? '—'}</dd>
         </div>
         <div>
           <dt>{t(locale, 'diagJitter')}</dt>
-          <dd data-testid="diag-value-jitter">{jitter === null ? '—' : `${Math.round(jitter * 10) / 10} ms`}</dd>
+          <dd data-testid="diag-value-jitter" data-level={jitterLevel}>{jitter === null ? '—' : `${Math.round(jitter * 10) / 10} ms`}</dd>
         </div>
         <div>
           <dt>{t(locale, 'diagCodec')}</dt>
@@ -182,7 +203,7 @@ export function DiagnosticOverlay({
         </div>
         <div>
           <dt>{t(locale, 'diagDecodeLatency')}</dt>
-          <dd data-testid="diag-value-decode">{decodeLatency === null ? '—' : `${Math.round(decodeLatency)} ms`}</dd>
+          <dd data-testid="diag-value-decode" data-level={decodeLevel}>{decodeLatency === null ? '—' : `${Math.round(decodeLatency)} ms`}</dd>
         </div>
       </dl>
     </aside>
