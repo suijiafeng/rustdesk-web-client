@@ -77,8 +77,21 @@ function passwordEncryptionKey(): Promise<CryptoKey> {
   return promise;
 }
 
-function bytesFromBase64(value: string) {
-  return Uint8Array.from(atob(value), char => char.charCodeAt(0));
+function bytesFromBase64(value: string): Uint8Array<ArrayBuffer> {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
 }
 
 async function decryptCredential(stored: string, key: CryptoKey, context?: string): Promise<unknown> {
@@ -156,8 +169,7 @@ async function encryptCredential(value: string, context: string): Promise<string
     { name: 'AES-GCM', iv, additionalData: encoder.encode(context) },
     await passwordEncryptionKey(), encoder.encode(JSON.stringify(value)),
   );
-  const base64 = (bytes: Uint8Array) => btoa(Array.from(bytes, byte => String.fromCharCode(byte)).join(''));
-  return JSON.stringify({ iv: base64(iv), data: base64(new Uint8Array(encrypted)) });
+  return JSON.stringify({ iv: bytesToBase64(iv), data: bytesToBase64(new Uint8Array(encrypted)) });
 }
 
 export async function persistDevicePassword(deviceKey: string, password: string, current: () => boolean) {

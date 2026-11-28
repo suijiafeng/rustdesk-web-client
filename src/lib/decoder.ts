@@ -94,41 +94,61 @@ export function webCodecsStatus(): { ok: boolean; reason: string } {
   return { ok: true, reason: '' };
 }
 
-export async function probeCodecs(): Promise<CodecSupport> {
-  const result: CodecSupport = {
-    vp8: false,
-    vp9: false,
-    h264: false,
-    h265: false,
-    av1: false,
-    reported: true,
-  };
+let cachedCodecProbe: { ctor: unknown; promise: Promise<CodecSupport> } | null = null;
 
+export async function probeCodecs(): Promise<CodecSupport> {
   if (typeof VideoDecoder === 'undefined') {
-    return result;
+    return {
+      vp8: false,
+      vp9: false,
+      h264: false,
+      h265: false,
+      av1: false,
+      reported: true,
+    };
   }
 
-  await Promise.all(
-    WEB_CODECS.map(async (entry) => {
-      for (const codec of entry.candidates) {
-        try {
-          const check = await VideoDecoder.isConfigSupported({
-            codec,
-            optimizeForLatency: true,
-          });
-          if (check.supported) {
-            result[entry.name] = true;
-            resolvedCodecStrings[entry.name] = codec;
-            return;
-          }
-        } catch {
-          // Try next candidate profile
-        }
-      }
-    }),
-  );
+  if (cachedCodecProbe && cachedCodecProbe.ctor === VideoDecoder) {
+    const cached = await cachedCodecProbe.promise;
+    return { ...cached };
+  }
 
-  return result;
+  const promise = (async (): Promise<CodecSupport> => {
+    const result: CodecSupport = {
+      vp8: false,
+      vp9: false,
+      h264: false,
+      h265: false,
+      av1: false,
+      reported: true,
+    };
+
+    await Promise.all(
+      WEB_CODECS.map(async (entry) => {
+        for (const codec of entry.candidates) {
+          try {
+            const check = await VideoDecoder.isConfigSupported({
+              codec,
+              optimizeForLatency: true,
+            });
+            if (check.supported) {
+              result[entry.name] = true;
+              resolvedCodecStrings[entry.name] = codec;
+              return;
+            }
+          } catch {
+            // Try next candidate profile
+          }
+        }
+      }),
+    );
+
+    return result;
+  })();
+
+  cachedCodecProbe = { ctor: VideoDecoder, promise };
+  const resolved = await promise;
+  return { ...resolved };
 }
 
 export interface DecoderMetrics {

@@ -23,8 +23,12 @@ export class CursorImages {
         width > MAX_CURSOR_SIDE || height > MAX_CURSOR_SIDE || typeof rgba !== 'string' ||
         rgba.length !== 4 * Math.ceil(width * height * 4 / 3)) return null;
     try {
-      const pixels = Uint8ClampedArray.from(atob(rgba), character => character.charCodeAt(0));
-      if (pixels.length !== width * height * 4 || !Number.isFinite(hotX) || !Number.isFinite(hotY)) return null;
+      const binary = atob(rgba);
+      if (binary.length !== width * height * 4 || !Number.isFinite(hotX) || !Number.isFinite(hotY)) return null;
+      const pixels = new Uint8ClampedArray(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        pixels[i] = binary.charCodeAt(i);
+      }
       const image = { pixels: new ImageData(pixels, width, height), hotX, hotY };
       if (id !== undefined) {
         for (const key of this.entries.keys()) {

@@ -181,7 +181,16 @@ export class RemoteAudio {
         this.configure(this.format.sampleRate, this.format.channels);
         if (this.closed || this.decoder?.state !== 'configured') return;
       }
-      const data = typeof packet === 'string' ? Uint8Array.from(atob(packet), c => c.charCodeAt(0)) : packet;
+      let data: Uint8Array;
+      if (typeof packet === 'string') {
+        const binary = atob(packet);
+        data = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          data[i] = binary.charCodeAt(i);
+        }
+      } else {
+        data = packet;
+      }
       if (!data.length || data.length > 8192) throw new Error('Invalid Opus packet');
       const timestamp = Math.max(this.lastTimestamp + 1, Math.round(this.context.currentTime * 1_000_000));
       this.lastTimestamp = timestamp;
