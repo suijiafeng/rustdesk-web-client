@@ -44,27 +44,37 @@ export const PASSWORD_STORAGE_PREFIX = 'rd_web_device_password_v1:';
 const GATEWAY_TOKEN_KEY = 'rd_web_gateway_token_v1';
 const SESSION_KEY = 'rd_web_session_credentials_v1';
 
-async function passwordEncryptionKey(): Promise<CryptoKey> {
-  // A read/write transaction selects one non-exportable key even if two tabs initialize together.
-  const candidate = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
-  return new Promise((resolve, reject) => {
-    const open = indexedDB.open('rd_web_keys', 1);
-    open.onupgradeneeded = () => open.result.createObjectStore('keys');
-    open.onerror = () => reject(open.error);
-    open.onsuccess = () => {
-      const db = open.result;
-      const tx = db.transaction('keys', 'readwrite');
-      const store = tx.objectStore('keys');
-      const read = store.get('tab-passwords');
-      let key = candidate;
-      read.onsuccess = () => {
-        if (read.result) key = read.result;
-        else store.put(candidate, 'tab-passwords');
+let cachedKeyPromise: Promise<CryptoKey> | null = null;
+
+function passwordEncryptionKey(): Promise<CryptoKey> {
+  if (cachedKeyPromise) return cachedKeyPromise;
+  const promise = (async (): Promise<CryptoKey> => {
+    // A read/write transaction selects one non-exportable key even if two tabs initialize together.
+    const candidate = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+    return new Promise((resolve, reject) => {
+      const open = indexedDB.open('rd_web_keys', 1);
+      open.onupgradeneeded = () => open.result.createObjectStore('keys');
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        const db = open.result;
+        const tx = db.transaction('keys', 'readwrite');
+        const store = tx.objectStore('keys');
+        const read = store.get('tab-passwords');
+        let key = candidate;
+        read.onsuccess = () => {
+          if (read.result) key = read.result;
+          else store.put(candidate, 'tab-passwords');
+        };
+        tx.oncomplete = () => { db.close(); resolve(key); };
+        tx.onabort = () => { db.close(); reject(tx.error); };
       };
-      tx.oncomplete = () => { db.close(); resolve(key); };
-      tx.onabort = () => { db.close(); reject(tx.error); };
-    };
+    });
+  })().catch((err) => {
+    cachedKeyPromise = null;
+    throw err;
   });
+  cachedKeyPromise = promise;
+  return promise;
 }
 
 function bytesFromBase64(value: string) {

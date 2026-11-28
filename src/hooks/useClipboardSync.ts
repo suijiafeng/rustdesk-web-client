@@ -7,6 +7,9 @@ interface Options {
   notify: (key: I18nKey, error?: boolean) => void;
 }
 const MAX_BYTES = 256 * 1024;
+const TEXT_ENCODER = new TextEncoder();
+const isWithinByteLimit = (text: string) =>
+  text.length * 3 <= MAX_BYTES || TEXT_ENCODER.encode(text).length <= MAX_BYTES;
 const newSession = () => ({ lastText: null as string | null, remote: null as string | null, revision: 0, writing: false });
 
 export function useClipboardSync(options: Options) {
@@ -14,7 +17,7 @@ export function useClipboardSync(options: Options) {
   latest.current = options;
   const session = useRef(newSession());
   const [pending, setPending] = useState<'read' | 'write' | null>(null);
-  const valid = (text: string) => new TextEncoder().encode(text).length <= MAX_BYTES;
+  const valid = isWithinByteLimit;
 
   const sendLocal = useCallback((text: string) => {
     if (!latest.current.enabled) return false;

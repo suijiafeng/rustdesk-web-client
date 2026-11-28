@@ -50,7 +50,7 @@ function detectCoarsePointer(): boolean {
 }
 
 export default function App() {
-  const isCoarseDevice = detectCoarsePointer();
+  const [isCoarseDevice] = useState(detectCoarsePointer);
   const preferences = usePreferences(isCoarseDevice);
   const {
     setDirectIpEnabled, setMode, setPeerId, setIdServer, setRelayServer,
