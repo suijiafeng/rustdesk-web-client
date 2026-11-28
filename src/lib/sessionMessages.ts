@@ -246,18 +246,18 @@ export function createSessionMessageHandler(context: SessionMessageContext) {
           activeMode === 'id'
             ? {
                 mode: 'id',
-                peerId: peerId.replace(/\s+/g, ''),
-                idServer: idServer.trim(),
-                relayServer: relayServer.trim(),
-                serverKey: serverKey.trim(),
-                forceRelay,
+                peerId: targetPeerId,
+                idServer: targetIdServer,
+                relayServer: targetRelayServer,
+                serverKey: targetServerKey,
+                forceRelay: targetForceRelay,
                 hostname: msg.hostname || '',
                 platform: msg.platform || '',
               }
             : {
                 mode: 'direct',
-                host: host.trim(),
-                port: port.trim() || '21118',
+                host: targetHost,
+                port: targetPortStr,
                 hostname: msg.hostname || '',
                 platform: msg.platform || '',
               },

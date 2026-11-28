@@ -87,7 +87,7 @@ export function SessionDisplayControls({
           }))}
           onChange={(value) => {
             const level = value as QualityLevel;
-            onChangeQuality(level, targetFps, isMobile ? undefined : preferredCodec);
+            onChangeQuality(level, targetFps, preferredCodec);
             onNotify(t(locale, 'requestSent') + ' · ' + t(locale, qualityNames[level]));
           }}
         />

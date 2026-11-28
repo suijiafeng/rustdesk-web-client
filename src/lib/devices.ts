@@ -21,12 +21,12 @@ export interface SavedDevice {
 }
 
 /**
- * Formats 9-digit RustDesk IDs into spaced groups ("187685134" -> "187 685 134"),
+ * Formats numeric RustDesk IDs into 3-digit spaced groups ("187685134" -> "187 685 134"),
  * matching the official RustDesk mobile & desktop apps.
  */
 export function formatPeerId(raw: string): string {
   const clean = raw.replace(/\s+/g, '');
-  if (/^\d{7,12}$/.test(clean)) {
+  if (/^\d+$/.test(clean) && clean.length > 3) {
     return clean.replace(/(\d{3})(?=\d)/g, '$1 ');
   }
   return raw.trim();

@@ -10,7 +10,7 @@ import type { useVideoPipeline } from '../hooks/useVideoPipeline';
 import type { useViewTransform } from '../hooks/useViewTransform';
 import type { SoftKeyboardMode } from '../hooks/useKeyboardViewport';
 import type { SavedDevice } from '../lib/devices';
-import { persistDisplayPrefs, type DisplayPrefs } from '../lib/displayPrefs';
+import type { DisplayPrefs } from '../lib/displayPrefs';
 import type { TelemetryStore } from '../lib/sessionStats';
 import { t } from '../lib/i18n';
 import type { ClientMessage, PeerMessage, QualityLevel, ServerMessage } from '../lib/protocol';
@@ -122,7 +122,7 @@ export function SessionPanels({
   connection, controls, chrome, notices, diagnostics,
 }: SessionPanelsProps) {
   const {
-    locale, localePreference, theme, displayPrefs, setDisplayPrefs, displayPrefsRef,
+    locale, localePreference, theme, displayPrefs,
     changeLocale, changeTheme, mode, directIpEnabled, host, port, peerId, idServer,
     relayServer, serverKey, forceRelay, setMode, handleToggleDirectIp, setHost, setPort,
     setPeerId, setIdServer, setRelayServer, setServerKey, setForceRelay,
@@ -428,15 +428,12 @@ export function SessionPanels({
             }}
             onQuickKey={handleQuickKey}
             onChangeQuality={(q, fps, nextCodec, customQuality) => {
-              setQuality(q);
-              setTargetFps(fps);
-              const activeCodec = nextCodec ?? displayPrefsRef.current.codec;
-              const ratio = customQuality ?? displayPrefsRef.current.customBitrate;
-              const updated = { ...displayPrefsRef.current, qualityPreset: q, targetFps: fps, codec: activeCodec, customBitrate: ratio };
-              displayPrefsRef.current = updated;
-              setDisplayPrefs(updated);
-              persistDisplayPrefs(updated);
-              send({ type: 'quality', quality: q, customQuality: q === 'custom' ? ratio : undefined, fps, codec: activeCodec });
+              handleUpdateDisplayPrefs({
+                qualityPreset: q,
+                targetFps: fps,
+                ...(nextCodec !== undefined && { codec: nextCodec }),
+                ...(customQuality !== undefined && { customBitrate: customQuality }),
+              });
             }}
           />
         </Suspense>

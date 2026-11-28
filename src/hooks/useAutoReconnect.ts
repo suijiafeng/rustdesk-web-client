@@ -76,9 +76,10 @@ export function useAutoReconnect({
   }, [onRetry, reconnectRequest]);
 
   // Countdown timer (paused while tab/screen is hidden to avoid background data usage)
+  const secondsLeft = autoReconnect?.secondsLeft;
   useEffect(() => {
-    if (!autoReconnect || phase !== 'error' || !visible) return;
-    if (autoReconnect.secondsLeft <= 0) {
+    if (secondsLeft === undefined || phase !== 'error' || !visible) return;
+    if (secondsLeft <= 0) {
       triggerRetry();
       return;
     }
@@ -90,7 +91,7 @@ export function useAutoReconnect({
     return () => {
       window.clearTimeout(timer);
     };
-  }, [autoReconnect, phase, visible, triggerRetry]);
+  }, [secondsLeft, phase, visible, triggerRetry]);
 
   // Browser online fast-retry while visible
   const hasPendingReconnect = Boolean(autoReconnect) && phase === 'error' && visible;

@@ -105,13 +105,7 @@ export function useConnectForm(props: ConnectFormProps) {
   const isConnecting = phase === 'connecting';
   const activeMode: ConnectionMode = directIpEnabled ? mode : 'id';
 
-  const formattedIdValue = useMemo(() => {
-    const clean = peerId.replace(/\s+/g, '');
-    if (/^\d+$/.test(clean) && clean.length > 3) {
-      return clean.replace(/(\d{3})(?=\d)/g, '$1 ');
-    }
-    return peerId;
-  }, [peerId]);
+  const formattedIdValue = useMemo(() => formatPeerId(peerId), [peerId]);
 
   const activeTargetLabel =
     pendingMode === 'id'
