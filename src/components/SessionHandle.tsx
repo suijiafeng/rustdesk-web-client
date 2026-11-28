@@ -239,8 +239,8 @@ export function SessionHandle({
         type="button"
         className={`rd-toolbar-btn${viewMode === 'original' ? ' active' : ''}`}
         data-testid="toolbar-view-toggle"
-        aria-label={viewMode === 'fit' ? '100%' : t(locale, 'fit')}
-        data-tooltip={viewMode === 'fit' ? '100%' : t(locale, 'fit')}
+        aria-label={t(locale, viewMode === 'fit' ? 'viewStyleOriginal' : 'viewStyleFit')}
+        data-tooltip={t(locale, viewMode === 'fit' ? 'viewStyleOriginal' : 'viewStyleFit')}
         data-tooltip-pos="bottom"
         onClick={onToggleViewMode}
       >
@@ -253,8 +253,8 @@ export function SessionHandle({
           className={`rd-toolbar-btn${isFullscreen ? ' active' : ''}`}
           data-testid="toolbar-fullscreen"
           aria-pressed={isFullscreen}
-          aria-label={t(locale, 'fullscreen')}
-          data-tooltip={t(locale, 'fullscreen')}
+          aria-label={t(locale, isFullscreen ? 'exitFullscreen' : 'fullscreen')}
+          data-tooltip={t(locale, isFullscreen ? 'exitFullscreen' : 'fullscreen')}
           data-tooltip-pos="bottom"
           onClick={onToggleFullscreen}
         >
@@ -268,8 +268,8 @@ export function SessionHandle({
           className={`rd-toolbar-btn${audioEnabled ? ' active' : ''}`}
           data-testid="toolbar-audio"
           aria-pressed={audioEnabled}
-          aria-label={t(locale, 'remoteAudio')}
-          data-tooltip={t(locale, 'remoteAudio')}
+          aria-label={t(locale, audioEnabled ? 'remoteAudioOff' : 'remoteAudio')}
+          data-tooltip={t(locale, audioEnabled ? 'remoteAudioOff' : 'remoteAudio')}
           data-tooltip-pos="bottom"
           onClick={onToggleAudio}
         >

@@ -29,8 +29,8 @@ test('resolveLocalePreference defaults to default and resolves system language a
 test('translates core labels and connection status in en and zh', () => {
   assert.equal(t('en', 'displays'), 'Displays');
   assert.equal(t('zh', 'displays'), '显示器');
-  assert.equal(t('en', 'languageDefault'), 'Default');
-  assert.equal(t('zh', 'languageDefault'), '默认');
+  assert.equal(t('en', 'languageDefault'), 'Follow system');
+  assert.equal(t('zh', 'languageDefault'), '跟随系统');
   assert.equal(statusLabel('en', 'live'), 'live');
   assert.equal(statusLabel('zh', 'live'), '已连接');
 });
