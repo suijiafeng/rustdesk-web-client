@@ -67,8 +67,6 @@ export function PasswordModal({
             type="button"
             className="w-9 h-9 inline-flex items-center justify-center rounded-lg border-0 bg-transparent text-[var(--ink-soft)] hover:bg-[var(--rd-hover-bg)]"
             aria-label={t(locale, 'close')}
-            data-tooltip={t(locale, 'close')}
-            data-tooltip-pos="bottom-end"
             onClick={onClose}
           >
             <X size={18} />

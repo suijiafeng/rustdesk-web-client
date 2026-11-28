@@ -103,18 +103,16 @@ export function ConnectForm({ model }: { model: ConnectFormModel }) {
                 }
               }}
               onMouseLeave={() => {
-                if (window.matchMedia?.('(hover: hover)').matches) {
-                  setHelpHover(false);
-                }
+                setHelpHover(false);
               }}
             >
               <button
                 type="button"
-                className="inline-flex items-center justify-center w-8 h-8 rounded-full text-[var(--ink-soft)] hover:bg-[var(--rd-hover-bg)] border-0 bg-transparent"
+                className="inline-flex items-center justify-center w-8 h-8 rounded-full text-[var(--ink-soft)] hover:bg-[var(--rd-hover-bg)] border-0 bg-transparent cursor-default"
                 data-testid="remote-help-btn"
                 aria-label={t(locale, 'helpButtonAria')}
-                aria-expanded={helpVisible}
-                aria-controls="remote-help-popover"
+                aria-describedby={helpVisible ? 'remote-help-popover' : undefined}
+                onMouseDown={(e) => e.preventDefault()}
               >
                 <HelpCircle size={17} />
               </button>
@@ -249,8 +247,6 @@ export function ConnectForm({ model }: { model: ConnectFormModel }) {
                     type="button"
                     className="rd-hero-action-btn"
                     aria-label={t(locale, 'clearInput')}
-                    data-tooltip={t(locale, 'clearInput')}
-                    data-tooltip-pos="top"
                     onClick={() => {
                       setHeroInputError(false);
                       setAcOpen(false);
@@ -266,8 +262,6 @@ export function ConnectForm({ model }: { model: ConnectFormModel }) {
                   className="rd-hero-action-btn primary-arrow"
                   data-testid="connect"
                   aria-label={t(locale, 'connect')}
-                  data-tooltip={t(locale, 'connect')}
-                  data-tooltip-pos="top-end"
                   disabled={isConnecting}
                 >
                   <ArrowRight size={24} />
@@ -364,8 +358,6 @@ export function ConnectForm({ model }: { model: ConnectFormModel }) {
                 className="rd-hero-action-btn primary-arrow"
                 data-testid="connect"
                 aria-label={t(locale, 'connect')}
-                data-tooltip={t(locale, 'connect')}
-                data-tooltip-pos="top-end"
                 disabled={isConnecting}
               >
                 <ArrowRight size={24} />

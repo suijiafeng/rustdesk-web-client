@@ -74,19 +74,40 @@ export function ErrorBanner({
   return (
     <div className="rd-err-banner" data-testid="error-banner" role="alert">
       {hasDetails ? (
-        <div className="rd-err-info-wrap" ref={infoRef}>
+        <div
+          className="rd-err-info-wrap"
+          ref={infoRef}
+          onMouseEnter={() => {
+            if (window.matchMedia?.('(hover: hover)').matches) {
+              setDetailsOpen(true);
+            }
+          }}
+          onMouseLeave={() => {
+            setDetailsOpen(false);
+          }}
+        >
           <button
             type="button"
             className="rd-err-info-btn"
             data-testid="error-info-toggle"
             aria-label={t(locale, 'technicalDetails')}
-            aria-expanded={detailsOpen}
-            onClick={() => setDetailsOpen((prev) => !prev)}
+            aria-describedby={detailsOpen ? 'error-technical-details' : undefined}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={(e) => {
+              if (!window.matchMedia?.('(hover: hover)').matches || e.detail === 0) {
+                setDetailsOpen((prev) => !prev);
+              }
+            }}
           >
             <AlertCircle size={17} aria-hidden="true" />
           </button>
           {detailsOpen && (
-            <div className="rd-err-tooltip" role="tooltip" data-testid="error-technical-details">
+            <div
+              id="error-technical-details"
+              className="rd-err-tooltip"
+              role="tooltip"
+              data-testid="error-technical-details"
+            >
               {error && <p className="m-0 break-words font-mono">{error.code} · {error.stage}</p>}
               {showRawDetail && (
                 <p className={`m-0 break-words whitespace-pre-wrap${error ? ' mt-1' : ''}`}>{technicalDetail}</p>
@@ -156,8 +177,6 @@ export function ErrorBanner({
         className="rd-err-dismiss-btn"
         data-testid="error-dismiss"
         aria-label={t(locale, 'dismissError')}
-        data-tooltip={t(locale, 'dismissError')}
-        data-tooltip-pos="top-end"
         onClick={onDismiss}
       >
         <X size={15} />

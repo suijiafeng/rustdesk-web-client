@@ -170,8 +170,6 @@ function DesktopSessionMenu({
               style={{ minWidth: 36, minHeight: 36, padding: 6 }}
               data-testid="session-close"
               aria-label={t(locale, 'close')}
-              data-tooltip={t(locale, 'close')}
-              data-tooltip-pos="bottom-end"
               onClick={onClose}
             >
               <X size={16} />

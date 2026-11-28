@@ -148,8 +148,6 @@ export function SessionHandle({
         data-testid="session-handle"
         aria-label={t(locale, 'toolbarExpand')}
         aria-expanded="false"
-        data-tooltip={t(locale, 'toolbarExpand')}
-        data-tooltip-pos="bottom"
         style={{ left: `${clampToolbarX(handleX) * 100}%` }}
         onPointerDown={startDrag}
         onPointerMove={moveDrag}
@@ -181,8 +179,6 @@ export function SessionHandle({
       {/* Drag grip + remote host title */}
       <div
         className="rd-toolbar-drag"
-        data-tooltip={t(locale, 'toolbarDragHint')}
-        data-tooltip-pos="bottom-start"
         onPointerDown={startDrag}
         onPointerMove={moveDrag}
         onPointerUp={(e) => endDrag(e)}
@@ -311,8 +307,6 @@ export function SessionHandle({
         className={`rd-toolbar-btn rd-toolbar-menu-btn${hasWarning ? ' warn' : ''}`}
         data-testid="toolbar-open-menu"
         aria-label={t(locale, 'toolbarMore')}
-        data-tooltip={t(locale, 'toolbarMore')}
-        data-tooltip-pos="bottom"
         onClick={onOpenMenu}
       >
         <SlidersHorizontal size={15} />
@@ -352,8 +346,6 @@ export function SessionHandle({
         className="rd-toolbar-btn"
         data-testid="toolbar-collapse"
         aria-label={t(locale, 'toolbarCollapse')}
-        data-tooltip={t(locale, 'toolbarCollapse')}
-        data-tooltip-pos="bottom-end"
         onClick={() => onSetExpanded(false)}
       >
         <ChevronUp size={15} />

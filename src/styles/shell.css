@@ -165,12 +165,11 @@
   border-radius: 999px;
   background: transparent;
   color: var(--bad);
-  cursor: pointer;
+  cursor: default;
   transition: background-color 140ms ease;
 }
 
-.rd-err-info-btn:hover,
-.rd-err-info-btn[aria-expanded="true"] {
+.rd-err-info-btn:hover {
   background: var(--bad-bg);
 }
 
@@ -189,6 +188,7 @@
   font-size: 12px;
   line-height: 1.45;
   box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+  pointer-events: none;
 }
 
 .rd-err-action-btn {

@@ -248,10 +248,6 @@ export function PeerList({
                       aria-label={
                         device.favorite ? t(locale, 'unfavoriteDevice') : t(locale, 'favoriteDevice')
                       }
-                      data-tooltip={
-                        device.favorite ? t(locale, 'unfavoriteDevice') : t(locale, 'favoriteDevice')
-                      }
-                      data-tooltip-pos="top"
                       aria-pressed={device.favorite}
                       onClick={() => onToggleFavorite(device.key)}
                     >
@@ -344,10 +340,6 @@ export function PeerList({
                     aria-label={
                       device.favorite ? t(locale, 'unfavoriteDevice') : t(locale, 'favoriteDevice')
                     }
-                    data-tooltip={
-                      device.favorite ? t(locale, 'unfavoriteDevice') : t(locale, 'favoriteDevice')
-                    }
-                    data-tooltip-pos="top"
                     aria-pressed={device.favorite}
                     onClick={() => onToggleFavorite(device.key)}
                   >

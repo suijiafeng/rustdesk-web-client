@@ -60,8 +60,6 @@ export function SettingsView(props: SettingsViewProps) {
             className="rd-mobile-icon-btn dark rd-settings-back-btn"
             data-testid="mobile-settings-back"
             aria-label={t(locale, 'back')}
-            data-tooltip={t(locale, 'back')}
-            data-tooltip-pos="bottom-start"
             onClick={onBack}
           >
             <ArrowLeft size={20} />

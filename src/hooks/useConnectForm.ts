@@ -63,8 +63,7 @@ export function useConnectForm(props: ConnectFormProps) {
     openNetworkServerSetup,
   } = props;
   const [helpHover, setHelpHover] = useState(false);
-  const [helpPinned, setHelpPinned] = useState(false);
-  const helpVisible = helpHover || helpPinned;
+  const helpVisible = helpHover;
 
   const [heroInputError, setHeroInputError] = useState(false);
   const [heroErrorShake, setHeroErrorShake] = useState(false);
@@ -83,13 +82,11 @@ export function useConnectForm(props: ConnectFormProps) {
     if (!helpVisible) return;
     const handlePointerDown = (ev: PointerEvent) => {
       if (helpAnchorRef.current && !helpAnchorRef.current.contains(ev.target as Node)) {
-        setHelpPinned(false);
         setHelpHover(false);
       }
     };
     const handleKeyDown = (ev: KeyboardEvent) => {
       if (ev.key === 'Escape') {
-        setHelpPinned(false);
         setHelpHover(false);
       }
     };
@@ -236,8 +233,6 @@ export function useConnectForm(props: ConnectFormProps) {
     formattedIdValue,
     helpAnchorRef,
     helpVisible,
-    helpPinned,
-    setHelpPinned,
     setHelpHover,
     heroInputError,
     heroErrorShake,

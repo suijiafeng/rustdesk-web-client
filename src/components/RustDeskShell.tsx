@@ -283,8 +283,6 @@ export function RustDeskShell({
                 type="button"
                 className="rd-mobile-icon-btn"
                 aria-label={t(locale, 'close')}
-                data-tooltip={t(locale, 'close')}
-                data-tooltip-pos="bottom-start"
                 onClick={onClose}
               >
                 <X size={20} />
@@ -302,8 +300,6 @@ export function RustDeskShell({
               className="rd-mobile-icon-btn"
               data-testid="mobile-open-settings"
               aria-label={t(locale, 'openSettings')}
-              data-tooltip={t(locale, 'tabSettings')}
-              data-tooltip-pos="bottom-end"
               onClick={() => setSettingsOpen(true)}
             >
               <Settings size={20} />
@@ -353,10 +349,6 @@ export function RustDeskShell({
                   aria-label={
                     viewLayout === 'grid' ? t(locale, 'listViewAria') : t(locale, 'gridViewAria')
                   }
-                  data-tooltip={
-                    viewLayout === 'grid' ? t(locale, 'listViewAria') : t(locale, 'gridViewAria')
-                  }
-                  data-tooltip-pos="bottom-end"
                   onClick={() =>
                     setViewLayout((prev) => {
                       const next = prev === 'grid' ? 'list' : 'grid';
